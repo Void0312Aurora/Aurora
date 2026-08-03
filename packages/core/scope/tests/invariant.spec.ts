@@ -1,0 +1,112 @@
+import { freezeMessage, MessageId } from '@deepseek-ai/dsh-llm'
+import { describe, expect, it } from 'vitest'
+import { Context } from 'cordis'
+import type { Events } from 'cordis'
+import { InboxItemId, type Agent } from '@deepseek-ai/dsh-agent'
+import { scopeTarget } from '@deepseek-ai/dsh-scope'
+import * as ScopeInvariant from '@deepseek-ai/dsh-scope/invariant'
+import InvariantService from '@deepseek-ai/dsh-invariants'
+
+async function setup(): Promise<Context> {
+  const ctx = new Context()
+  await ctx.plugin(InvariantService)
+  await ctx.plugin(ScopeInvariant)
+  return ctx
+}
+
+function emit(ctx: Context, receiver: object | undefined, event: string, args: unknown[]): void {
+  const dispatch = ctx.emit.bind(ctx) as (...values: unknown[]) => void
+  if (receiver === undefined) dispatch(event, ...args)
+  else { dispatch(receiver, event, ...args) }
+}
+
+describe('scoped-dispatch invariants', () => {
+  type AgentEventName = Extract<keyof Events, `agent/${string}`>
+  type EventArgs<K extends keyof Events> = Events[K] extends (...args: infer Args) => unknown ? Args : never
+
+  it('ignores ordinary events and rejects a scoped dispatch without a carrier', async () => {
+    const ctx = await setup()
+    expect(() => { emit(ctx, undefined, 'ordinary/event', []) }).not.toThrow()
+    const agent = { id: 'a1' }
+    expect(() => { emit(ctx, undefined, 'agent/error', [agent, 1, 0, new Error('x')]) })
+      .toThrow(/dispatched without a scope carrier/)
+  })
+
+  it('checks every generated subject resolver against the carrier key', async () => {
+    const ctx = await setup()
+    const agent = { id: 'a1' } as unknown as Agent
+    const other = { id: 'a2' } as unknown as Agent
+    const signal = new AbortController().signal
+    const config = { provider: 'p', model: 'm' }
+    const message = freezeMessage({
+      id: MessageId('m'),
+      role: 'user',
+      content: [],
+      source: { kind: 'user' },
+    })
+    const item = { id: InboxItemId('i'), message, placement: 'queued' as const }
+    const agentRows = {
+      'agent/created': [agent],
+      'agent/disposed': [agent],
+      'agent/status': [agent, 'idle'],
+      'agent/inbox/enqueue': [agent, item],
+      'agent/inbox/update': [agent, item],
+      'agent/inbox/dequeue': [agent, item],
+      'agent/inbox/discard': [agent, []],
+      'agent/cancel-requested': [agent, { kind: 'user' }],
+      'agent/session-start': [agent, 'startup'],
+      'agent/step': [agent, 1, 1, signal],
+      'agent/prompt-submit': [agent, message, signal, () => Promise.resolve({ kind: 'allow' })],
+      'agent/request': [agent, 1, 1, signal, () => Promise.resolve(config)],
+      'agent/request-error': [
+        agent,
+        1,
+        1,
+        new Error('request'),
+        { message: 'request', code: 'UNKNOWN' },
+        [],
+        undefined,
+        signal,
+        () => Promise.resolve(undefined),
+      ],
+      'agent/turn-stopping': [agent, 1, signal],
+      'agent/settled': [agent, 1, { kind: 'completed' }],
+      'agent/error': [agent, 1, 0, new Error('x')],
+    } satisfies { [K in AgentEventName]: EventArgs<K> }
+    const rows: Array<[string, unknown[]]> = [
+      ...Object.entries(agentRows),
+      ['approval/request', [{ agent, toolName: 'echo' }, () => Promise.resolve('unavailable')]],
+      ['goal/changed', [agent, { operation: 'create', ref: { id: 'goal-a', revision: 1 } }]],
+      ['system-prompt/assemble', [[], { scope: agent }]],
+      ['tools/code-dispatch-log', [{ exec: { callId: 'c', name: 't', arguments: {} }, agent, subCallId: 'c:code:1', name: 't', isError: false, content: [] }, () => Promise.resolve([])]],
+      ['tools/execute', [{ callId: 'c', name: 't', arguments: {}, agent }, () => Promise.resolve({ content: [], isError: false })]],
+      ['tools/post-execute', [{ callId: 'c', name: 't', arguments: {}, agent }, { content: [], isError: false }, () => Promise.resolve({ kind: 'accept' })]],
+      ['tools/pre-execute', [{ callId: 'c', name: 't', arguments: {}, agent }, () => Promise.resolve({ kind: 'allow' })]],
+      ['tools/result', [{ callId: 'c', name: 't', arguments: {}, agent }, { content: [], isError: false }]],
+    ]
+
+    for (const [event, args] of rows) {
+      expect(() => { emit(ctx, scopeTarget(agent, agent), event, args) }, `${event} matching`).not.toThrow()
+      expect(() => { emit(ctx, scopeTarget(agent, other), event, args) }, `${event} mismatched`)
+        .toThrow(/DIFFERENT subject/)
+    }
+  })
+
+  it('requires carriers for generated presence-only scoped events without comparing a payload subject', async () => {
+    const ctx = await setup()
+    const agent = { id: 'a1' }
+    const rows: Array<[string, Array<unknown>]> = [
+      ['session/created', [{}]],
+      ['session/disposed', [{}]],
+      ['session/event', [{}, {}]],
+      ['session/flush', [{}]],
+      ['subagent/end', [{}]],
+      ['subagent/start', [{}]],
+    ]
+    for (const [event, args] of rows) {
+      expect(() => { emit(ctx, scopeTarget(agent, agent), event, args) }, `${event} carrier`).not.toThrow()
+      expect(() => { emit(ctx, undefined, event, args) }, `${event} no carrier`)
+        .toThrow(/dispatched without a scope carrier/)
+    }
+  })
+})
