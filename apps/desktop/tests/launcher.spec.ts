@@ -1,4 +1,5 @@
 import { join } from 'node:path'
+import { PassThrough } from 'node:stream'
 import { describe, expect, it, vi } from 'vitest'
 import {
   parseReadyLine,
@@ -15,7 +16,7 @@ function launchWith(
   env: NodeJS.ProcessEnv = {},
   platform: NodeJS.Platform = 'win32',
 ): ReturnType<typeof resolveWebLaunch> {
-  return resolveWebLaunch({ env, appDir: APP_DIR, isPackaged: false, execPath: 'C:\\repo\\node_modules\\electron\\dist\\electron.exe', exists, platform })
+  return resolveWebLaunch({ env, appDir: APP_DIR, execPath: 'C:\\repo\\node_modules\\electron\\dist\\electron.exe', exists, platform })
 }
 
 describe('parseReadyLine', () => {
@@ -39,7 +40,7 @@ describe('parseReadyLine', () => {
 })
 
 describe('resolveWebLaunch', () => {
-  const base = { env: {}, appDir: APP_DIR, isPackaged: false, execPath: 'C:\\electron\\electron.exe' }
+  const base = { env: {}, appDir: APP_DIR, execPath: 'C:\\electron\\electron.exe' }
 
   it('prefers DSH_BIN over every other candidate', () => {
     const launch = resolveWebLaunch({
@@ -73,7 +74,7 @@ describe('resolveWebLaunch', () => {
     const suffix = join('deploy', 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
     const launch = launchWith(path => path.endsWith(suffix))
     expect(launch.command).toBe('C:\\repo\\node_modules\\electron\\dist\\electron.exe')
-    expect(launch.args[0]).toContain(suffix)
+    expect(launch.args).toEqual(['--expose-internals', expect.stringContaining(suffix), ...WEB_ARGS])
     expect(launch.env).toEqual({ ELECTRON_RUN_AS_NODE: '1', DSH_PERMISSION_MODE: 'danger-full-access' })
     expect(launch.source).toBe('embedded closure')
   })
@@ -125,6 +126,31 @@ describe('waitForReadyLine', () => {
     const pending = new Promise<string>(() => {})
     const stream = (async function* () { yield 'no line here\n'; await pending })()
     await expect(waitForReadyLine(stream, { timeoutMs: 10 })).rejects.toThrow(/within 10ms/)
+  })
+
+  it('keeps consuming the stream after readiness instead of destroying it', async () => {
+    // Regression: returning from a `for await` over a Node stream destroys it,
+    // and the live server then dies with EPIPE on its next stdout write.
+    const stream = new PassThrough()
+    const forwarded: string[] = []
+    const urlPromise = waitForReadyLine(stream, { onChunk: (chunk) => { forwarded.push(chunk) } })
+    stream.write('dsh web: http://127.0.0.1:1234\n')
+    const url = await urlPromise
+    expect(url.href).toBe('http://127.0.0.1:1234/')
+    stream.write('more server output after readiness\n')
+    await new Promise(resolve => setTimeout(resolve, 20))
+    expect(stream.destroyed).toBe(false)
+    expect(forwarded.join('')).toContain('more server output after readiness')
+    stream.end()
+    await new Promise(resolve => setTimeout(resolve, 20))
+  })
+
+  it('destroys the stream on timeout so the consumption loop cannot leak', async () => {
+    const stream = new PassThrough()
+    stream.write('nothing useful\n')
+    await expect(waitForReadyLine(stream, { timeoutMs: 10 })).rejects.toThrow(/within 10ms/)
+    await new Promise(resolve => setTimeout(resolve, 20))
+    expect(stream.destroyed).toBe(true)
   })
 })
 

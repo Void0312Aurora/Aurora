@@ -21,7 +21,6 @@ const PACKAGE_DIR = dirname(dirname(fileURLToPath(import.meta.url)))
 let mainWindow: BrowserWindow | undefined
 let tray: Tray | undefined
 let server: ChildProcess | undefined
-let reaper: ChildProcess | undefined
 let serverUrl: URL | undefined
 let quitting = false
 
@@ -42,6 +41,9 @@ function trayIconPath(): string {
 function killTree(pid: number): void {
   if (process.platform === 'win32') {
     spawn('taskkill', ['/T', '/F', '/PID', String(pid)], { stdio: 'ignore', windowsHide: true })
+      // taskkill always exists on Windows; the handler only prevents an
+      // uncaught 'error' crash if it cannot be started at all.
+      .on('error', () => {})
   } else {
     server?.kill()
   }
@@ -112,14 +114,27 @@ function createTray(): void {
 function fatal(error: Error): void {
   console.error(`[dsh-desktop] ${error.message}`)
   dialog.showErrorBox(WINDOW_TITLE, error.message)
+  // app.exit() skips before-quit; kill the server tree here so a boot failure
+  // cannot leave an orphaned `dsh web` (the reaper only guards hard kills).
+  quitting = true
+  if (server?.pid !== undefined) killTree(server.pid)
   app.exit(1)
+}
+
+/**
+ * Directory holding this package's runnable payload. In dev that is the
+ * package itself; packaged, the embedded closure and the reaper are spawned
+ * under Electron-as-Node, which cannot read inside `app.asar`, so they must
+ * live in the unpacked tree.
+ */
+function runDir(): string {
+  return app.isPackaged ? join(process.resourcesPath, 'app.asar.unpacked') : PACKAGE_DIR
 }
 
 async function boot(): Promise<void> {
   const launch = resolveWebLaunch({
     env: process.env,
-    appDir: PACKAGE_DIR,
-    isPackaged: app.isPackaged,
+    appDir: runDir(),
     execPath: process.execPath,
   })
   if (launch.env.DSH_PERMISSION_MODE !== undefined && process.env.DSH_PERMISSION_MODE === undefined) {
@@ -133,16 +148,7 @@ async function boot(): Promise<void> {
     windowsHide: true,
   })
   server = child
-  // Windows has no parent-death notification; the reaper polls this process
-  // and tree-kills the server if the main is ever hard-killed (Task Manager,
-  // taskkill, a crash), so `dsh web` cannot outlive its window.
-  if (process.platform === 'win32') {
-    reaper = spawn(process.execPath, [join(PACKAGE_DIR, 'lib', 'reaper.js'), String(process.pid), String(child.pid ?? 0)], {
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
-      stdio: 'ignore',
-      windowsHide: true,
-    })
-  }
+  let ready = false
   let stderrTail = ''
   child.stderr.on('data', (chunk: Buffer) => {
     stderrTail = (stderrTail + chunk.toString()).slice(-STDERR_TAIL_LIMIT)
@@ -151,16 +157,11 @@ async function boot(): Promise<void> {
     // Spawn failure (command not found etc.): no child exists to clean up.
     fatal(new Error(`dsh-desktop: failed to spawn dsh web via ${launch.source}: ${error.message}`))
   })
-  const url = await waitForReadyLine(child.stdout, {
-    onChunk: (chunk) => { process.stdout.write(`[dsh web] ${chunk}`) },
-  })
-  await waitForHttpOk(url)
-  serverUrl = url
-  Menu.setApplicationMenu(null)
-  createWindow(url)
-  createTray()
   child.on('exit', (code, signal) => {
-    if (quitting) return
+    // Attached immediately so a crash during readiness cannot go unreported;
+    // before readiness the readiness wait itself fails (the stream ends), so
+    // the boot error path owns the message.
+    if (quitting || !ready) return
     void dialog.showMessageBox({
       type: 'error',
       title: WINDOW_TITLE,
@@ -168,6 +169,39 @@ async function boot(): Promise<void> {
       detail: `code ${String(code)} signal ${String(signal)}\n${stderrTail}`,
     }).finally(() => { app.quit() })
   })
+  // Windows has no parent-death notification; the reaper polls this process
+  // and tree-kills the server if the main is ever hard-killed (Task Manager,
+  // taskkill, a crash), so `dsh web` cannot outlive its window. The reaper
+  // stays alive across a graceful quit too: it detects the main's exit and
+  // finishes the cleanup even if the quit path's own taskkill races the exit.
+  if (process.platform === 'win32') {
+    spawn(process.execPath, [join(runDir(), 'lib', 'reaper.js'), String(process.pid), String(child.pid ?? 0)], {
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+      stdio: 'ignore',
+      windowsHide: true,
+    })
+      // The reaper is best-effort: if it cannot start, the graceful quit path
+      // still tree-kills the server; only hard-kill cleanup is lost.
+      .on('error', () => {})
+  }
+  // Readable stream: yield strings, and a multibyte character split across
+  // chunks is reassembled by the decoder instead of mojibaked.
+  child.stdout.setEncoding('utf8')
+  let url: URL | undefined
+  try {
+    url = await waitForReadyLine(child.stdout, {
+      onChunk: (chunk) => { process.stdout.write(`[dsh web] ${chunk}`) },
+    })
+    await waitForHttpOk(url)
+    ready = true
+    serverUrl = url
+  } catch (error) {
+    fatal(error instanceof Error ? new Error(`${error.message}\n${stderrTail}`) : new Error(String(error)))
+  }
+  if (url === undefined) return
+  Menu.setApplicationMenu(null)
+  createWindow(url)
+  createTray()
 }
 
 // Tray residency means the app outlives its window; a second launch must focus
@@ -180,7 +214,9 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(boot).catch(fatal)
   app.on('before-quit', () => {
     quitting = true
-    reaper?.kill()
+    // The reaper is deliberately left alive: it polls this process, so after
+    // the main exits it performs the same tree kill — guaranteeing cleanup
+    // even if the taskkill spawned here races the process exit.
     if (server?.pid !== undefined) killTree(server.pid)
   })
   // Tray residency: the app outlives its window by design, so a destroyed
