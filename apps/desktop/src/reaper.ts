@@ -26,8 +26,13 @@ const timer = setInterval(() => {
     // main process is gone (or becomes unowned).
     process.kill(mainPid, 0)
   } catch {
+    // process.kill(pid, 0) throws only when the main is gone or unowned —
+    // either way the server must not outlive it.
     clearInterval(timer)
     spawn('taskkill', ['/T', '/F', '/PID', String(serverPid)], { stdio: 'ignore', windowsHide: true })
+      // taskkill always exists on Windows; the handler only prevents an
+      // uncaught 'error' crash if it cannot be started at all.
+      .on('error', () => {})
     process.exit(0)
   }
 }, POLL_INTERVAL_MS)

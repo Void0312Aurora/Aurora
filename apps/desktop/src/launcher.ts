@@ -26,10 +26,13 @@ export interface WebServerLaunch {
 /** Filesystem and process facts the launcher reads; injectable for tests. */
 export interface LaunchEnvironment {
   env: NodeJS.ProcessEnv
-  /** Directory containing this package's `lib/` (`apps/desktop` in dev, the asar root when packaged). */
+  /**
+   * Directory holding this package's payload: `apps/desktop` in dev, the
+   * **unpacked** app root (`<resources>/app.asar.unpacked`) when packaged —
+   * the embedded closure and the reaper run under Electron-as-Node, which
+   * cannot read inside `app.asar`.
+   */
   appDir: string
-  /** Whether this is a packaged build (the embedded closure is then the first non-env candidate). */
-  isPackaged: boolean
   /** The running executable — Electron's own binary, reused as Node when the embedded closure is selected. */
   execPath: string
   /** Node executable for checkout launches; defaults to `node` on PATH. */
@@ -70,7 +73,10 @@ export function resolveWebLaunch(options: LaunchEnvironment): WebServerLaunch {
   if (exists(embedded)) {
     return {
       command: options.execPath,
-      args: [embedded, ...WEB_ARGS],
+      // The harness's HMR service needs Node internals; under Electron-as-Node
+      // the node-addon-require-builtin fallback does not work (Electron's V8
+      // lacks the embedder symbol), so the real flag is required here.
+      args: ['--expose-internals', embedded, ...WEB_ARGS],
       env: { ELECTRON_RUN_AS_NODE: '1', ...permissionMode },
       source: 'embedded closure',
     }
@@ -111,6 +117,8 @@ export function parseReadyLine(line: string): URL | undefined {
     const url = new URL(candidate)
     return url.port === '' ? undefined : url
   } catch {
+    // new URL(string) throws only SyntaxError for unparsable input; any such
+    // line is not a readiness line.
     return undefined
   }
 }
@@ -125,39 +133,72 @@ export interface ReadyLineOptions {
 /**
  * Wait for the `dsh web` readiness line on the child's stdout. Resolves with
  * the advertised URL; rejects when the stream ends first (the server exited
- * without ever listening) or after {@link ReadyLineOptions.timeoutMs}. The
- * timeout and the line scan race; whichever settles first wins.
+ * without ever listening) or after {@link ReadyLineOptions.timeoutMs}.
+ *
+ * The scan never breaks out of the consumption loop: for-await over a Node
+ * stream destroys it on early return, and the live server keeps writing
+ * stdout after readiness (a destroyed pipe kills it with EPIPE). Once the
+ * line is found the loop keeps draining the stream — `onChunk` keeps
+ * forwarding — but stops scanning. On the timeout path the iterator is
+ * returned so the loop cannot leak.
  * @param stdout - the child's stdout as an async iterable of string chunks.
  * @param options - timeout and logging hooks.
  * @returns the readiness-line URL.
  */
 export function waitForReadyLine(stdout: AsyncIterable<string>, options: ReadyLineOptions = {}): Promise<URL> {
   const timeoutMs = options.timeoutMs ?? 60_000
-  const loop = (async (): Promise<URL> => {
-    // Chunks split lines arbitrarily; keep the unterminated tail across chunks.
-    let buffer = ''
-    for await (const chunk of stdout) {
-      options.onChunk?.(chunk)
-      buffer += chunk
-      const lines = buffer.split(/\r?\n/)
-      buffer = lines.pop() ?? ''
-      for (const line of lines) {
-        const url = parseReadyLine(line)
-        if (url !== undefined) return url
+  return new Promise<URL>((resolve, reject) => {
+    const iterator = stdout[Symbol.asyncIterator]()
+    let resolved = false
+    const timer = setTimeout(() => {
+      // Giving up on the stream: stop the consumption loop. Node streams are
+      // also destroyed here — the timeout means we are done with this server,
+      // and an open pipe would otherwise keep the loop alive forever.
+      void iterator.return?.()
+      const destroyable = stdout as AsyncIterable<string> & { destroy?: () => void }
+      destroyable.destroy?.()
+      reject(new Error(`dsh-desktop: no readiness line from dsh web within ${timeoutMs}ms`))
+    }, timeoutMs)
+    void (async () => {
+      try {
+        // Chunks split lines arbitrarily; keep the unterminated tail across chunks.
+        let buffer = ''
+        while (true) {
+          const result = await iterator.next()
+          if (result.done) break
+          const chunk = result.value
+          options.onChunk?.(chunk)
+          if (resolved) continue
+          buffer += chunk
+          const lines = buffer.split(/\r?\n/)
+          buffer = lines.pop() ?? ''
+          for (const line of lines) {
+            const url = parseReadyLine(line)
+            if (url !== undefined) {
+              resolved = true
+              clearTimeout(timer)
+              resolve(url)
+            }
+          }
+        }
+        if (resolved) return
+        // The stream ended: a final line without a trailing newline still counts.
+        const url = parseReadyLine(buffer)
+        if (url !== undefined) {
+          resolved = true
+          clearTimeout(timer)
+          resolve(url)
+          return
+        }
+        clearTimeout(timer)
+        reject(new Error('dsh-desktop: dsh web exited before printing its readiness line'))
+      } catch (error) {
+        if (resolved) return
+        clearTimeout(timer)
+        reject(error instanceof Error ? error : new Error(String(error)))
       }
-    }
-    // The stream ended: a final line without a trailing newline still counts.
-    const url = parseReadyLine(buffer)
-    if (url !== undefined) return url
-    throw new Error('dsh-desktop: dsh web exited before printing its readiness line')
-  })()
-  const timeout = new Promise<never>((_resolve, reject) => {
-    setTimeout(() => { reject(new Error(`dsh-desktop: no readiness line from dsh web within ${timeoutMs}ms`)) }, timeoutMs)
+    })()
   })
-  // Only one of the two can win the race; swallow the loser's rejection so it
-  // never surfaces as an unhandled rejection.
-  void loop.catch(() => {})
-  return Promise.race([loop, timeout])
 }
 
 export interface HttpOkOptions {
