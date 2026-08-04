@@ -1,0 +1,11 @@
+{
+  "name": "dsh-desktop-closure",
+  "description": "Dependency-only deploy root for dsh-desktop: pnpm deploy materializes this manifest and node_modules into apps/desktop/deploy, the self-contained dsh web bundle the packaged app runs under Electron-as-Node",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@deepseek-ai/dsh": "workspace:^",
+    "@deepseek-ai/dsh-frontend": "workspace:^"
+  }
+}

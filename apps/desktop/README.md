@@ -1,0 +1,48 @@
+# `@deepseek-ai/dsh-desktop`
+
+English | [中文](README.zh.md)
+
+
+Electron shell for the DeepSeek Harness Web GUI: it spawns `dsh web`, waits for the server's readiness line, and hosts the GUI in a standalone window. Closing the window hides it and keeps the server running in the tray; the tray menu reopens the window or quits the app (and with it the server). One instance per machine — a second launch focuses the existing window instead of starting a second server.
+
+## Running from the checkout
+
+Build the repo first — `pnpm run build` produces the CLI lib, the web dist, and this package's lib — then:
+
+```sh
+pnpm --filter @deepseek-ai/dsh-desktop dev
+```
+
+The launcher resolves `dsh web` in this order:
+
+1. `DSH_BIN` — an explicit executable path (useful for a custom CLI build);
+2. the embedded closure at `deploy/node_modules/@deepseek-ai/dsh/lib/bin.js` (only in packaged builds; see Packaging);
+3. this checkout's CLI — built `apps/cli/lib/bin.js` when present, else the tsx source launch (`node --import tsx/esm apps/cli/src/bin.ts`) the root `pnpm run dsh` script uses;
+4. `dsh` on `PATH`.
+
+The server always listens on `127.0.0.1` on an OS-assigned port (`--port 0`), so it can never collide with an existing `dsh web`; the readiness line `dsh web: http://127.0.0.1:<port>` is parsed from stdout, then polled for HTTP 200. Loopback requests pass the /api browser-trust fence by default, so no extra flags are needed.
+
+## Behavior notes
+
+- The window is a plain sandboxed renderer (`nodeIntegration: false`, `contextIsolation: true`, `sandbox: true`) with no preload: the GUI is a normal web application. Links that would open a new window or navigate off the server origin go to the system browser instead.
+- Closing the window does not quit — the server keeps running and the tray icon stays. **Quit** terminates the `dsh web` process tree and exits. On Windows the tree kill is `taskkill /T` because `child.kill()` is `TerminateProcess` of the direct child only, and the server does not run its graceful-dispose path; session data is written per event to JSONL, so a killed server loses nothing already logged.
+- Windows has no harness confinement backend, so the CLI's default `workspace-write` permission mode cannot boot there. When `DSH_PERMISSION_MODE` is unset the shell falls back to `danger-full-access` (approval prompts are disabled) and logs a warning; set `DSH_PERMISSION_MODE` explicitly to override.
+- If the Electron main is hard-killed (Task Manager, a crash), a small reaper child polls it and tree-kills the server within a second, so `dsh web` never outlives its window.
+- The server's stdout is forwarded to this process's stdout with a `[dsh web]` prefix; run `electron .` from a terminal to see both streams. The packaged app writes nothing to disk besides Electron's own `userData` and the harness's normal `$DSH_HOME`/workspace files.
+- Session and workspace semantics are the CLI's: the invoking directory is the default project/Workspace root, and `$DSH_HOME/config.yaml` applies as usual. Launching the packaged app from a Start-menu shortcut starts with the shell's cwd, so prefer opening the app from a project directory or picking the Workspace in the GUI.
+
+## Packaging
+
+```sh
+pnpm --filter @deepseek-ai/dsh-desktop dist        # NSIS installer + portable exe under release/
+pnpm --filter @deepseek-ai/dsh-desktop dist:dir    # unpacked dir only, for a quick smoke
+```
+
+
+`dist` first builds the repo (`build:lib` + `build:web`), then materializes the self-contained web closure with `pnpm run deploy:closure` (the `dsh-desktop-closure` deploy root, the same pattern `python/sdk-runtime` uses), then runs electron-builder with `electron-builder.yml`. The packaged app needs no Node, no `dsh`, and no checkout: the launcher's embedded-closure branch runs the bundled CLI under Electron-as-Node (`ELECTRON_RUN_AS_NODE=1`). The closure's native addons are N-API and need no rebuild against Electron.
+
+Icons (`build/icon.png`, `build/tray-icon.png`) are rasterized from `apps/web/public/favicon.svg` by `pnpm run icons` and committed; regenerate them if the favicon changes.
+
+## Tests
+
+`tests/launcher.spec.ts` covers the pure launcher logic — command resolution, readiness-line parsing, and the readiness polls — keyless and without launching Electron.
