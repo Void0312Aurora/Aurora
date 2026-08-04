@@ -16,7 +16,7 @@ pnpm --filter @deepseek-ai/dsh-desktop dev
 The launcher resolves `dsh web` in this order:
 
 1. `DSH_BIN` — an explicit executable path (useful for a custom CLI build);
-2. the embedded closure at `deploy/node_modules/@deepseek-ai/dsh/lib/bin.js` (only in packaged builds; see Packaging);
+2. the embedded closure at `deploy/node_modules/@deepseek-ai/dsh/lib/bin.js` (whenever `deploy/` is materialized — always in packaged builds, and in a dev checkout after `deploy:closure`; see Packaging);
 3. this checkout's CLI — built `apps/cli/lib/bin.js` when present, else the tsx source launch (`node --import tsx/esm apps/cli/src/bin.ts`) the root `pnpm run dsh` script uses;
 4. `dsh` on `PATH`.
 
@@ -39,7 +39,7 @@ pnpm --filter @deepseek-ai/dsh-desktop dist:dir    # unpacked dir only, for a qu
 ```
 
 
-`dist` first builds the repo (`build:lib` + `build:web`), then materializes the self-contained web closure with `pnpm run deploy:closure` (the `dsh-desktop-closure` deploy root, the same pattern `python/sdk-runtime` uses), then runs electron-builder with `electron-builder.yml`. The packaged app needs no Node, no `dsh`, and no checkout: the launcher's embedded-closure branch runs the bundled CLI under Electron-as-Node (`ELECTRON_RUN_AS_NODE=1`). The closure's native addons are N-API and need no rebuild against Electron.
+`dist` first builds the repo (`build:lib` + `build:web`), then materializes the self-contained web closure with `pnpm run deploy:closure` (the `dsh-desktop-closure` deploy root, the same pattern `python/sdk-runtime` uses), then runs electron-builder with `electron-builder.yml`. The packaged app needs no Node, no `dsh`, and no checkout: the launcher's embedded-closure branch runs the bundled CLI under Electron-as-Node (`ELECTRON_RUN_AS_NODE=1`) with `--expose-internals` — the harness's HMR service needs Node internals, and the `node-addon-require-builtin` fallback does not work under Electron's V8. The closure's native addons are N-API and need no rebuild against Electron; `deploy/**` and `lib/reaper.js` are unpacked from the asar so the run-as-Node children can read them.
 
 Icons (`build/icon.png`, `build/tray-icon.png`) are rasterized from `apps/web/public/favicon.svg` by `pnpm run icons` and committed; regenerate them if the favicon changes.
 

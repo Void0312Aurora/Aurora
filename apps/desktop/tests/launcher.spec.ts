@@ -128,6 +128,11 @@ describe('waitForReadyLine', () => {
     await expect(waitForReadyLine(stream, { timeoutMs: 10 })).rejects.toThrow(/within 10ms/)
   })
 
+  it('accepts a final readiness line without a trailing newline', async () => {
+    const url = await waitForReadyLine(streamOf(['noise line\n', 'dsh web: http://127.0.0.1:4321']))
+    expect(url.href).toBe('http://127.0.0.1:4321/')
+  })
+
   it('keeps consuming the stream after readiness instead of destroying it', async () => {
     // Regression: returning from a `for await` over a Node stream destroys it,
     // and the live server then dies with EPIPE on its next stdout write.
