@@ -3,6 +3,10 @@ packages:
   - packages/*/*
   # Product assemblies over the package tier; apps/cli owns the `dsh` bin.
   - apps/*
+  # dsh-desktop's dependency-only deploy root: pnpm deploy materializes the
+  # self-contained web closure into apps/desktop/deploy (python/sdk-runtime is
+  # the same pattern for the Python runtime).
+  - apps/desktop/closure
   - website
   # The runnable demo leaves join as ONE workspace member: examples/package.json
   # declares the union of every leaf's cordis.yml plugins as workspace:*, so a
@@ -46,6 +50,11 @@ allowBuilds:
   # The Python runtime deploy includes the reviewed workspace postinstall that
   # restores the executable bit on node-pty's macOS spawn helper.
   '@deepseek-ai/dsh-pty-local@file:packages/pty/pty-local': true
+  # Electron's postinstall downloads the platform binary into node_modules.
+  electron: true
+  # Transitive of electron-builder's Squirrel.Windows target, which dsh-desktop
+  # never uses (nsis + portable only); its script is a no-op we deny.
+  electron-winstaller: false
 
 # The Landlock launcher family is our own sibling-repo release, consumed
 # fresh (hours old at each coordinated bump) — the release-age quarantine

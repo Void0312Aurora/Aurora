@@ -11,7 +11,8 @@
   ],
   "ignoreWorkspaces": [
     "vendor/*",
-    "python/sdk-runtime"
+    "python/sdk-runtime",
+    "apps/desktop/closure"
   ],
   "ignoreDependencies": [
     "@yarnpkg/cli-dist",
@@ -633,6 +634,19 @@
       ],
       "ignoreDependencies": [
         "@deepseek-ai/.+"
+      ]
+    },
+    "apps/desktop": {
+      "entry": [
+        "src/main.ts",
+        "src/reaper.ts",
+        "tests/**/*.spec.ts",
+        "scripts/generate-icons.mjs"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "tests/**/*.ts",
+        "scripts/**/*.mjs"
       ]
     },
     "packages/client/modules": {
