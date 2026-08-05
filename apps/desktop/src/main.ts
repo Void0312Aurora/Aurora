@@ -209,9 +209,9 @@ async function boot(): Promise<void> {
     env: { ...process.env, ...launch.env },
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
-    // POSIX: detaching makes the child a process-group leader so killTree can
-    // signal the whole tree with `-pid`; Windows stays attached and uses
-    // taskkill /T instead (detached would orphan the child from the reaper).
+    // POSIX: detaching makes the child a process-group leader so both killTree
+    // and the reaper can signal the whole tree with a negated PID; Windows
+    // stays attached and tree-kills with taskkill /T instead.
     detached: process.platform !== 'win32',
   })
   server = child
@@ -236,21 +236,22 @@ async function boot(): Promise<void> {
       detail: `code ${String(code)} signal ${String(signal)}\n${stderrTail}`,
     }).finally(() => { app.quit() })
   })
-  // Windows has no parent-death notification; the reaper polls this process
-  // and tree-kills the server if the main is ever hard-killed (Task Manager,
-  // taskkill, a crash), so `dsh web` cannot outlive its window. The reaper
-  // stays alive across a graceful quit too: it detects the main's exit and
-  // finishes the cleanup even if the quit path's own taskkill races the exit.
-  if (process.platform === 'win32') {
-    spawn(process.execPath, [join(runDir(), 'lib', 'reaper.js'), String(process.pid), String(child.pid ?? 0)], {
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
-      stdio: 'ignore',
-      windowsHide: true,
-    })
-      // The reaper is best-effort: if it cannot start, the graceful quit path
-      // still tree-kills the server; only hard-kill cleanup is lost.
-      .on('error', () => {})
-  }
+  // No OS delivers a parent-death notification, so the reaper polls this
+  // process and tree-kills the server if the main is ever hard-killed (Task
+  // Manager, taskkill, a crash), so `dsh web` cannot outlive its window on any
+  // platform. Windows kills via taskkill /T; POSIX signals the server's
+  // process group (the server is detached, so a negated PID reaches the whole
+  // tree). The reaper stays alive across a graceful quit too: it detects the
+  // main's exit and finishes the cleanup even if the quit path's own killTree
+  // races the exit. It is deliberately not killed on quit.
+  spawn(process.execPath, [join(runDir(), 'lib', 'types', 'reaper.js'), String(process.pid), String(child.pid ?? 0)], {
+    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+    stdio: 'ignore',
+    windowsHide: true,
+  })
+    // The reaper is best-effort: if it cannot start, the graceful quit path
+    // still tree-kills the server; only hard-kill cleanup is lost.
+    .on('error', () => {})
   // Readable stream: yield strings, and a multibyte character split across
   // chunks is reassembled by the decoder instead of mojibaked.
   child.stdout.setEncoding('utf8')
@@ -298,7 +299,7 @@ if (!app.requestSingleInstanceLock()) {
     quitting = true
     // The reaper is deliberately left alive: it polls this process, so after
     // the main exits it performs the same tree kill — guaranteeing cleanup
-    // even if the taskkill spawned here races the process exit.
+    // even if the killTree spawned here races the process exit.
     if (server?.pid !== undefined) killTree(server.pid)
   })
   // Tray residency: the app outlives its window by design, so a destroyed
