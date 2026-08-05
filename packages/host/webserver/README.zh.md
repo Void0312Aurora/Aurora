@@ -4,7 +4,7 @@
 
 朴素的 HTTP 路由注册插件（默认导出 `HttpServerService`，配置为 `{host, port, distIndex}`）：一个在激活时开始监听的 `node:http` 服务器，提供 `ctx.httpServer`。`register(route)` 添加具名的 `exact`／`prefix` 路由；重复的 `(kind, path)` 会抛错，因为路由模式是组合层契约，冲突即配置错误；返回的 disposer 会移除该路由。`tapIndex(transform)` 添加按注册顺序应用的 index.html 转换，`port` 读取正在监听的端口（当 `port` 为 0 时读取 OS 分配的值），`host` 读取配置的绑定宿主（这些是其他插件据以自适应的组合期事实，例如 directory-picker 选择器）。匹配顺序固定不变：先在整张表中匹配精确路由，再匹配最长前缀，最后回退到静态 dist，并遵循固定语义：越出 dist 根目录的遍历返回 403，任何未命中项都以 HTTP 200 回退到 `index.html`（SPA 路由），未知扩展名按 octet-stream 提供，GET／HEAD 之外的方法返回 405。注册顺序不承载任何面向请求的语义。
 
-该包不了解任何 harness 概念：`/api` 桥接是 connection 插件的路由，插件 bundle 与 HMR（热模块替换）事件流则是 modules／hmr 插件的路由。`host` 只接受 `127.0.0.1`（默认姿态）和 `0.0.0.0`（有意向网络开放）；`distIndex` 是由组合应用解析并注入的组装事实，绝不会自行解析，因为 dist 位置属于应用的工作区知识。该服务器只服务 Web（浏览器）形态；Electron 通过 `file://` 加载 dist，并经 IPC 桥接承载 fetch，而不使用本服务器。该包从不打印内容；URL 行属于 shell。
+该包不了解任何 harness 概念：`/api` 桥接是 connection 插件的路由，插件 bundle 与 HMR（热模块替换）事件流则是 modules／hmr 插件的路由。`host` 只接受 `127.0.0.1`（默认姿态）和 `0.0.0.0`（有意向网络开放）；`distIndex` 是由组合应用解析并注入的组装事实，绝不会自行解析，因为 dist 位置属于应用的工作区知识。该服务器只服务 Web（浏览器）形态；桌面外壳（`apps/desktop`）也复用本服务器承载 GUI：`dsh web` 组合了本包，因此 Electron 窗口只是浏览器形态所用的同一个 `127.0.0.1:<port>` 服务器的另一个 HTTP 客户端（见 [dsh-desktop note](../../../.agents/notes/implemented/architecture/2026-08-04-dsh-desktop-electron-shell.md)）。外壳既不通过 `file://` 加载 dist，也不经 IPC 桥接承载 fetch。该包从不打印内容；URL 行属于 shell。
 
 监听失败（EADDRINUSE……）会从激活过程抛出，以 bind 诊断使 Loader 组合 reject；失败的候选 fiber 会被 dispose（资源释放）。处理请求时抛错（例如格式错误的百分号转义传入 `decodeURIComponent`，或客户端在请求体传输中途断开）时，服务器会响应 400；若响应头已经发出，则销毁 socket，并记录 warning，但绝不会退出进程。资源释放会把 `close()` 与 `closeAllConnections()` 配对，因为一直保持打开的 SSE（Server-Sent Events）响应不会自行结束。
 
