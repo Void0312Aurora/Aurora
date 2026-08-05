@@ -6,6 +6,8 @@ Status: implemented
 
 > 范围：新的产品组装 `apps/desktop`（`@deepseek-ai/dsh-desktop`），把现有 `dsh web` GUI 承载到独立 Electron 窗口并带托盘常驻，外加其自包含打包方案（electron-builder + `dsh-desktop-closure` deploy root，用 `pnpm deploy` 物化、在 Electron-as-Node 下运行）。
 
+> 部分取代：[GUI 分层与 RPC 协议 note](2026-07-19-gui-layering-and-rpc-protocol.md) 曾为将来的 Electron 形态预设 IPC fetch 载体；本外壳以 HTTP 客户端形态落地，复用现有 `dsh web` webserver。该 note 的协议本体（四象限消息模型）仍然有效。
+
 ## Problem
 
 Web GUI 是产品交互最丰富的界面，却活在浏览器标签页里：没有任务栏存在感、没有托盘、没有独立窗口外观，每次启动都要开终端、起 `dsh web`、保住标签页。用户要求独立窗口。GUI 本质是客户端-服务器架构——`dsh web` 在 `127.0.0.1:<port>` 提供本地 HTTP API 和静态外壳——因此「桌面应用」不可能是单进程，必须是拥有服务器生命周期的客户端外壳。外壳因此要解决：`dsh web` 从哪来（检出目录、PATH 还是内置）、如何免配置得知端口（服务器支持 `--port 0`，OS 分配）、如何探测就绪（`dsh web` 在 listen 之后才打印 `dsh web: http://127.0.0.1:<port>`）、以及窗口生命周期与服务器生命周期的关系（托盘常驻：关闭 ≠ 退出）。
@@ -16,7 +18,7 @@ Web GUI 是产品交互最丰富的界面，却活在浏览器标签页里：没
 
 **托盘常驻，而不是窗口生命周期。** 关闭窗口只隐藏它，服务器继续运行；托盘菜单重新打开窗口或退出（同时杀掉服务器）。二次启动聚焦已有窗口。打包版不需要 Node、`dsh` 或检出目录：嵌入闭包在 Electron-as-Node（`ELECTRON_RUN_AS_NODE=1`）下运行，且带 `--expose-internals`——harness 的 HMR 服务需要 Node 内部模块，而 `node-addon-require-builtin` 回退在 Electron 的 V8 下不可用（缺少 `GetAlignedPointerFromEmbedderData` 符号）。闭包内的原生插件（node-pty、koffi）是 N-API，无需针对 Electron 重新编译（`npmRebuild: false`）。
 
-**打包用共享 lockfile deploy，而不是 `--legacy`。** `apps/desktop/closure` 是纯依赖 deploy root，其 107 项清单镜像 `python/sdk-runtime` 的 harness 闭包，外加 Web 专属 seam 包（`dsh-atomic-write`、`dsh-session-telemetry`、`dsh-session-telemetry-otel`、`dsh-session-title-llm`、`dsh-spill`、`dsh-spill-policy`）与 `@deepseek-ai/dsh` + `@deepseek-ai/dsh-frontend`；`apps/web` 增加了 `files: ["dist"]` 字段，让构建好的 GUI 进入闭包。物化命令为 `pnpm deploy --prod` 加 `--config.inject-workspace-packages=true --config.node-linker=hoisted --config.strict-dep-builds=false`——共享 lockfile 路径会复制每个包（结果零符号链接）。**pnpm 11.7.0 的 `pnpm deploy --legacy` 会非确定性地丢掉一部分 workspace 包**（仓库自己的 `python/sdk-runtime` 管线在该 pnpm 下同样中招）；不要重新引入。electron-builder 只打包 `lib/`、`build/`（图标）与 `deploy/`，并配 `asarUnpack: deploy/** + lib/reaper.js`（Electron-as-Node 子进程读不了 `app.asar` 内部）；本包自身零运行时依赖，因此 electron-builder 对 node_modules 的处理永远不会碰到闭包。`dist` 先跑完整仓库构建（`build:lib` + `build:web`），因为闭包复制的是构建产物而非源码。
+**打包用共享 lockfile deploy，而不是 `--legacy`。** `apps/desktop/closure` 是纯依赖 deploy root，其 107 项清单镜像 `python/sdk-runtime` 的 harness 闭包，外加 Web 专属 seam 包（`dsh-atomic-write`、`dsh-session-telemetry`、`dsh-session-telemetry-otel`、`dsh-session-title-llm`、`dsh-spill`、`dsh-spill-policy`）与 `@deepseek-ai/dsh` + `@deepseek-ai/dsh-frontend`；`apps/web` 增加了 `files: ["dist"]` 字段，让构建好的 GUI 进入闭包。物化命令为 `pnpm deploy --prod` 加 `--config.inject-workspace-packages=true --config.node-linker=hoisted --config.strict-dep-builds=false`——共享 lockfile 路径会复制每个包（结果零符号链接）。**pnpm 11.7.0 的 `pnpm deploy --legacy` 会非确定性地丢掉一部分 workspace 包**（仓库自己的 `python/sdk-runtime` 管线在该 pnpm 下同样中招）；不要重新引入。electron-builder 只打包 `lib/`、`build/`（图标）与 `deploy/`，并配 `asarUnpack: deploy/** + lib/types/reaper.js`（Electron-as-Node 子进程读不了 `app.asar` 内部）；本包自身零运行时依赖，因此 electron-builder 对 node_modules 的处理永远不会碰到闭包。`dist` 先跑完整仓库构建（`build:lib` + `build:web`），因为闭包复制的是构建产物而非源码。
 
 ## Alternatives considered
 
