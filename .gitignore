@@ -37,3 +37,7 @@ apps/web/dist/
 worktrees/
 .agents/worktrees/
 .typert-*/
+
+# Codex action transient workspace files
+.codex-prior-review-context.md
+codex-ci-logs.txt

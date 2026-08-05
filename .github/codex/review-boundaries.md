@@ -131,7 +131,7 @@ everything; examples and docs are leaves):
 
 | Tier | Typical paths | Depth |
 |------|---------------|-------|
-| High | `packages/core/`, `packages/agent/`, `packages/agent-loop/`, `packages/llm/`, `packages/session-persistence/`, `vendor/cordis`, wire contracts and RPC schemas, `apps/cli/` launcher logic | All dimensions, line-level scrutiny, cross-consumer impact search |
+| High | `packages/core/` (incl. `agent`, `agent-loop`), `packages/llm/`, `packages/session-persistence/`, `vendor/cordis`, wire contracts and RPC schemas, `apps/cli/` launcher logic | All dimensions, line-level scrutiny, cross-consumer impact search |
 | Medium | `apps/web/`, `apps/desktop/`, `packages/client/`, `packages/ui/`, test infrastructure, `scripts/` gates | Correctness, contracts, complexity; edge cases at P2 |
 | Low | `docs/`, `website/`, comments, non-executable assets | Accuracy and doc-sync only |
 

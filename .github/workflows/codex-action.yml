@@ -41,7 +41,7 @@ on:
         default: true
   workflow_run:
     workflows:
-      - ci.yml
+      - CI
     types:
       - completed
   release:
@@ -78,12 +78,13 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+      issues: read
       pull-requests: read
     outputs:
       final_message: ${{ steps.run_codex.outputs.final-message }}
     steps:
       - name: Checkout PR merge commit
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           ref: refs/pull/${{ github.event.pull_request.number }}/merge
           fetch-depth: 0
@@ -202,13 +203,14 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+      issues: read
       pull-requests: read
     outputs:
       final_message: ${{ steps.run_codex.outputs.final-message }}
     steps:
       - name: Checkout PR merge commit
         if: github.event.issue.pull_request
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           ref: refs/pull/${{ github.event.issue.number }}/merge
           fetch-depth: 0
@@ -216,7 +218,7 @@ jobs:
 
       - name: Checkout default branch
         if: ${{ !github.event.issue.pull_request }}
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.event.repository.default_branch }}
           fetch-depth: 0
@@ -319,7 +321,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout target ref
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           ref: ${{ inputs.target_ref != '' && inputs.target_ref || github.ref }}
           fetch-depth: 0
@@ -381,7 +383,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Checkout target ref
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           ref: ${{ inputs.target_ref != '' && inputs.target_ref || github.ref }}
           fetch-depth: 0
@@ -453,7 +455,7 @@ jobs:
 
   ci-failure-diagnosis:
     name: Codex CI failure diagnosis
-    if: github.actor == 'Void0312Aurora' && github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.event != 'pull_request'
+    if: github.actor == 'Void0312Aurora' && github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -463,7 +465,7 @@ jobs:
       final_message: ${{ steps.run_codex.outputs.final-message }}
     steps:
       - name: Checkout failed workflow head
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
@@ -535,7 +537,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout release ref
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.target_ref != '' && inputs.target_ref || github.ref }}
           fetch-depth: 0
