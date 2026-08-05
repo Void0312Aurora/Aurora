@@ -15,11 +15,11 @@
  * Usage: node reaper.js <mainPid> <serverPid>
  */
 
-// The same deploy-relative import src/main.ts uses (patched to the emitted
-// depth by scripts/patch-deploy-imports.mjs): the packaged app has no
+// The same lib-relative import src/main.ts uses: the packaged app has no
 // node_modules, and this script runs from the unpacked tree (Electron-as-Node
-// cannot read inside app.asar), so the primitive must live under deploy/.
-import { killProcessTree } from '../deploy/node_modules/@deepseek-ai/dsh-process-tree/lib/index.js'
+// cannot read inside app.asar), so the primitive ships as plain files under
+// lib/process-tree/ — packed and unpacked by electron-builder.
+import { killProcessTree } from '../lib/process-tree/index.js'
 
 const mainPid = Number(process.argv[2])
 const serverPid = Number(process.argv[3])

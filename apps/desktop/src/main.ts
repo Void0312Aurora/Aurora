@@ -10,16 +10,15 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { join } from 'node:path'
 import { app, BrowserWindow, dialog, Menu, nativeImage, shell, Tray } from 'electron'
 import { resolveWebLaunch, waitForHttpOk, waitForReadyLine, childExited } from './launcher.ts'
-// The tree-kill primitive ships inside the unpacked deploy closure (see
-// apps/desktop/closure): the packaged app has no node_modules, and
-// Electron-as-Node children (the reaper) cannot read inside app.asar, so code
-// they import must live under deploy/ — which electron-builder unpacks. The
-// specifier below is written relative to src/ (`../deploy`); `scripts/
-// patch-deploy-imports.mjs` rewrites it to `../../deploy` in the emitted
-// lib/types/ files, where the deploy tree is two levels up, so dev and
-// packaged resolutions agree. Dev requires `deploy:closure` to have
-// materialized the tree first (packaged builds always have).
-import { killProcessTree } from '../deploy/node_modules/@deepseek-ai/dsh-process-tree/lib/index.js'
+// The tree-kill primitive is materialized into this package's build output
+// (scripts/materialize-process-tree.mjs copies the compiled primitive into
+// lib/process-tree/ before every build): the packaged app has no node_modules,
+// and Electron-as-Node children (the reaper) cannot read inside app.asar, so
+// code they import must be plain files under lib/ — which electron-builder
+// packs and unpacks (lib/process-tree/**). The specifier below is written
+// relative to src/ and resolves identically from the emitted lib/types/, so
+// dev and packaged resolutions agree without any post-build rewrite.
+import { killProcessTree } from '../lib/process-tree/index.js'
 
 const APP_ID = 'ai.deepseek.dsh-desktop'
 const WINDOW_TITLE = 'DSH Desktop'
