@@ -23,6 +23,9 @@ let tray: Tray | undefined
 let server: ChildProcess | undefined
 let serverUrl: URL | undefined
 let quitting = false
+// A focus request (second launch, tray click) that arrived while the server
+// was still booting and no window existed yet; honored once boot completes.
+let pendingFocus = false
 
 function iconPath(): string {
   return join(PACKAGE_DIR, 'build', 'icon.png')
@@ -57,6 +60,33 @@ function showWindow(): void {
     return
   }
   if (serverUrl !== undefined) createWindow(serverUrl)
+  else pendingFocus = true
+}
+
+/**
+ * Open a URL in the system browser — but only http(s) links: the GUI must
+ * not be able to launch arbitrary programs via `file://` or a custom
+ * protocol, and a navigation target that is not a parseable URL is dropped
+ * too. `shell.openExternal` is fire-and-forget; its rejection must not
+ * become an unhandled rejection in the Electron main process.
+ * @param raw - the raw URL from the web contents.
+ */
+function openExternal(raw: string): void {
+  let url: URL
+  try {
+    url = new URL(raw)
+  } catch {
+    // new URL(string) throws only SyntaxError for unparsable input; ignore.
+    console.warn(`[dsh-desktop] ignoring unparsable external URL: ${raw}`)
+    return
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    console.warn(`[dsh-desktop] ignoring non-http(s) external URL: ${raw}`)
+    return
+  }
+  void shell.openExternal(raw).catch((error: unknown) => {
+    console.error(`[dsh-desktop] failed to open ${raw}: ${error instanceof Error ? error.message : String(error)}`)
+  })
 }
 
 function createWindow(url: URL): void {
@@ -92,13 +122,18 @@ function createWindow(url: URL): void {
   // The GUI is a single-page app; anything that opens a new window or
   // navigates away from the server origin belongs in the system browser.
   window.webContents.setWindowOpenHandler(({ url: target }) => {
-    void shell.openExternal(target)
+    openExternal(target)
     return { action: 'deny' }
   })
   window.webContents.on('will-navigate', (event, target) => {
-    if (new URL(target).origin === url.origin) return
+    try {
+      if (new URL(target).origin === url.origin) return
+    } catch {
+      // new URL(string) throws only SyntaxError for unparsable input; such a
+      // target is not ours and is rejected below.
+    }
     event.preventDefault()
-    void shell.openExternal(target)
+    openExternal(target)
   })
 }
 
@@ -213,6 +248,14 @@ async function boot(): Promise<void> {
   Menu.setApplicationMenu(null)
   createWindow(url)
   createTray()
+  // A focus request cached while the server was booting (second launch, tray
+  // click) is honored now that the window exists; the request would have been
+  // silently lost otherwise. Deliberately after createWindow, so the cached
+  // request surfaces this one window instead of spawning a second.
+  if (pendingFocus) {
+    pendingFocus = false
+    showWindow()
+  }
 }
 
 // Tray residency means the app outlives its window; a second launch must focus
