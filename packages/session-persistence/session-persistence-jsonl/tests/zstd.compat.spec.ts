@@ -19,6 +19,16 @@ describe('JSONL Zstandard compatibility', () => {
     const eventFrame = encoded.subarray(frames[1]!.start, frames[1]!.end)
     const missingChecksumByte = eventFrame.subarray(0, -1)
     expect(scanZstdFrames(missingChecksumByte)).toEqual({ frames: [], tornStart: 0 })
-    expect((await decompressZstdFrame(missingChecksumByte)).toString()).toContain('"type":"turn/start"')
+    // Torn-frame decompression is best-effort across Node versions: Node < 26
+    // returns the available plaintext, Node >= 26 rejects the truncated frame
+    // (nodejs/node#64593). The recovery path (readZstdPrefix) treats both as
+    // expected — complete prior frames are recovered either way — so pin each
+    // version's behavior rather than asserting one of them unconditionally.
+    const nodeMajor = Number(process.version.slice(1).split('.')[0])
+    if (nodeMajor >= 26) {
+      await expect(decompressZstdFrame(missingChecksumByte)).rejects.toThrow()
+    } else {
+      expect((await decompressZstdFrame(missingChecksumByte)).toString()).toContain('"type":"turn/start"')
+    }
   })
 })

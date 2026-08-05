@@ -106,8 +106,12 @@ export async function compressZstdFrame(input: Buffer | string): Promise<Buffer>
 }
 
 /**
- * Decompress one complete frame or the available prefix of a torn final frame.
- * Complete-frame checksums are validated by Node's decoder.
+ * Decompress one complete frame, or attempt a torn final frame on a
+ * best-effort basis: Node < 26 returns the available plaintext prefix, while
+ * Node >= 26 rejects structurally incomplete input (nodejs/node#64593) and
+ * throws. Callers must treat a thrown error as "no plaintext recovered from
+ * this torn frame" — the JSONL recovery path does exactly that, so complete
+ * prior frames stay recoverable on every Node version.
  * @param input - bytes beginning at a Zstandard frame boundary.
  * @returns plaintext produced from the available input.
  */
