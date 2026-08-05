@@ -5,6 +5,7 @@
  * `main.ts`.
  */
 
+import type { ChildProcess } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -234,4 +235,16 @@ export async function waitForHttpOk(url: URL, options: HttpOkOptions = {}): Prom
     await new Promise(resolve => setTimeout(resolve, pollIntervalMs))
   }
   throw new Error(`dsh-desktop: server not reachable at ${url.href} within ${timeoutMs}ms (last error: ${String(lastError)})`)
+}
+
+/**
+ * Whether a spawned child process has already exited. `exitCode` and
+ * `signalCode` stay null until the child exits, so either becoming non-null
+ * means the process is gone (a clean exit sets the code, a signal death sets
+ * the signal). A child that never spawned (spawn error) reports neither, which
+ * this returns as not-exited; callers treat the spawn-error event separately.
+ * @param child - the child process to probe.
+ */
+export function childExited(child: Pick<ChildProcess, 'exitCode' | 'signalCode'>): boolean {
+  return child.exitCode !== null || child.signalCode !== null
 }

@@ -2,6 +2,7 @@ import { join } from 'node:path'
 import { PassThrough } from 'node:stream'
 import { describe, expect, it, vi } from 'vitest'
 import {
+  childExited,
   parseReadyLine,
   resolveWebLaunch,
   waitForHttpOk,
@@ -189,5 +190,27 @@ describe('waitForHttpOk', () => {
     const fetchImpl = vi.fn(async () => { throw new Error('ECONNREFUSED') })
     await expect(waitForHttpOk(new URL('http://127.0.0.1:1/'), { fetchImpl, timeoutMs: 30, pollIntervalMs: 5 }))
       .rejects.toThrow(/http:\/\/127\.0\.0\.1:1\/.*ECONNREFUSED/)
+  })
+
+  it('keeps polling and rejects when the server only answers non-2xx', async () => {
+    const fetchImpl = vi.fn(async () => new Response('nope', { status: 500 }))
+    await expect(waitForHttpOk(new URL('http://127.0.0.1:1/'), { fetchImpl, timeoutMs: 50, pollIntervalMs: 5 }))
+      .rejects.toThrow(/HTTP 500/)
+    // The poll must have retried until the deadline, not given up after one attempt.
+    expect(fetchImpl.mock.calls.length).toBeGreaterThan(1)
+  })
+})
+
+describe('childExited', () => {
+  it('is false while the child is still running', () => {
+    expect(childExited({ exitCode: null, signalCode: null })).toBe(false)
+  })
+
+  it('is true once the child exited with a code', () => {
+    expect(childExited({ exitCode: 0, signalCode: null })).toBe(true)
+  })
+
+  it('is true once the child was killed by a signal', () => {
+    expect(childExited({ exitCode: null, signalCode: 'SIGKILL' })).toBe(true)
   })
 })

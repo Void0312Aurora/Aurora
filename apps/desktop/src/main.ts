@@ -10,7 +10,7 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { app, BrowserWindow, dialog, Menu, nativeImage, shell, Tray } from 'electron'
-import { resolveWebLaunch, waitForHttpOk, waitForReadyLine } from './launcher.ts'
+import { resolveWebLaunch, waitForHttpOk, waitForReadyLine, childExited } from './launcher.ts'
 
 const APP_ID = 'ai.deepseek.dsh-desktop'
 const WINDOW_TITLE = 'DSH Desktop'
@@ -77,7 +77,11 @@ function createWindow(url: URL): void {
   })
   mainWindow = window
   window.once('ready-to-show', () => { window.show() })
-  void window.loadURL(url.href)
+  void window.loadURL(url.href).catch((error: unknown) => {
+    // The server may have died right after readiness; a failed load must
+    // not crash the main process, the window just stays on its error page.
+    console.error(`[dsh-desktop] failed to load ${url.href}: ${error instanceof Error ? error.message : String(error)}`)
+  })
   window.on('close', (event) => {
     // Tray residency: closing hides the window and keeps the server running.
     if (quitting) return
@@ -193,6 +197,13 @@ async function boot(): Promise<void> {
       onChunk: (chunk) => { process.stdout.write(`[dsh web] ${chunk}`) },
     })
     await waitForHttpOk(url)
+    // A 200 on the readiness port is not necessarily ours: if the child
+    // exited while the poll ran, some other local server may have answered.
+    // Hosting a stranger's process would be a mistake, so fail the boot
+    // instead (the catch below owns the fatal dialog).
+    if (childExited(child)) {
+      throw new Error(`dsh-desktop: dsh web exited (code ${String(child.exitCode)} signal ${String(child.signalCode)}) while its port was verified; not adopting the server`)
+    }
     ready = true
     serverUrl = url
   } catch (error) {
