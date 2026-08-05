@@ -37,8 +37,11 @@ function trayIconPath(): string {
 
 /**
  * Terminate a process and its descendants. On Windows `child.kill()` is
- * `TerminateProcess` of the direct child only, so a tree kill is needed to
- * reach the server's own subprocesses (bash, sandbox helpers).
+ * `TerminateProcess` of the direct child only, so taskkill /T is needed to
+ * reach the server's own subprocesses (bash, sandbox helpers). On POSIX the
+ * server is spawned detached as a process-group leader (see boot), so killing
+ * the group with `-pid` covers the same tree: SIGTERM first, SIGKILL after a
+ * grace period.
  * @param pid - the process to terminate.
  */
 function killTree(pid: number): void {
@@ -47,9 +50,30 @@ function killTree(pid: number): void {
       // taskkill always exists on Windows; the handler only prevents an
       // uncaught 'error' crash if it cannot be started at all.
       .on('error', () => {})
-  } else {
-    server?.kill()
+    return
   }
+  try {
+    // The server was spawned detached, so a negated PID signals the whole
+    // process group in one call.
+    process.kill(-pid, 'SIGTERM')
+  } catch (error) {
+    // ESRCH means the group is already gone — the desired outcome.
+    if ((error as NodeJS.ErrnoException).code !== 'ESRCH') {
+      console.error(`[dsh-desktop] killTree SIGTERM failed for pid ${pid}: ${String(error)}`)
+    }
+    return
+  }
+  // SIGTERM gets a grace period; the group must not outlive its parent.
+  setTimeout(() => {
+    try {
+      process.kill(-pid, 'SIGKILL')
+    } catch (error) {
+      // ESRCH: the group exited after SIGTERM, nothing left to force.
+      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') {
+        console.error(`[dsh-desktop] killTree SIGKILL failed for pid ${pid}: ${String(error)}`)
+      }
+    }
+  }, 5_000)
 }
 
 function showWindow(): void {
@@ -185,6 +209,10 @@ async function boot(): Promise<void> {
     env: { ...process.env, ...launch.env },
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
+    // POSIX: detaching makes the child a process-group leader so killTree can
+    // signal the whole tree with `-pid`; Windows stays attached and uses
+    // taskkill /T instead (detached would orphan the child from the reaper).
+    detached: process.platform !== 'win32',
   })
   server = child
   let ready = false
