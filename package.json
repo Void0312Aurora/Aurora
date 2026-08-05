@@ -15,7 +15,7 @@
   ],
   "scripts": {
     "build": "npm run build:lib && npm run build:web",
-    "build:lib": "tsc -b && tsdown",
+    "build:lib": "node apps/desktop/scripts/materialize-process-tree.mjs && tsc -b && tsdown",
     "build:web": "pnpm --filter @deepseek-ai/dsh-frontend run build",
     "clean": "tsx scripts/clean.ts",
     "change-scope": "tsx scripts/change-scope.ts",

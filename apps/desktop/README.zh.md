@@ -7,7 +7,7 @@ DeepSeek Harness Web GUI 的 Electron 外壳：它启动 `dsh web`，等待服�
 
 ## 从检出目录运行
 
-先构建仓库——`pnpm run build` 产出 CLI lib、web dist 与本包的 lib——然后物化一次 deploy 树：`pnpm run deploy:closure`（构建与 dev 都必需：Electron 主进程与 reaper 从 `deploy/node_modules/@deepseek-ai/dsh-process-tree` 引入 tree-kill 原语，这是打包应用唯一的运行时 import 路径——见「打包」）：
+先构建仓库——`pnpm run build` 产出 CLI lib、web dist 与本包的 lib（`build:lib` 步骤会自动把 tree-kill 原语编译进 `lib/process-tree/`）。只有在想运行嵌入闭包而非检出分支时才需要 `deploy:closure`（见下文）：
 
 ```sh
 pnpm run deploy:closure
