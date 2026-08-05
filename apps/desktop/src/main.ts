@@ -7,16 +7,23 @@
  */
 
 import { spawn, type ChildProcess } from 'node:child_process'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
 import { app, BrowserWindow, dialog, Menu, nativeImage, shell, Tray } from 'electron'
 import { resolveWebLaunch, waitForHttpOk, waitForReadyLine, childExited } from './launcher.ts'
 
 const APP_ID = 'ai.deepseek.dsh-desktop'
 const WINDOW_TITLE = 'DSH Desktop'
 const STDERR_TAIL_LIMIT = 4_000
-/** `apps/desktop` in dev, the asar root when packaged. */
-const PACKAGE_DIR = dirname(dirname(fileURLToPath(import.meta.url)))
+/**
+ * `apps/desktop` in dev, the asar root when packaged. Resolved from
+ * `app.getAppPath()` rather than derived from `import.meta.url`: the built
+ * entry lives at `lib/types/main.js` (one level deeper than `lib/main.js`),
+ * so a two-level dirname walk would land on `apps/desktop/lib` — breaking the
+ * packaged icon paths, the dev runDir, and the launcher's checkout repo-root
+ * discovery. `getAppPath()` is the app root Electron itself resolves (`electron .`
+ * in dev; the asar root when packaged) and is safe to call at module scope.
+ */
+const PACKAGE_DIR = app.getAppPath()
 
 let mainWindow: BrowserWindow | undefined
 let tray: Tray | undefined
@@ -243,15 +250,26 @@ async function boot(): Promise<void> {
   // process group (the server is detached, so a negated PID reaches the whole
   // tree). The reaper stays alive across a graceful quit too: it detects the
   // main's exit and finishes the cleanup even if the quit path's own killTree
-  // races the exit. It is deliberately not killed on quit.
+  // races the exit. It is deliberately not killed on quit. Like the server, it
+  // must live outside Electron's process group: a terminal Ctrl+C signals the
+  // group, and taking the reaper with it would kill the hard-kill cleanup
+  // exactly when it is needed (detached + unref below).
   spawn(process.execPath, [join(runDir(), 'lib', 'types', 'reaper.js'), String(process.pid), String(child.pid ?? 0)], {
     env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
     stdio: 'ignore',
     windowsHide: true,
+    // Detached gives the reaper its own process group on POSIX (immune to the
+    // group SIGINT that takes Electron) and a console-less independent process
+    // on Windows; there taskkill /T is group-agnostic, so it still reaches the
+    // reaper's targets. unref() drops the parent's handle so Electron can exit
+    // without waiting — the reaper's job is to outlive it, not hold it open.
+    detached: true,
   })
     // The reaper is best-effort: if it cannot start, the graceful quit path
     // still tree-kills the server; only hard-kill cleanup is lost.
     .on('error', () => {})
+    // Unref after the error handler, which returns the child itself.
+    .unref()
   // Readable stream: yield strings, and a multibyte character split across
   // chunks is reassembled by the decoder instead of mojibaked.
   child.stdout.setEncoding('utf8')
