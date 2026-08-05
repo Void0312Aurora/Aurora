@@ -28,4 +28,4 @@ Web GUI 是产品交互最丰富的界面，却活在浏览器标签页里：没
 
 ## Consequences
 
-`pnpm --filter @deepseek-ai/dsh-desktop dev` 从检出目录以独立窗口打开 GUI；`dist` 产出 NSIS 安装包和免安装 exe，无需任何预装工具即可运行。启动器逻辑有无密钥单测（`apps/desktop/tests/launcher.spec.ts`）；Electron 胶水刻意薄到无需快照。服务器 stdout 以 `[dsh web]` 前缀转发；打包版不在别处写日志。v1 已知瑕疵（README 已记录）：打包版内 harness 源码提示段会命名一个不存在的检出路径（纯装饰，启动时无人读取）、调用目录即 workspace 的语义让开始菜单启动落在 shell 的 cwd、托盘图标主题是单一反色 PNG、外部链接一律经系统浏览器离开应用。
+`pnpm --filter @deepseek-ai/dsh-desktop dev` 从检出目录以独立窗口打开 GUI；`dist` 产出 NSIS 安装包和免安装 exe，无需任何预装工具即可运行。启动器逻辑有无密钥单测（`apps/desktop/tests/launcher.spec.ts`）；Electron 胶水刻意薄到无需快照。服务器 stdout 以 `[dsh web]` 前缀转发；打包版不在别处写日志。v1 已知瑕疵：打包版内 harness 源码提示段会命名 unpacked deploy 树中一个存在但并非 harness 检出目录的路径（纯装饰，启动时无人读取）、调用目录即 workspace 的语义让开始菜单启动落在 shell 的 cwd、托盘图标主题是单一反色 PNG、外部链接一律经系统浏览器离开应用（前两项在 README 中亦有记录）。

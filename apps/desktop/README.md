@@ -20,7 +20,7 @@ The launcher resolves `dsh web` in this order:
 3. this checkout's CLI — built `apps/cli/lib/bin.js` when present, else the tsx source launch (`node --import tsx/esm apps/cli/src/bin.ts`) the root `pnpm run dsh` script uses;
 4. `dsh` on `PATH`.
 
-The server always listens on `127.0.0.1` on an OS-assigned port (`--port 0`), so it can never collide with an existing `dsh web`; the readiness line `dsh web: http://127.0.0.1:<port>` is parsed from stdout, then polled for HTTP 200. Loopback requests pass the /api browser-trust fence by default, so no extra flags are needed.
+The server always listens on `127.0.0.1` on an OS-assigned port (`--port 0`), so it can never collide with an existing `dsh web`; the readiness line `dsh web: http://127.0.0.1:<port>` is parsed from stdout, then polled for HTTP 200. Loopback requests pass the /api browser-trust fence by default, so no extra flags are needed. If `deploy/` is materialized (you ran `deploy:closure` or `dist`), the embedded closure shadows the checkout branches — re-run `deploy:closure` after CLI changes, or set `DSH_BIN` to force a specific launch.
 
 ## Behavior notes
 
