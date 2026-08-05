@@ -6,15 +6,20 @@
  * gone, tree-kills the server child and exits. Runs under Electron-as-Node;
  * its only inputs are the two PIDs on argv.
  *
- * Tree kill is platform-specific: Windows uses `taskkill /T /F`; POSIX sends
- * SIGTERM to the server's process group (the server is spawned detached, so a
- * negated PID reaches the whole tree) and escalates to SIGKILL after a grace
- * period.
+ * The tree kill is delegated to the `@deepseek-ai/dsh-process-tree` primitive
+ * (taskkill /T /F on Windows; SIGTERM with SIGKILL escalation against the
+ * server's detached process group on POSIX). Its escalation timer is what
+ * keeps this process alive until the kill lands; once it fires, the event
+ * loop drains and the reaper exits on its own.
  *
  * Usage: node reaper.js <mainPid> <serverPid>
  */
 
-import { spawn } from 'node:child_process'
+// The same deploy-relative import src/main.ts uses (patched to the emitted
+// depth by scripts/patch-deploy-imports.mjs): the packaged app has no
+// node_modules, and this script runs from the unpacked tree (Electron-as-Node
+// cannot read inside app.asar), so the primitive must live under deploy/.
+import { killProcessTree } from '../deploy/node_modules/@deepseek-ai/dsh-process-tree/lib/index.js'
 
 const mainPid = Number(process.argv[2])
 const serverPid = Number(process.argv[3])
@@ -23,8 +28,6 @@ if (!Number.isInteger(mainPid) || !Number.isInteger(serverPid) || mainPid <= 0 |
 }
 
 const POLL_INTERVAL_MS = 1_000
-/** The main process's killTree gives SIGTERM a five-second grace before SIGKILL; match it. */
-const SIGKILL_GRACE_MS = 5_000
 
 // The interval must keep this process alive — that is its whole job.
 const timer = setInterval(() => {
@@ -42,40 +45,15 @@ const timer = setInterval(() => {
 }, POLL_INTERVAL_MS)
 
 /**
- * Tree-kill the server child once the main is gone. Windows: taskkill /T /F
- * reaches the server's own subprocesses. POSIX: the server is detached, so a
- * negated PID signals its whole process group — SIGTERM first, SIGKILL after
- * a grace period (the same pattern src/main.ts's killTree uses). The timeout
- * below keeps this process alive for the escalation, then exits.
+ * Tree-kill the server child once the main is gone, via the shared
+ * `@deepseek-ai/dsh-process-tree` primitive — the same kill `main.ts`'s
+ * killTree performs, with the reaper's log prefix. On Windows the spawned
+ * taskkill child keeps this process alive until the kill completes; on POSIX
+ * the primitive's escalation timer does, and the reaper then exits on its own
+ * as the event loop drains.
  */
 function killServerTree(): void {
-  if (process.platform === 'win32') {
-    spawn('taskkill', ['/T', '/F', '/PID', String(serverPid)], { stdio: 'ignore', windowsHide: true })
-      // taskkill always exists on Windows; the handler only prevents an
-      // uncaught 'error' crash if it cannot be started at all.
-      .on('error', () => {})
-    process.exit(0)
-  }
-  try {
-    process.kill(-serverPid, 'SIGTERM')
-  } catch (error) {
-    // ESRCH means the group is already gone — the desired outcome.
-    if ((error as NodeJS.ErrnoException).code !== 'ESRCH') {
-      console.error(`[dsh-desktop] reaper SIGTERM failed for pid ${serverPid}: ${String(error)}`)
-    }
-    process.exit(0)
-    return
-  }
-  // SIGTERM gets a grace period; the group must not outlive the main.
-  setTimeout(() => {
-    try {
-      process.kill(-serverPid, 'SIGKILL')
-    } catch (error) {
-      // ESRCH: the group exited after SIGTERM, nothing left to force.
-      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') {
-        console.error(`[dsh-desktop] reaper SIGKILL failed for pid ${serverPid}: ${String(error)}`)
-      }
-    }
-    process.exit(0)
-  }, SIGKILL_GRACE_MS)
+  killProcessTree(serverPid, {
+    logger: (message) => { console.error(`[dsh-desktop] reaper ${message}`) },
+  })
 }
