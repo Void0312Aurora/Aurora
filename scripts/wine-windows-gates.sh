@@ -208,6 +208,13 @@ grep -q '^smoke: win32 x64' "$scratch/logs/smoke.log" || { echo 'wine-windows-ga
 # `build` = tsc -b then tsdown, `production site` = the VitePress build. Both
 # statuses are captured so one failure cannot hide the other's result.
 build_gate() {
+  # The desktop shell imports the tree-kill primitive from its own build
+  # output (lib/process-tree/), which scripts/materialize-process-tree.mjs
+  # compiles and copies in. Materialize it with the host Node first: the
+  # primitive is platform-neutral JS (no Wine-specific paths), so host
+  # compilation is equivalent to compiling under Wine, and the Wine tsc -b
+  # below resolves the import from the materialized lib/.
+  node apps/desktop/scripts/materialize-process-tree.mjs || return $?
   wine_node "$scratch/logs/tsc.log" "$tsc_js" -b --pretty false || return $?
   wine_node "$scratch/logs/tsdown.log" "$tsdown_js"
 }
