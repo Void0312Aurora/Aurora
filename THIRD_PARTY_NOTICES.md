@@ -53,6 +53,7 @@ External packages that a workspace package resolves at runtime. `scripts/install
 | [`commander`](https://github.com/tj/commander.js) | MIT |
 | [`diff`](https://github.com/kpdecker/jsdiff) | BSD-3-Clause |
 | [`dotenv`](https://github.com/motdotla/dotenv) | BSD-2-Clause |
+| [`electron`](https://github.com/electron/electron) | MIT |
 | [`eventsource-parser`](https://github.com/rexxars/eventsource-parser) | MIT |
 | [`handlebars`](https://github.com/handlebars-lang/handlebars.js) | MIT |
 | [`immer`](https://github.com/immerjs/immer) | MIT |
@@ -98,6 +99,7 @@ External packages **directly declared** only by repository tooling, test infrast
 | [`@braintree/sanitize-url`](https://github.com/braintree/sanitize-url) | MIT |
 | [`@modelcontextprotocol/server-everything`](https://github.com/modelcontextprotocol/servers) | MIT / Apache-2.0 |
 | [`@modelcontextprotocol/server-filesystem`](https://github.com/modelcontextprotocol/servers) | MIT / Apache-2.0 |
+| [`@resvg/resvg-js`](https://github.com/git@github.com:yisibl/resvg-js) | MPL-2.0 |
 | [`@stylistic/eslint-plugin`](https://github.com/eslint-stylistic/eslint-stylistic) | MIT |
 | [`@testing-library/dom`](https://github.com/testing-library/dom-testing-library) | MIT |
 | [`@testing-library/react`](https://github.com/testing-library/react-testing-library) | MIT |
@@ -120,6 +122,7 @@ External packages **directly declared** only by repository tooling, test infrast
 | [`cytoscape-cose-bilkent`](https://github.com/cytoscape/cytoscape.js-cose-bilkent) | MIT |
 | [`dayjs`](https://github.com/iamkun/dayjs) | MIT |
 | [`debug`](https://github.com/debug-js/debug) | MIT |
+| [`electron-builder`](https://github.com/electron-userland/electron-builder) | MIT |
 | [`esbuild`](https://github.com/evanw/esbuild) | MIT |
 | [`eslint`](https://github.com/eslint/eslint) | MIT |
 | [`eslint-plugin-sonarjs`](https://github.com/SonarSource/SonarJS) | LGPL-3.0-only |
@@ -145,7 +148,7 @@ External packages **directly declared** only by repository tooling, test infrast
 | [`vitepress-plugin-mermaid`](https://github.com/emersonbottero/vitepress-plugin-mermaid) | MIT |
 | [`vitest`](https://github.com/vitest-dev/vitest) | MIT |
 
-`eslint-plugin-sonarjs` (LGPL-3.0-only) and `lightningcss` (MPL-2.0) run only as development tooling; their code is not linked into or distributed with any DeepSeek Harness artifact.
+`@resvg/resvg-js` (MPL-2.0), `eslint-plugin-sonarjs` (LGPL-3.0-only) and `lightningcss` (MPL-2.0) run only as development tooling; their code is not linked into or distributed with any DeepSeek Harness artifact.
 
 ## Python SDK dependencies (`python/`)
 
