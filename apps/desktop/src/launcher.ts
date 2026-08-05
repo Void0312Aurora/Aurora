@@ -45,9 +45,10 @@ export interface LaunchEnvironment {
 /**
  * The harness has no confinement backend on Windows, so its default
  * `workspace-write` permission mode cannot boot there. The shell falls back to
- * `danger-full-access` when the mode is unset, exactly the environment a
- * Windows user must otherwise supply for every `dsh` invocation; an explicit
- * `DSH_PERMISSION_MODE` always wins.
+ * `danger-full-access` when the mode is unset (an explicit empty string counts
+ * as unset too), exactly the environment a Windows user must otherwise supply
+ * for every `dsh` invocation; an explicit non-empty `DSH_PERMISSION_MODE`
+ * always wins.
  */
 export const WINDOWS_PERMISSION_FALLBACK = 'danger-full-access' as const
 
@@ -62,7 +63,10 @@ export const WINDOWS_PERMISSION_FALLBACK = 'danger-full-access' as const
 export function resolveWebLaunch(options: LaunchEnvironment): WebServerLaunch {
   const exists = options.exists ?? existsSync
   const platform = options.platform ?? process.platform
-  const permissionMode = platform === 'win32' && options.env.DSH_PERMISSION_MODE === undefined
+  // An empty DSH_PERMISSION_MODE is treated exactly like an unset one, the
+  // same convention DSH_BIN uses below: an explicitly blank value must not
+  // bypass the Windows fallback.
+  const permissionMode = platform === 'win32' && (options.env.DSH_PERMISSION_MODE === undefined || options.env.DSH_PERMISSION_MODE === '')
     ? { DSH_PERMISSION_MODE: WINDOWS_PERMISSION_FALLBACK }
     : {}
   const dshBin = options.env.DSH_BIN

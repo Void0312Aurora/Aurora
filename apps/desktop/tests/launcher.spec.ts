@@ -104,6 +104,16 @@ describe('resolveWebLaunch', () => {
     const launch = launchWith(() => false)
     expect(launch).toEqual({ command: 'dsh', args: [...WEB_ARGS], env: { DSH_PERMISSION_MODE: 'danger-full-access' }, source: 'PATH' })
   })
+
+  it('treats an empty DSH_BIN as unset', () => {
+    const launch = launchWith(() => false, { DSH_BIN: '' })
+    expect(launch).toEqual({ command: 'dsh', args: [...WEB_ARGS], env: { DSH_PERMISSION_MODE: 'danger-full-access' }, source: 'PATH' })
+  })
+
+  it('treats an empty DSH_PERMISSION_MODE as unset on win32', () => {
+    const launch = launchWith(() => false, { DSH_PERMISSION_MODE: '' })
+    expect(launch.env).toEqual({ DSH_PERMISSION_MODE: 'danger-full-access' })
+  })
 })
 
 describe('waitForReadyLine', () => {

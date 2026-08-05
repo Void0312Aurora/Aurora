@@ -137,7 +137,7 @@ async function boot(): Promise<void> {
     appDir: runDir(),
     execPath: process.execPath,
   })
-  if (launch.env.DSH_PERMISSION_MODE !== undefined && process.env.DSH_PERMISSION_MODE === undefined) {
+  if (launch.env.DSH_PERMISSION_MODE !== undefined && (process.env.DSH_PERMISSION_MODE === undefined || process.env.DSH_PERMISSION_MODE === '')) {
     console.warn(`[dsh-desktop] Windows has no harness confinement backend; using ${launch.env.DSH_PERMISSION_MODE} permission mode (approval prompts are disabled). Set DSH_PERMISSION_MODE to override.`)
   }
   console.log(`[dsh-desktop] launching dsh web (${launch.source}): ${launch.command} ${launch.args.join(' ')}`)
