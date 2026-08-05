@@ -147,7 +147,11 @@ function loadWorkspaceManifests(): { manifests: Map<string, Manifest>; names: Se
   const manifests = new Map<string, Manifest>()
   const names = new Set<string>()
   for (const pattern of patterns) {
-    for (const path of globSync(pattern, { cwd: root })) {
+    for (const rawPath of globSync(pattern, { cwd: root })) {
+      // node:fs globSync returns platform-native separators; normalize to
+      // forward slashes so the DEV_ONLY_AREAS prefix checks (and the manifest
+      // keys) are identical on Windows and POSIX.
+      const path = rawPath.split('\\').join('/')
       const manifest = readManifest(path)
       manifests.set(path, manifest)
       if (manifest.name !== undefined) names.add(manifest.name)
@@ -172,7 +176,17 @@ function installedMetadata(name: string): { license: string; repo: string } {
     const virtual = resolve(root, store, '.pnpm')
     if (!existsSync(virtual)) continue
     const prefix = `${name.replace('/', '+')}@`
-    const entry = readdirSync(virtual).find(dir => dir.startsWith(prefix))
+    let entry = readdirSync(virtual).find(dir => dir.startsWith(prefix))
+    if (entry === undefined) {
+      // pnpm truncates virtual-store dir names that exceed
+      // `virtual-store-dir-max-length` (default 60 on Windows, 120 on POSIX)
+      // to `<first chars>_<sha256 of the full name>`, so the `name@` prefix
+      // never matches there. Such a dir still nests `node_modules/<name>`;
+      // identify it by the nested manifest rather than guessing the stem.
+      entry = readdirSync(virtual).find(dir =>
+        /_[0-9a-f]{32}$/.test(dir) && existsSync(resolve(virtual, dir, 'node_modules', name, 'package.json')),
+      )
+    }
     if (entry === undefined) continue
     manifest = JSON.parse(readFileSync(resolve(virtual, entry, 'node_modules', name, 'package.json'), 'utf8')) as typeof manifest
     break
@@ -224,6 +238,10 @@ export function tierExternalDeps(manifests: Map<string, Manifest>, names: Set<st
   const tiers = new Map<string, boolean>()
   // `tsx` is runtime by fiat: `bin/dsh` execs the CLI through its ESM hook.
   tiers.set('tsx', true)
+  // `electron` is runtime by fiat: although `apps/desktop` declares it as a
+  // devDependency, electron-builder packs the Electron runtime into every
+  // desktop installer — a build-carried runtime that must be disclosed.
+  tiers.set('electron', true)
   for (const [path, manifest] of manifests) {
     const devOnly = DEV_ONLY_AREAS.some(area => (area.endsWith('/') ? path.startsWith(area) : path === area))
     for (const kind of ALL_KINDS) {
