@@ -7,9 +7,10 @@ Electron shell for the DeepSeek Harness Web GUI: it spawns `dsh web`, waits for 
 
 ## Running from the checkout
 
-Build the repo first — `pnpm run build` produces the CLI lib, the web dist, and this package's lib — then:
+Build the repo first — `pnpm run build` produces the CLI lib, the web dist, and this package's lib — then materialize the deploy tree once with `pnpm run deploy:closure` (required for both build and dev: the Electron main and the reaper import the tree-kill primitive from `deploy/node_modules/@deepseek-ai/dsh-process-tree`, the packaged app's only runtime import path — see Packaging):
 
 ```sh
+pnpm run deploy:closure
 pnpm --filter @deepseek-ai/dsh-desktop dev
 ```
 

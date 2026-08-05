@@ -7,7 +7,7 @@
   "main": "lib/types/main.js",
   "author": "DeepSeek Harness",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node scripts/patch-deploy-imports.mjs",
     "watch": "tsc -p tsconfig.json --watch",
     "dev": "pnpm run build && electron .",
     "icons": "node scripts/generate-icons.mjs",

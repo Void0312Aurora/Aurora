@@ -10,6 +10,16 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { join } from 'node:path'
 import { app, BrowserWindow, dialog, Menu, nativeImage, shell, Tray } from 'electron'
 import { resolveWebLaunch, waitForHttpOk, waitForReadyLine, childExited } from './launcher.ts'
+// The tree-kill primitive ships inside the unpacked deploy closure (see
+// apps/desktop/closure): the packaged app has no node_modules, and
+// Electron-as-Node children (the reaper) cannot read inside app.asar, so code
+// they import must live under deploy/ — which electron-builder unpacks. The
+// specifier below is written relative to src/ (`../deploy`); `scripts/
+// patch-deploy-imports.mjs` rewrites it to `../../deploy` in the emitted
+// lib/types/ files, where the deploy tree is two levels up, so dev and
+// packaged resolutions agree. Dev requires `deploy:closure` to have
+// materialized the tree first (packaged builds always have).
+import { killProcessTree } from '../deploy/node_modules/@deepseek-ai/dsh-process-tree/lib/index.js'
 
 const APP_ID = 'ai.deepseek.dsh-desktop'
 const WINDOW_TITLE = 'DSH Desktop'
@@ -43,44 +53,19 @@ function trayIconPath(): string {
 }
 
 /**
- * Terminate a process and its descendants. On Windows `child.kill()` is
- * `TerminateProcess` of the direct child only, so taskkill /T is needed to
- * reach the server's own subprocesses (bash, sandbox helpers). On POSIX the
- * server is spawned detached as a process-group leader (see boot), so killing
- * the group with `-pid` covers the same tree: SIGTERM first, SIGKILL after a
- * grace period.
+ * Terminate the server child and its tree. The platform-specific logic lives
+ * in `@deepseek-ai/dsh-process-tree` — Windows: taskkill /T, because
+ * `child.kill()` is `TerminateProcess` of the direct child only; POSIX:
+ * SIGTERM against the server's detached process group (a negated pid reaches
+ * the whole tree), escalated to SIGKILL after a five-second grace. This
+ * wrapper only owns the desktop log prefix, preserving the historical message
+ * format.
  * @param pid - the process to terminate.
  */
 function killTree(pid: number): void {
-  if (process.platform === 'win32') {
-    spawn('taskkill', ['/T', '/F', '/PID', String(pid)], { stdio: 'ignore', windowsHide: true })
-      // taskkill always exists on Windows; the handler only prevents an
-      // uncaught 'error' crash if it cannot be started at all.
-      .on('error', () => {})
-    return
-  }
-  try {
-    // The server was spawned detached, so a negated PID signals the whole
-    // process group in one call.
-    process.kill(-pid, 'SIGTERM')
-  } catch (error) {
-    // ESRCH means the group is already gone — the desired outcome.
-    if ((error as NodeJS.ErrnoException).code !== 'ESRCH') {
-      console.error(`[dsh-desktop] killTree SIGTERM failed for pid ${pid}: ${String(error)}`)
-    }
-    return
-  }
-  // SIGTERM gets a grace period; the group must not outlive its parent.
-  setTimeout(() => {
-    try {
-      process.kill(-pid, 'SIGKILL')
-    } catch (error) {
-      // ESRCH: the group exited after SIGTERM, nothing left to force.
-      if ((error as NodeJS.ErrnoException).code !== 'ESRCH') {
-        console.error(`[dsh-desktop] killTree SIGKILL failed for pid ${pid}: ${String(error)}`)
-      }
-    }
-  }, 5_000)
+  killProcessTree(pid, {
+    logger: (message) => { console.error(`[dsh-desktop] killTree ${message}`) },
+  })
 }
 
 function showWindow(): void {

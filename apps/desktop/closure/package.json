@@ -45,6 +45,7 @@
     "@deepseek-ai/dsh-paths": "workspace:^",
     "@deepseek-ai/dsh-permission": "workspace:^",
     "@deepseek-ai/dsh-plan-mode": "workspace:^",
+    "@deepseek-ai/dsh-process-tree": "workspace:^",
     "@deepseek-ai/dsh-pty": "workspace:^",
     "@deepseek-ai/dsh-pty-local": "workspace:^",
     "@deepseek-ai/dsh-repeat-tool-guard": "workspace:^",
