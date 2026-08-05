@@ -30,8 +30,7 @@ Status: implemented
 - `apps/` 作为对外导出的应用形态入口，可以由 Client / Host 混合组装。
     - `apps/web`（`dsh-frontend`）是 vite 应用：`dsh-client-web` 导出的壳表面之上的一层薄 `main.ts`。
     - `apps/cli`（`@deepseek-ai/dsh`）做形态分发：`dsh web` = startHost + webserver + 构建出的 `dsh-frontend` dist；`dsh -p` = headless 进程内直调，零 HTTP。
-    - 将来的 Electron 形态经由 IPC fetch 载体复用同一套 web client 包。
-        - **已被 [dsh-desktop Electron 外壳 note](2026-08-04-dsh-desktop-electron-shell.md) 部分取代**：Electron 形态以 `apps/desktop` 落地，复用 `dsh web` 的 HTTP 外壳（`127.0.0.1:<port>`）——没有 IPC fetch 载体。IPC 桥方案被放弃：渲染进程是无 preload 的沙箱（IPC 桥需要 preload 与上下文桥，扩大攻击面）、HTTP 复用现有 webserver 零额外协议层、浏览器与桌面形态共享同一就绪/信任边界。四象限消息模型与本文其余内容不受影响。
+    - Electron 桌面外壳（`apps/desktop`）复用同一套 web client 包，走 `dsh web` 的 HTTP 通道（`127.0.0.1:<port>`）——没有 IPC fetch 载体（[dsh-desktop note](2026-08-04-dsh-desktop-electron-shell.md)）。IPC 桥方案被放弃：渲染进程是无 preload 的沙箱（IPC 桥需要 preload 与上下文桥，扩大攻击面）、HTTP 复用现有 webserver 零额外协议层、浏览器与桌面形态共享同一就绪/信任边界。四象限消息模型与本文其余内容不受影响。
 
 ```
 apps/*  (application shapes: apps/web = vite app, apps/cli = bin dispatch)
@@ -63,7 +62,7 @@ TypeScript 以 solution 根引用的**两个聚合 program** 检查（`tsconfig.
 |---|---|---|---|
 | 前置层 | `dsh-host-apiproxy` | TS/zod 定义 (api/)+ fetch 抽象 (fetch/：handler + 客户端基类) | 做简单、所有接入方都要；Node/浏览器皆可 import；协议内容见下文「消息协议」起各节；client 不得经 ctx 绕开 api |
 | 装配层 | `dsh-host-runtime` | 插件组合 + ApiProxy 集成 + web UI 插件挂载（覆盖八个 dshClient 包的内存 Loader 树）；host 级配置归属地（defaults/persistenceRoot，将来用户 profile） | 装什么插件、给什么默认值只在这里定；壳不得改装配 |
-| 承载层 | `dsh-host-webserver` | Web 形态 HTTP：静态服务 + `/api/*`→handler 转发 + SSE 写出 + close 语义；插件 bundle 端点 + `__DSH_BOOT__` manifest（元数据清单）注入（由 web 插件注册表供给） | Web（浏览器访问）专用；零 workspace 依赖（注册表经结构注入到达）；Electron 不复用它——**部分取代**：桌面外壳现在复用它（[dsh-desktop note](2026-08-04-dsh-desktop-electron-shell.md)） |
+| 承载层 | `dsh-host-webserver` | Web 形态 HTTP：静态服务 + `/api/*`→handler 转发 + SSE 写出 + close 语义；插件 bundle 端点 + `__DSH_BOOT__` manifest（元数据清单）注入（由 web 插件注册表供给） | Web（浏览器访问）专用；零 workspace 依赖（注册表经结构注入到达）；桌面外壳经 `dsh web` 的 HTTP 通道复用它（[dsh-desktop note](2026-08-04-dsh-desktop-electron-shell.md)） |
 | client 库 | `dsh-client-ui-slots` / `dsh-client-web-react` / `dsh-client-ui-primitives` | slot 注册表核心 / ctx↔React 胶合 / 纯 React 原子组件 | 组件零 cordis 运行时依赖；由壳播种进 loader 模块表 |
 | client 插件 | `dsh-client-connection` / `dsh-client-runtime` / `dsh-client-ui-theme` / `dsh-client-i18n` / `dsh-client-ui-layout` / `dsh-client-ui-sidebar` / `dsh-client-ui-conversation` / `dsh-client-ui-trajectory` | 浏览器侧 cordis 插件树（wire 消费者、核心服务、主题、i18n、布局、侧栏、对话、轨迹）——见 Web 客户端架构 RFC | 双入口（node 半边=空 apply；实现在 `src/client/`）；消费面唯一经 ApiProxy |
 | 应用态 | `@deepseek-ai/dsh`（apps/cli）+ `dsh-frontend`（apps/web，vite 应用） | bin 粗分发 + 每形态一个拼装模块（web.ts / headless.ts）；vite 应用是 `dsh-client-web` 壳表面之上的薄 main | 形态间动态 import 互不加载；dist 定位等 workspace 知识留在 app |
@@ -217,7 +216,7 @@ export type ResponseValue<K> =
 | `InProcessApiClient` | apiproxy 本包 | 注入的 `{ fetch }` handler | **同构点**：`new InProcessApiClient(toFetchHandler(api))` 全程不过网络但真跑 wire 序列化/zod/SSE 帧——`dsh -p` headless 即协议第二真实消费者 |
 | `WebApiClient` | dsh-client-connection | `globalThis.fetch`（同源 `/api/*`） | 浏览器形态；HTTP+SSE 承载落地见 Web 客户端架构 RFC |
 | `FixtureApiClient` | dsh-client-connection | 不用（协议层覆写） | 无 server 的 UI 开发（`?fixture`）：覆写 `callUnary`/`openMux`/`openHost`/`respond` 虚方法，自己就是假 server（帧 rpcId 由它 mint，语义自洽） |
-| （将来）IPC 桥子类——**未采纳**：Electron 形态复用 `WebApiClient` 走 HTTP（见 [dsh-desktop note](2026-08-04-dsh-desktop-electron-shell.md)） | apps/electron | IPC 序列化往返 | 仅换 doFetch，契约/基类零改 |
+| （将来）IPC 桥子类——**未采纳**：桌面外壳复用 `WebApiClient` 走 HTTP（见 [dsh-desktop note](2026-08-04-dsh-desktop-electron-shell.md)） | apps/desktop | IPC 序列化往返 | 仅换 doFetch，契约/基类零改 |
 
 ## 怎么扩展（操作清单）
 
