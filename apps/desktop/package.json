@@ -9,7 +9,7 @@
   "scripts": {
     "build": "node scripts/materialize-process-tree.mjs && tsc -p tsconfig.json && node scripts/fixup-import-paths.mjs",
     "watch": "tsc -p tsconfig.json --watch",
-    "dev": "pnpm run build && electron .",
+    "dev": "pnpm run build && cross-env ELECTRON_RUN_AS_NODE= electron .",
     "icons": "node scripts/generate-icons.mjs",
     "deploy:closure": "node -e \"require('node:fs').rmSync('deploy',{recursive:true,force:true})\" && pnpm --filter dsh-desktop-closure deploy --prod --config.node-linker=hoisted --config.inject-workspace-packages=true --config.allow-unused-patches=true --config.strict-dep-builds=false deploy && node -e \"for (const f of ['pnpm-lock.yaml','pnpm-workspace.yaml']) require('node:fs').rmSync('deploy/'+f,{force:true})\"",
     "dist": "pnpm -w run build:lib && pnpm -w run build:web && pnpm run deploy:closure && pnpm run build && electron-builder --config electron-builder.yml",
