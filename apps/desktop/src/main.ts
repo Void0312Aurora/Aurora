@@ -15,9 +15,9 @@ import { resolveWebLaunch, waitForHttpOk, waitForReadyLine, childExited } from '
 // lib/process-tree/ before every build): the packaged app has no node_modules,
 // and Electron-as-Node children (the reaper) cannot read inside app.asar, so
 // code they import must be plain files under lib/ — which electron-builder
-// packs and unpacks (lib/process-tree/**). Both the source (src/) and the
-// emitted output (lib/) sit at the same directory depth, so this relative
-// specifier resolves identically in dev and packaged builds.
+// packs and unpacks (lib/process-tree/**). The specifier is written relative
+// to src/; a post-tsc step (scripts/rewrite-import-extensions.mjs) adjusts
+// it for the emitted lib/types/ depth before every build.
 import { killProcessTree } from '../lib/process-tree/index.js'
 
 const APP_ID = 'ai.deepseek.dsh-desktop'
@@ -25,11 +25,12 @@ const WINDOW_TITLE = 'DSH Desktop'
 const STDERR_TAIL_LIMIT = 4_000
 /**
  * `apps/desktop` in dev, the asar root when packaged. Resolved from
- * `app.getAppPath()` rather than derived from `import.meta.url`: relying on
- * a depth-sensitive dirname walk from the entry point would couple callers
- * to the layout of the build output, which changes across refactors.
- * `getAppPath()` is the app root Electron itself resolves (`electron .` in
- * dev; the asar root when packaged) and is safe to call at module scope.
+ * `app.getAppPath()` rather than derived from `import.meta.url`: the built
+ * entry lives at `lib/types/main.js`, so a two-level dirname walk would
+ * land on `apps/desktop/lib` — breaking the packaged icon paths, the dev
+ * runDir, and the launcher's checkout repo-root discovery. `getAppPath()`
+ * is the app root Electron itself resolves (`electron .` in dev; the asar
+ * root when packaged) and is safe to call at module scope.
  */
 const PACKAGE_DIR = app.getAppPath()
 
@@ -60,8 +61,8 @@ function trayIconPath(): string {
  * format.
  * @param pid - the process to terminate.
  */
-function killTree(pid: number): void {
-  killProcessTree(pid, {
+function killTree(pid: number): Promise<void> {
+  return killProcessTree(pid, {
     logger: (message) => { console.error(`[dsh-desktop] killTree ${message}`) },
   })
 }
@@ -167,11 +168,15 @@ function createTray(): void {
 function fatal(error: Error): void {
   console.error(`[dsh-desktop] ${error.message}`)
   dialog.showErrorBox(WINDOW_TITLE, error.message)
-  // app.exit() skips before-quit; kill the server tree here so a boot failure
-  // cannot leave an orphaned `dsh web` (the reaper only guards hard kills).
+  // app.exit() skips before-quit; kill the server tree and wait for the
+  // dispatch to land so a boot failure cannot leave an orphaned `dsh web`
+  // (the reaper only guards hard kills).
   quitting = true
-  if (server?.pid !== undefined) killTree(server.pid)
-  app.exit(1)
+  if (server?.pid !== undefined) {
+    void killTree(server.pid).then(() => { app.exit(1) })
+  } else {
+    app.exit(1)
+  }
 }
 
 /**
@@ -237,7 +242,7 @@ async function boot(): Promise<void> {
   // must live outside Electron's process group: a terminal Ctrl+C signals the
   // group, and taking the reaper with it would kill the hard-kill cleanup
   // exactly when it is needed (detached + unref below).
-  spawn(process.execPath, [join(runDir(), 'lib', 'reaper.js'), String(process.pid), String(child.pid ?? 0)], {
+  spawn(process.execPath, [join(runDir(), 'lib', 'types', 'reaper.js'), String(process.pid), String(child.pid ?? 0)], {
     env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
     stdio: 'ignore',
     windowsHide: true,
@@ -296,12 +301,17 @@ if (!app.requestSingleInstanceLock()) {
   app.on('second-instance', showWindow)
   app.setAppUserModelId(APP_ID)
   app.whenReady().then(boot).catch(fatal)
-  app.on('before-quit', () => {
+  app.on('before-quit', (event) => {
     quitting = true
-    // The reaper is deliberately left alive: it polls this process, so after
-    // the main exits it performs the same tree kill — guaranteeing cleanup
-    // even if the killTree spawned here races the process exit.
-    if (server?.pid !== undefined) killTree(server.pid)
+    if (server?.pid !== undefined) {
+      // Prevent immediate exit and wait for the tree kill to dispatch
+      // (taskkill on Windows, SIGTERM on POSIX) so the server child and
+      // its descendants are gone before the Electron process exits.
+      // The reaper is the hard-kill backup: if this path is interrupted
+      // (crash, forced exit), the reaper performs the same tree kill.
+      event.preventDefault()
+      void killTree(server.pid).then(() => { app.exit(0) })
+    }
   })
   // Tray residency: the app outlives its window by design, so a destroyed
   // window must not trigger Electron's default quit.
