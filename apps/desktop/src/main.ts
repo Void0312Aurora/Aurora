@@ -8,7 +8,7 @@
 
 import { spawn, type ChildProcess } from 'node:child_process'
 import { join } from 'node:path'
-import { app, BrowserWindow, dialog, Menu, nativeImage, shell, Tray } from 'electron'
+import { app, BrowserWindow, dialog, Menu, nativeImage, shell, Tray } from './electron-api.ts'
 import { resolveWebLaunch, waitForHttpOk, waitForReadyLine, childExited } from './launcher.ts'
 // The tree-kill primitive is materialized into this package's build output
 // (scripts/materialize-process-tree.mjs copies the compiled primitive into
@@ -190,6 +190,38 @@ function runDir(): string {
 }
 
 async function boot(): Promise<void> {
+  // Test mode: skip server resolution and spawn, host a static page so the
+  // Electron lifecycle (window, tray, second-instance, quit) can be exercised
+  // without a built dsh binary. Set DSH_DESKTOP_TEST_TREE_PID to exercise the
+  // quit-path killTree against a guaranteed-dead pid (99999 by convention).
+  if (process.env.DSH_DESKTOP_TEST === '1') {
+    const testPidStr = process.env.DSH_DESKTOP_TEST_TREE_PID
+    if (testPidStr !== undefined) {
+      server = { pid: Number(testPidStr) } as ChildProcess
+    }
+    serverUrl = new URL('about:blank')
+    Menu.setApplicationMenu(null)
+    createWindow(serverUrl)
+    createTray()
+    if (pendingFocus) {
+      pendingFocus = false
+      showWindow()
+    }
+    // Signal readiness to the test harness. The harness sends a quit signal
+    // by writing to a named file, which the app polls (stdin is unreliable
+    // in GUI mode on Windows: the data event never fires on a piped stdin).
+    process.stdout.write('DSH_DESKTOP_READY\n')
+    const quitFile = process.env.DSH_DESKTOP_TEST_QUIT_FILE
+    if (quitFile !== undefined) {
+      void import('node:fs').then(({ watchFile }) => {
+        watchFile(quitFile, () => {
+          app.quit()
+        })
+      })
+    }
+    return
+  }
+
   const launch = resolveWebLaunch({
     env: process.env,
     appDir: runDir(),
