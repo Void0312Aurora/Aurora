@@ -40,11 +40,11 @@ export interface KillProcessTreeOptions {
   readonly platform?: NodeJS.Platform
   /**
    * Windows tree-kill implementation; defaults to spawning
-   * `taskkill /T /F /PID <pid>` with stdio ignored and a spawn-error guard
-   * (taskkill always exists on Windows; the guard only prevents an uncaught
-   * 'error' crash if it cannot be started at all).
+   * `taskkill /T /F /PID <pid>` and resolving when it exits.
+   * (taskkill always exists on Windows; the spawn-error guard only
+   * prevents an uncaught 'error' crash if it cannot be started at all.)
    */
-  readonly taskkill?: (pid: number) => void
+  readonly taskkill?: (pid: number) => Promise<void>
   /**
    * POSIX signal implementation; defaults to `process.kill`. Called with the
    * NEGATED group-leader pid (`-pid`), exactly as a detached process-group
@@ -71,13 +71,13 @@ function defaultLogger(message: string): void {
   console.error(message)
 }
 
-/** Default Windows implementation: recursive force kill of the tree, fire-and-forget. */
-function taskkillTree(pid: number): void {
-  // taskkill always exists on Windows; the handler only prevents an uncaught
-  // 'error' crash if it cannot be started at all.
-  /* v8 ignore next -- firing requires taskkill itself to be unlaunchable, which no CI lane can stage */
-  spawn('taskkill', ['/T', '/F', '/PID', String(pid)], { stdio: 'ignore', windowsHide: true })
-    .on('error', () => {})
+/** Default Windows implementation: spawns taskkill and returns a Promise that resolves when it exits. */
+function taskkillTree(pid: number): Promise<void> {
+  return new Promise((resolve) => {
+    spawn('taskkill', ['/T', '/F', '/PID', String(pid)], { stdio: 'ignore', windowsHide: true })
+      .on('error', () => { resolve() })
+      .on('close', () => { resolve() })
+  })
 }
 
 /**
@@ -89,13 +89,12 @@ function taskkillTree(pid: number): void {
  * @param pid - the tree root's process id.
  * @param options - platform, kill/log/timer injection, and the escalation grace.
  */
-export function killProcessTree(pid: number, options: KillProcessTreeOptions = {}): void {
+export function killProcessTree(pid: number, options: KillProcessTreeOptions = {}): Promise<void> {
   const platform = options.platform ?? process.platform
-  if (pid <= 0) return
+  if (pid <= 0) return Promise.resolve()
   const logger = options.logger ?? defaultLogger
   if (platform === 'win32') {
-    (options.taskkill ?? taskkillTree)(pid)
-    return
+    return (options.taskkill ?? taskkillTree)(pid)
   }
   // An arrow wrapper keeps `this` binding: `process.kill` is a method, and an
   // unbound reference would lose it when invoked through the interface.
@@ -107,17 +106,20 @@ export function killProcessTree(pid: number, options: KillProcessTreeOptions = {
   } catch (error) {
     // ESRCH means the group is already gone — the desired outcome.
     if (!isEsrch(error)) logger(`SIGTERM failed for pid ${pid}: ${String(error)}`)
-    return
+    return Promise.resolve()
   }
   // SIGTERM gets a grace period; the group must not outlive its parent. The
-  // timer itself keeps the caller's process alive until the escalation lands,
-  // which a detached reaper process relies on.
-  setTimeout(() => {
-    try {
-      signal(-pid, 'SIGKILL')
-    } catch (error) {
-      // ESRCH: the group exited after SIGTERM, nothing left to force.
-      if (!isEsrch(error)) logger(`SIGKILL failed for pid ${pid}: ${String(error)}`)
-    }
-  }, options.graceMs ?? SIGKILL_GRACE_MS)
+  // Promise (and its internal timer) keeps the caller's process alive until
+  // the escalation lands, which a detached reaper process relies on.
+  return new Promise<void>((resolve) => {
+    setTimeout(() => {
+      try {
+        signal(-pid, 'SIGKILL')
+      } catch (error) {
+        // ESRCH: the group exited after SIGTERM, nothing left to force.
+        if (!isEsrch(error)) logger(`SIGKILL failed for pid ${pid}: ${String(error)}`)
+      }
+      resolve()
+    }, options.graceMs ?? SIGKILL_GRACE_MS)
+  })
 }

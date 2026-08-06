@@ -19,7 +19,7 @@ describe('killProcessTree — POSIX process-group signalling', () => {
     vi.useFakeTimers()
     const signal = vi.fn()
     const logger = vi.fn()
-    killProcessTree(1234, { platform: 'linux', signal, logger })
+    void killProcessTree(1234, { platform: 'linux', signal, logger })
     expect(signal).toHaveBeenCalledTimes(1)
     expect(signal).toHaveBeenCalledWith(-1234, 'SIGTERM')
     expect(vi.getTimerCount()).toBe(1)
@@ -33,7 +33,7 @@ describe('killProcessTree — POSIX process-group signalling', () => {
   it('honors a custom escalation grace', () => {
     vi.useFakeTimers()
     const signal = vi.fn()
-    killProcessTree(1234, { platform: 'linux', signal, graceMs: 250 })
+    void killProcessTree(1234, { platform: 'linux', signal, graceMs: 250 })
     vi.advanceTimersByTime(249)
     expect(signal).toHaveBeenCalledTimes(1)
     vi.advanceTimersByTime(1)
@@ -46,7 +46,7 @@ describe('killProcessTree — POSIX process-group signalling', () => {
     err.code = 'ESRCH'
     const signal = vi.fn(() => { throw err })
     const logger = vi.fn()
-    killProcessTree(1234, { platform: 'linux', signal, logger })
+    void killProcessTree(1234, { platform: 'linux', signal, logger })
     expect(signal).toHaveBeenCalledOnce()
     expect(vi.getTimerCount()).toBe(0)
     expect(logger).not.toHaveBeenCalled()
@@ -58,7 +58,7 @@ describe('killProcessTree — POSIX process-group signalling', () => {
     err.code = 'EPERM'
     const signal = vi.fn(() => { throw err })
     const logger = vi.fn()
-    killProcessTree(1234, { platform: 'linux', signal, logger })
+    void killProcessTree(1234, { platform: 'linux', signal, logger })
     expect(logger).toHaveBeenCalledExactlyOnceWith('SIGTERM failed for pid 1234: Error: permission denied')
     expect(vi.getTimerCount()).toBe(0)
   })
@@ -71,7 +71,7 @@ describe('killProcessTree — POSIX process-group signalling', () => {
       .mockImplementationOnce(() => {})
       .mockImplementationOnce(() => { throw err })
     const logger = vi.fn()
-    killProcessTree(1234, { platform: 'linux', signal, logger })
+    void killProcessTree(1234, { platform: 'linux', signal, logger })
     vi.advanceTimersByTime(5_000)
     expect(signal).toHaveBeenLastCalledWith(-1234, 'SIGKILL')
     expect(logger).not.toHaveBeenCalled()
@@ -85,7 +85,7 @@ describe('killProcessTree — POSIX process-group signalling', () => {
       .mockImplementationOnce(() => {})
       .mockImplementationOnce(() => { throw err })
     const logger = vi.fn()
-    killProcessTree(1234, { platform: 'linux', signal, logger })
+    void killProcessTree(1234, { platform: 'linux', signal, logger })
     vi.advanceTimersByTime(5_000)
     expect(logger).toHaveBeenCalledExactlyOnceWith('SIGKILL failed for pid 1234: Error: permission denied')
   })
@@ -93,7 +93,7 @@ describe('killProcessTree — POSIX process-group signalling', () => {
   it('default signal binding signals a real dead group: ESRCH is silent and no timer is set', () => {
     vi.useFakeTimers()
     const logger = vi.fn()
-    killProcessTree(DEAD_PID, { platform: 'linux', logger })
+    void killProcessTree(DEAD_PID, { platform: 'linux', logger })
     expect(vi.getTimerCount()).toBe(0)
     expect(logger).not.toHaveBeenCalled()
   })
@@ -102,44 +102,44 @@ describe('killProcessTree — POSIX process-group signalling', () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
     const err = new Error('boom') as NodeJS.ErrnoException
     err.code = 'EPERM'
-    killProcessTree(5, { platform: 'linux', signal: () => { throw err } })
+    void killProcessTree(5, { platform: 'linux', signal: () => { throw err } })
     expect(consoleError).toHaveBeenCalledExactlyOnceWith('SIGTERM failed for pid 5: Error: boom')
   })
 })
 
 describe('killProcessTree — Windows taskkill', () => {
   it('invokes taskkill with the tree root pid and never signals a group', () => {
-    const taskkill = vi.fn()
+    const taskkill = vi.fn(() => Promise.resolve())
     const signal = vi.fn()
     const logger = vi.fn()
-    killProcessTree(1234, { platform: 'win32', taskkill, signal, logger })
+    void killProcessTree(1234, { platform: 'win32', taskkill, signal, logger })
     expect(taskkill).toHaveBeenCalledExactlyOnceWith(1234)
     expect(signal).not.toHaveBeenCalled()
     expect(logger).not.toHaveBeenCalled()
   })
 
-  it('default taskkill binding spawns a real taskkill on a dead pid without throwing', () => {
+  it('default taskkill binding spawns a real taskkill on a dead pid without throwing', async () => {
     const logger = vi.fn()
-    expect(() =>{  killProcessTree(DEAD_PID, { platform: 'win32', logger }) }).not.toThrow()
+    await expect(killProcessTree(DEAD_PID, { platform: 'win32', logger })).resolves.toBeUndefined()
     expect(logger).not.toHaveBeenCalled()
   })
 })
 
 describe('killProcessTree — guards and defaults', () => {
   it.each(['win32', 'linux'] as const)('is a no-op for a non-positive pid on %s', (platform) => {
-    const taskkill = vi.fn()
+    const taskkill = vi.fn(() => Promise.resolve())
     const signal = vi.fn()
     const logger = vi.fn()
-    killProcessTree(0, { platform, taskkill, signal, logger })
-    killProcessTree(-1, { platform, taskkill, signal, logger })
+    void killProcessTree(0, { platform, taskkill, signal, logger })
+    void killProcessTree(-1, { platform, taskkill, signal, logger })
     expect(taskkill).not.toHaveBeenCalled()
     expect(signal).not.toHaveBeenCalled()
     expect(logger).not.toHaveBeenCalled()
   })
 
-  it('defaults to the running platform without throwing', () => {
+  it('defaults to the running platform without throwing', async () => {
     const logger = vi.fn()
-    expect(() =>{  killProcessTree(DEAD_PID, { logger }) }).not.toThrow()
+    await expect(killProcessTree(DEAD_PID, { logger })).resolves.toBeUndefined()
     expect(logger).not.toHaveBeenCalled()
   })
 })

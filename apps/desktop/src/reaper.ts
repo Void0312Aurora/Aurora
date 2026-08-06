@@ -39,7 +39,7 @@ const timer = setInterval(() => {
     // process.kill(pid, 0) throws only when the main is gone or unowned —
     // either way the server must not outlive it.
     clearInterval(timer)
-    killServerTree()
+    void killServerTree()
     return
   }
 }, POLL_INTERVAL_MS)
@@ -47,13 +47,13 @@ const timer = setInterval(() => {
 /**
  * Tree-kill the server child once the main is gone, via the shared
  * `@deepseek-ai/dsh-process-tree` primitive — the same kill `main.ts`'s
- * killTree performs, with the reaper's log prefix. On Windows the spawned
- * taskkill child keeps this process alive until the kill completes; on POSIX
- * the primitive's escalation timer does, and the reaper then exits on its own
- * as the event loop drains.
+ * killTree performs, with the reaper's log prefix. The returned Promise
+ * keeps this process alive (on Windows: until taskkill exits; on POSIX:
+ * until the SIGKILL escalation timer fires), so the reaper cannot exit
+ * before the kill lands.
  */
-function killServerTree(): void {
-  killProcessTree(serverPid, {
+function killServerTree(): Promise<void> {
+  return killProcessTree(serverPid, {
     logger: (message) => { console.error(`[dsh-desktop] reaper ${message}`) },
   })
 }

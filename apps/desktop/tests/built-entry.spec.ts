@@ -1,10 +1,17 @@
 /**
- * Built-entry smoke: verify that the compiled `lib/` module graph is
+ * Built-entry smoke: verify that the compiled `lib/types/` module graph is
  * self-consistent — every relative import resolves to an existing file.
  * This is the minimal guard against the import-depth class of bugs
  * introduced by outDir changes (e.g. lib/types adding an extra directory
- * level that breaks relative specifiers). The test does not import Electron,
+ * level that breaks relative specifiers — the post-tsc fixup script must
+ * rewrite the import to the depth-2 form). The test does not import Electron,
  * so it runs keyless in any Node environment.
+ *
+ * IMPORTANT: the compiled entry lives at `lib/types/` (depth 2); the
+ * materialized process-tree primitive lives at `lib/process-tree/`
+ * (depth 1). The post-tsc `fixup-import-paths.mjs` adjusts the specifier
+ * from the source form (`../lib/process-tree/index.js`) to the emitted form
+ * (`../process-tree/index.js`). This test verifies the FIXED output.
  */
 
 import { existsSync } from 'node:fs'
@@ -21,6 +28,8 @@ function relativeImportSpecifiers(source: string): string[] {
   }
   return specs
 }
+
+const OUT_DIR = resolve(import.meta.dirname, '..', 'lib', 'types')
 
 /**
  * Verify every relative import specifier in a compiled JS file resolves
@@ -49,31 +58,35 @@ async function verifyRelativeImports(entryJs: string): Promise<[string, string][
 
 describe('built-entry import graph', () => {
   it('main.js: every relative import resolves, and it imports the process-tree primitive', async () => {
-    const resolved = await verifyRelativeImports(resolve(import.meta.dirname, '..', 'lib', 'main.js'))
+    const resolved = await verifyRelativeImports(resolve(OUT_DIR, 'main.js'))
     expect(resolved.length, 'main.js must have at least one relative import').toBeGreaterThan(0)
-    // The key regression guard: main.js must import the materialized tree-kill
-    // primitive by a relative path that resolves to lib/process-tree/.
+    // The key regression guard: the post-tsc fixup rewrites the specifier
+    // to the depth-2 form (../process-tree/index.js), which must resolve
+    // to lib/process-tree/index.js from lib/types/main.js.
     const procTreeImport = resolved.find(([, p]) => p.includes('process-tree'))
     expect(procTreeImport, 'main.js must import the process-tree primitive via a relative specifier')
       .toBeDefined()
+    // The rewritten specifier must be the depth-2 form, not the source
+    // form that would resolve to lib/lib/process-tree/.
+    expect(procTreeImport![0], 'specifier must be the post-fixup depth-2 form')
+      .toBe('../process-tree/index.js')
   })
 
   it('reaper.js: every relative import resolves, and it imports the process-tree primitive', async () => {
-    const resolved = await verifyRelativeImports(resolve(import.meta.dirname, '..', 'lib', 'reaper.js'))
+    const resolved = await verifyRelativeImports(resolve(OUT_DIR, 'reaper.js'))
     expect(resolved.length, 'reaper.js must have at least one relative import').toBeGreaterThan(0)
     const procTreeImport = resolved.find(([, p]) => p.includes('process-tree'))
     expect(procTreeImport, 'reaper.js must import the process-tree primitive via a relative specifier')
       .toBeDefined()
+    expect(procTreeImport![0], 'specifier must be the post-fixup depth-2 form')
+      .toBe('../process-tree/index.js')
   })
 
   it('launcher.js: any relative imports resolve', async () => {
-    // launcher.js may import only from node:* — that's fine, the check
-    // is that if it HAS relative imports, they resolve.
-    await verifyRelativeImports(resolve(import.meta.dirname, '..', 'lib', 'launcher.js'))
+    await verifyRelativeImports(resolve(OUT_DIR, 'launcher.js'))
   })
 
   it('process-tree/index.js: any relative imports resolve', async () => {
-    // The primitive is zero-dependency; it may import only from node:*.
     await verifyRelativeImports(
       resolve(import.meta.dirname, '..', 'lib', 'process-tree', 'index.js'),
     )
