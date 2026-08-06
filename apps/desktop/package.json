@@ -4,7 +4,7 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
-  "main": "lib/types/main.js",
+  "main": "lib/main.js",
   "author": "DeepSeek Harness",
   "scripts": {
     "build": "node scripts/materialize-process-tree.mjs && tsc -p tsconfig.json",

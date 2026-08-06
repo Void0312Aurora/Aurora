@@ -40,7 +40,7 @@ pnpm --filter @deepseek-ai/dsh-desktop dist:dir    # unpacked dir only, for a qu
 ```
 
 
-`dist` 先构建仓库（`build:lib` + `build:web`），再用 `pnpm run deploy:closure` 物化自包含 web 闭包（`dsh-desktop-closure` deploy root，与 `python/sdk-runtime` 同一模式），最后用 `electron-builder.yml` 运行 electron-builder。安装包与可执行文件未签名，Windows SmartScreen 首次运行可能提示。打包版不需要 Node、不需要 `dsh`、也不需要检出目录：启动器的嵌入闭包分支在 Electron-as-Node（`ELECTRON_RUN_AS_NODE=1`）下运行捆绑的 CLI，并带 `--expose-internals`——harness 的 HMR 服务需要 Node 内部模块，而 `node-addon-require-builtin` 回退在 Electron 的 V8 下不可用。闭包中的原生插件是 N-API，无需针对 Electron 重新编译；`deploy/**` 与 `lib/types/reaper.js` 从 asar 解包，供 run-as-Node 子进程读取。
+`dist` 先构建仓库（`build:lib` + `build:web`），再用 `pnpm run deploy:closure` 物化自包含 web 闭包（`dsh-desktop-closure` deploy root，与 `python/sdk-runtime` 同一模式），最后用 `electron-builder.yml` 运行 electron-builder。安装包与可执行文件未签名，Windows SmartScreen 首次运行可能提示。打包版不需要 Node、不需要 `dsh`、也不需要检出目录：启动器的嵌入闭包分支在 Electron-as-Node（`ELECTRON_RUN_AS_NODE=1`）下运行捆绑的 CLI，并带 `--expose-internals`——harness 的 HMR 服务需要 Node 内部模块，而 `node-addon-require-builtin` 回退在 Electron 的 V8 下不可用。闭包中的原生插件是 N-API，无需针对 Electron 重新编译；`deploy/**` 与 `lib/reaper.js` 从 asar 解包，供 run-as-Node 子进程读取。
 
 图标（`build/icon.png`、`build/tray-icon.png`）由 `pnpm run icons` 从 `apps/web/public/favicon.svg` 栅格化生成并提交；favicon 变化时重新生成。
 

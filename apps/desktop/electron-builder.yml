@@ -17,7 +17,7 @@ asar: true
 # inside app.asar; keep them on the real unpacked tree.
 asarUnpack:
   - deploy/**
-  - lib/types/reaper.js
+  - lib/reaper.js
   - lib/process-tree/**
 # The deploy closure's native addons are N-API (node-pty, koffi), which stay
 # ABI-compatible with Electron-as-Node; no rebuild against Electron headers.
