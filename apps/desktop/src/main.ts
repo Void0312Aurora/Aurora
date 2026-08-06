@@ -15,9 +15,9 @@ import { resolveWebLaunch, waitForHttpOk, waitForReadyLine, childExited } from '
 // lib/process-tree/ before every build): the packaged app has no node_modules,
 // and Electron-as-Node children (the reaper) cannot read inside app.asar, so
 // code they import must be plain files under lib/ — which electron-builder
-// packs and unpacks (lib/process-tree/**). The specifier below is written
-// relative to src/ and resolves identically from the emitted lib/types/, so
-// dev and packaged resolutions agree without any post-build rewrite.
+// packs and unpacks (lib/process-tree/**). Both the source (src/) and the
+// emitted output (lib/) sit at the same directory depth, so this relative
+// specifier resolves identically in dev and packaged builds.
 import { killProcessTree } from '../lib/process-tree/index.js'
 
 const APP_ID = 'ai.deepseek.dsh-desktop'
@@ -25,12 +25,11 @@ const WINDOW_TITLE = 'DSH Desktop'
 const STDERR_TAIL_LIMIT = 4_000
 /**
  * `apps/desktop` in dev, the asar root when packaged. Resolved from
- * `app.getAppPath()` rather than derived from `import.meta.url`: the built
- * entry lives at `lib/types/main.js` (one level deeper than `lib/main.js`),
- * so a two-level dirname walk would land on `apps/desktop/lib` — breaking the
- * packaged icon paths, the dev runDir, and the launcher's checkout repo-root
- * discovery. `getAppPath()` is the app root Electron itself resolves (`electron .`
- * in dev; the asar root when packaged) and is safe to call at module scope.
+ * `app.getAppPath()` rather than derived from `import.meta.url`: relying on
+ * a depth-sensitive dirname walk from the entry point would couple callers
+ * to the layout of the build output, which changes across refactors.
+ * `getAppPath()` is the app root Electron itself resolves (`electron .` in
+ * dev; the asar root when packaged) and is safe to call at module scope.
  */
 const PACKAGE_DIR = app.getAppPath()
 
@@ -238,7 +237,7 @@ async function boot(): Promise<void> {
   // must live outside Electron's process group: a terminal Ctrl+C signals the
   // group, and taking the reaper with it would kill the hard-kill cleanup
   // exactly when it is needed (detached + unref below).
-  spawn(process.execPath, [join(runDir(), 'lib', 'types', 'reaper.js'), String(process.pid), String(child.pid ?? 0)], {
+  spawn(process.execPath, [join(runDir(), 'lib', 'reaper.js'), String(process.pid), String(child.pid ?? 0)], {
     env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
     stdio: 'ignore',
     windowsHide: true,
