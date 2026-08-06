@@ -5654,6 +5654,10 @@ importers:
         version: link:../../../vendor/cordis
 
   packages/subprocess/subprocess-local:
+    dependencies:
+      '@deepseek-ai/dsh-process-tree':
+        specifier: workspace:^
+        version: link:../../support/process-tree
     devDependencies:
       '@deepseek-ai/dsh-invariants':
         specifier: workspace:^
