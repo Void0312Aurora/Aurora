@@ -28,8 +28,7 @@
         "scripts/**/*.mjs"
       ],
       "ignoreDependencies": [
-        "playwright",
-        "lefthook"
+        "playwright"
       ]
     },
     "examples": {

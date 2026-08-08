@@ -10,14 +10,21 @@ import {
   WEB_ARGS,
 } from '../src/launcher.ts'
 
-const APP_DIR = 'C:\\repo\\apps\\desktop'
+// Fixture paths are built with the host's `join` because the launcher resolves
+// its candidates with the host's `node:path`; a Windows literal would not
+// normalize on POSIX (`join('C:\\repo\\apps\\desktop', '..', '..')` is `C:..`).
+// `platform` is injected separately and only selects the permission fallback,
+// so the win32 default below is independent of the path flavor.
+const REPO_ROOT = join('repo')
+const APP_DIR = join(REPO_ROOT, 'apps', 'desktop')
+const EXEC_PATH = join(REPO_ROOT, 'node_modules', 'electron', 'dist', 'electron')
 
 function launchWith(
   exists: (path: string) => boolean,
   env: NodeJS.ProcessEnv = {},
   platform: NodeJS.Platform = 'win32',
 ): ReturnType<typeof resolveWebLaunch> {
-  return resolveWebLaunch({ env, appDir: APP_DIR, execPath: 'C:\\repo\\node_modules\\electron\\dist\\electron.exe', exists, platform })
+  return resolveWebLaunch({ env, appDir: APP_DIR, execPath: EXEC_PATH, exists, platform })
 }
 
 describe('parseReadyLine', () => {
@@ -41,15 +48,18 @@ describe('parseReadyLine', () => {
 })
 
 describe('resolveWebLaunch', () => {
-  const base = { env: {}, appDir: APP_DIR, execPath: 'C:\\electron\\electron.exe' }
+  // `platform` is explicit: the permission fallback is a win32 behavior, and
+  // leaving it to `process.platform` would make these cases host-dependent.
+  const base = { env: {}, appDir: APP_DIR, execPath: EXEC_PATH, platform: 'win32' as NodeJS.Platform }
 
   it('prefers DSH_BIN over every other candidate', () => {
+    const dshBin = join('tools', 'dsh')
     const launch = resolveWebLaunch({
       ...base,
-      env: { DSH_BIN: 'C:\\tools\\dsh.exe' },
+      env: { DSH_BIN: dshBin },
     })
     expect(launch).toEqual({
-      command: 'C:\\tools\\dsh.exe',
+      command: dshBin,
       args: [...WEB_ARGS],
       env: { DSH_PERMISSION_MODE: 'danger-full-access' },
       source: 'DSH_BIN',
@@ -74,7 +84,7 @@ describe('resolveWebLaunch', () => {
   it('uses the embedded closure under Electron-as-Node when present', () => {
     const suffix = join('deploy', 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
     const launch = launchWith(path => path.endsWith(suffix))
-    expect(launch.command).toBe('C:\\repo\\node_modules\\electron\\dist\\electron.exe')
+    expect(launch.command).toBe(EXEC_PATH)
     expect(launch.args).toEqual(['--expose-internals', expect.stringContaining(suffix), ...WEB_ARGS])
     expect(launch.env).toEqual({ ELECTRON_RUN_AS_NODE: '1', DSH_PERMISSION_MODE: 'danger-full-access' })
     expect(launch.source).toBe('embedded closure')
@@ -84,7 +94,7 @@ describe('resolveWebLaunch', () => {
     const launch = launchWith(path => path.endsWith(join('apps', 'cli', 'lib', 'bin.js')))
     expect(launch).toEqual({
       command: 'node',
-      args: ['C:\\repo\\apps\\cli\\lib\\bin.js', ...WEB_ARGS],
+      args: [join(REPO_ROOT, 'apps', 'cli', 'lib', 'bin.js'), ...WEB_ARGS],
       env: { DSH_PERMISSION_MODE: 'danger-full-access' },
       source: 'checkout lib',
     })
@@ -94,9 +104,9 @@ describe('resolveWebLaunch', () => {
     const launch = launchWith(path => path.endsWith(join('apps', 'cli', 'src', 'bin.ts')))
     expect(launch).toEqual({
       command: 'node',
-      args: ['--import', 'tsx/esm', 'C:\\repo\\apps\\cli\\src\\bin.ts', ...WEB_ARGS],
+      args: ['--import', 'tsx/esm', join(REPO_ROOT, 'apps', 'cli', 'src', 'bin.ts'), ...WEB_ARGS],
       env: { DSH_PERMISSION_MODE: 'danger-full-access' },
-      cwd: 'C:\\repo',
+      cwd: REPO_ROOT,
       source: 'checkout source',
     })
   })
