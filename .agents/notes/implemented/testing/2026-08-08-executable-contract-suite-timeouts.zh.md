@@ -16,7 +16,7 @@ Status: implemented
 
 超时是这个套件的属性，在其 `describe` 上声明一次：
 
-```ts
+```ts ignore-check
 describe('Oxlint executable contract', { timeout: 90_000 }, () => {
 ```
 

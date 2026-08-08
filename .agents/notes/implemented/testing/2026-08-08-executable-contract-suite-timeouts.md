@@ -16,7 +16,7 @@ Three of the file's six cases carried an individual `20_000` timeout; the other 
 
 The timeout is a property of this suite, declared once on its `describe`:
 
-```ts
+```ts ignore-check
 describe('Oxlint executable contract', { timeout: 90_000 }, () => {
 ```
 
