@@ -2,19 +2,20 @@
 
 [English](README.md) | 中文
 
-零依赖的进程树终止原语，由桌面外壳（`@deepseek-ai/dsh-desktop`）共用：其主进程与孤儿 reaper 原先各自携带一份 kill 逻辑副本，现在都改调本原语。子进程后端的 tree-kill seam 是规划中的后续消费者。
+零依赖的进程树终止原语，由桌面外壳（`@deepseek-ai/dsh-desktop`）与本地子进程后端（`@deepseek-ai/dsh-subprocess-local`）共享。桌面主进程与孤儿 reaper 会在关闭期间等待本原语；subprocess-local 将其用于自身 tree-kill seam 的底层实现。
 
 ## 接口面
 
 ```ts
 import { killProcessTree } from '@deepseek-ai/dsh-process-tree'
 
-// Terminate pid and its whole tree: taskkill /T /F on Windows; on POSIX the
-// group gets SIGTERM and SIGKILL five seconds later if it ignored the signal.
-killProcessTree(serverPid)
+declare const serverPid: number
+
+// Terminate pid and its whole tree, then await the platform completion boundary.
+await killProcessTree(serverPid)
 ```
 
-一次调用、永不抛错；ESRCH 静默（树已不在——这正是期望结果），其余失败经可注入的 `logger` 上报（默认 `console.error`）。Windows 用 `taskkill /T /F`，因为 `child.kill()` 只对直接子进程做 `TerminateProcess`。POSIX 要求树根以 detached 方式拉起、自成进程组：负 pid 一次信号覆盖整个组——先 SIGTERM，`graceMs`（默认 5000）后仍未退出则补发 SIGKILL。升级定时器是普通 `setTimeout`，因此 detached 的短命调用方（桌面 reaper）会存活到强制 kill 落地。
+一次 await 调用，永不抛错。Windows 用 `taskkill /T /F`，因为 `child.kill()` 只对直接子进程做 `TerminateProcess`，并在该命令完成后 resolve。POSIX 要求树根以 detached 方式拉起、自成进程组：负 pid 会对整个组发送 SIGTERM，在需要时于 `graceMs`（默认 5000）后升级为 SIGKILL；当信号发送和存活探测成功时，会轮询至该组消失。ESRCH 静默，因为树已经消失；其他信号发送、探测或 taskkill 启动错误经可注入的 `logger` 上报（默认 `console.error`），随后以 best-effort 方式 resolve。该 Promise 及其定时器会让桌面 reaper 这类 detached 的短命调用方存活到成功的平台完成边界。
 
 ## Model Experience
 
@@ -26,7 +27,5 @@ killProcessTree(serverPid)
 
 ## Known Limitations and Deferred Work
 
-- **升级不可撤销**——`killProcessTree` 安排完定时器即返回；SIGKILL 无法取消，定时器句柄也不对外。桌面调用方（退出路径、reaper）从未需要该句柄。
 - **Windows 无宽限阶段**——taskkill `/T /F` 立即终止；Windows 的优雅关闭通道随桌面外壳自身的 v1 决策一并推迟。
-- **不校验 pid 归属**——原语只对 pid 所指的树发信号；调用方自行负责 pid 属于自己（桌面只会杀自己拉起的子进程）。
-- **subprocess-local 仍自带 kill seam**——`packages/subprocess/subprocess-local/src/spawn.ts` 中的 `killGroup`/`taskkillProcessTree`/`signalTree` 早于本包；迁移是独立步骤，因为该包的拆除竞态与幂等契约不同于桌面的升级流程。
+- **不校验 pid 归属**——原语会终止 pid 指向的任何进程树；调用方必须拥有所传入的 pid。

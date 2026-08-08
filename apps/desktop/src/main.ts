@@ -8,17 +8,9 @@
 
 import { spawn, type ChildProcess } from 'node:child_process'
 import { join } from 'node:path'
+import { killProcessTree } from '@deepseek-ai/dsh-process-tree'
 import { app, BrowserWindow, dialog, Menu, nativeImage, shell, Tray } from './electron-api.ts'
 import { resolveWebLaunch, waitForHttpOk, waitForReadyLine, childExited } from './launcher.ts'
-// The tree-kill primitive is materialized into this package's build output
-// (scripts/materialize-process-tree.mjs copies the compiled primitive into
-// lib/process-tree/ before every build): the packaged app has no node_modules,
-// and Electron-as-Node children (the reaper) cannot read inside app.asar, so
-// code they import must be plain files under lib/ — which electron-builder
-// packs and unpacks (lib/process-tree/**). The specifier is written relative
-// to src/; a post-tsc step (scripts/rewrite-import-extensions.mjs) adjusts
-// it for the emitted lib/types/ depth before every build.
-import { killProcessTree } from '../lib/process-tree/index.js'
 
 const APP_ID = 'ai.deepseek.dsh-desktop'
 const WINDOW_TITLE = 'DSH Desktop'
@@ -165,6 +157,41 @@ function createTray(): void {
   tray.on('click', showWindow)
 }
 
+/**
+ * Expose the minimum file-based control used by the built Electron lifecycle
+ * smoke. Server resolution, spawn, readiness, window creation, and teardown
+ * remain the shipping path; the test hook only reports readiness and requests
+ * the same `app.quit()` action as the tray menu.
+ */
+async function exposeLifecycleTestControl(): Promise<void> {
+  if (process.env.DSH_DESKTOP_TEST !== '1') return
+  const serverPid = server?.pid
+  if (serverPid === undefined) {
+    throw new Error('dsh-desktop: lifecycle test control requires a live server pid')
+  }
+  const quitFile = process.env.DSH_DESKTOP_TEST_QUIT_FILE
+  if (quitFile !== undefined) {
+    const { statSync } = await import('node:fs')
+    const timer = setInterval(() => {
+      let current
+      try {
+        current = statSync(quitFile)
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
+        clearInterval(timer)
+        fatal(new Error(`dsh-desktop: lifecycle quit probe failed: ${error instanceof Error ? error.message : String(error)}`))
+        return
+      }
+      if (!current.isFile() || current.size === 0) return
+      clearInterval(timer)
+      app.quit()
+    }, 100)
+  }
+  // Emit readiness only after the optional quit poller is registered, so a
+  // harness reacting immediately cannot create the signal before observation.
+  process.stdout.write(`DSH_DESKTOP_READY ${String(serverPid)}\n`)
+}
+
 function fatal(error: Error): void {
   console.error(`[dsh-desktop] ${error.message}`)
   dialog.showErrorBox(WINDOW_TITLE, error.message)
@@ -190,38 +217,6 @@ function runDir(): string {
 }
 
 async function boot(): Promise<void> {
-  // Test mode: skip server resolution and spawn, host a static page so the
-  // Electron lifecycle (window, tray, second-instance, quit) can be exercised
-  // without a built dsh binary. Set DSH_DESKTOP_TEST_TREE_PID to exercise the
-  // quit-path killTree against a guaranteed-dead pid (99999 by convention).
-  if (process.env.DSH_DESKTOP_TEST === '1') {
-    const testPidStr = process.env.DSH_DESKTOP_TEST_TREE_PID
-    if (testPidStr !== undefined) {
-      server = { pid: Number(testPidStr) } as ChildProcess
-    }
-    serverUrl = new URL('about:blank')
-    Menu.setApplicationMenu(null)
-    createWindow(serverUrl)
-    createTray()
-    if (pendingFocus) {
-      pendingFocus = false
-      showWindow()
-    }
-    // Signal readiness to the test harness. The harness sends a quit signal
-    // by writing to a named file, which the app polls (stdin is unreliable
-    // in GUI mode on Windows: the data event never fires on a piped stdin).
-    process.stdout.write('DSH_DESKTOP_READY\n')
-    const quitFile = process.env.DSH_DESKTOP_TEST_QUIT_FILE
-    if (quitFile !== undefined) {
-      void import('node:fs').then(({ watchFile }) => {
-        watchFile(quitFile, () => {
-          app.quit()
-        })
-      })
-    }
-    return
-  }
-
   const launch = resolveWebLaunch({
     env: process.env,
     appDir: runDir(),
@@ -323,6 +318,7 @@ async function boot(): Promise<void> {
     pendingFocus = false
     showWindow()
   }
+  await exposeLifecycleTestControl()
 }
 
 // Tray residency means the app outlives its window; a second launch must focus
@@ -330,15 +326,19 @@ async function boot(): Promise<void> {
 if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
-  app.on('second-instance', showWindow)
+  app.on('second-instance', () => {
+    if (process.env.DSH_DESKTOP_TEST === '1') {
+      process.stdout.write('DSH_DESKTOP_SECOND_INSTANCE\n')
+    }
+    showWindow()
+  })
   app.setAppUserModelId(APP_ID)
   app.whenReady().then(boot).catch(fatal)
   app.on('before-quit', (event) => {
     quitting = true
     if (server?.pid !== undefined) {
-      // Prevent immediate exit and wait for the tree kill to dispatch
-      // (taskkill on Windows, SIGTERM on POSIX) so the server child and
-      // its descendants are gone before the Electron process exits.
+      // Prevent immediate exit and await the process-tree completion boundary
+      // so the server child and its descendants are gone before Electron exits.
       // The reaper is the hard-kill backup: if this path is interrupted
       // (crash, forced exit), the reaper performs the same tree kill.
       event.preventDefault()

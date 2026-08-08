@@ -15,7 +15,7 @@
   ],
   "scripts": {
     "build": "npm run build:lib && npm run build:web",
-    "build:lib": "node apps/desktop/scripts/materialize-process-tree.mjs && tsc -b && tsdown",
+    "build:lib": "node apps/desktop/scripts/materialize-process-tree.mjs && tsc -b && node apps/desktop/scripts/fixup-import-paths.mjs && tsdown",
     "build:web": "pnpm --filter @deepseek-ai/dsh-frontend run build",
     "clean": "tsx scripts/clean.ts",
     "change-scope": "tsx scripts/change-scope.ts",
@@ -33,6 +33,7 @@
     "test:web": "npm run build && npm run test:web:built",
     "test:web:refresh": "npm run build && DSH_SNAPSHOT=refresh vitest run --config vitest.web.config.ts",
     "test:web:built": "vitest run --config vitest.web.config.ts",
+    "test:desktop:electron": "vitest run apps/desktop/tests/electron-lifecycle.spec.ts",
     "test:gui": "vitest run packages/client packages/host",
     "check:all": "tsx scripts/run-gates.ts check-all",
     "check:ci": "tsx scripts/run-gates.ts ci-primary",

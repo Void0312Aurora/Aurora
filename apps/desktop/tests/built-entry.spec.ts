@@ -9,9 +9,9 @@
  *
  * IMPORTANT: the compiled entry lives at `lib/types/` (depth 2); the
  * materialized process-tree primitive lives at `lib/process-tree/`
- * (depth 1). The post-tsc `fixup-import-paths.mjs` adjusts the specifier
- * from the source form (`../lib/process-tree/index.js`) to the emitted form
- * (`../process-tree/index.js`). This test verifies the FIXED output.
+ * (depth 1). The post-tsc `fixup-import-paths.mjs` adjusts the package-name
+ * source specifier (`@deepseek-ai/dsh-process-tree`) to the emitted relative
+ * form (`../process-tree/index.js`). This test verifies the fixed output.
  */
 
 import { existsSync } from 'node:fs'
@@ -66,8 +66,8 @@ describe('built-entry import graph', () => {
     const procTreeImport = resolved.find(([, p]) => p.includes('process-tree'))
     expect(procTreeImport, 'main.js must import the process-tree primitive via a relative specifier')
       .toBeDefined()
-    // The rewritten specifier must be the depth-2 form, not the source
-    // form that would resolve to lib/lib/process-tree/.
+    // The package-name import is rewritten to the depth-2 relative form in
+    // the artifact so the packaged app has no runtime node_modules edge.
     expect(procTreeImport![0], 'specifier must be the post-fixup depth-2 form')
       .toBe('../process-tree/index.js')
   })

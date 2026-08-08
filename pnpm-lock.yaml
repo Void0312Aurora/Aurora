@@ -513,6 +513,10 @@ importers:
         version: 1.1.0(patch_hash=7a0c04f1f49d798a9ffe2f7f414c01064a44ca2489772d0c3e1235ab336755e6)
 
   apps/desktop:
+    dependencies:
+      '@deepseek-ai/dsh-process-tree':
+        specifier: workspace:^
+        version: link:../../packages/support/process-tree
     devDependencies:
       '@resvg/resvg-js':
         specifier: ^2.6.2

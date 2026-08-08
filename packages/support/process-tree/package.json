@@ -5,10 +5,10 @@
   "private": true,
   "type": "module",
   "main": "lib/index.js",
-  "types": "lib/index.d.ts",
+  "types": "lib/types/index.d.ts",
   "exports": {
     ".": {
-      "types": "./lib/index.d.ts",
+      "types": "./lib/types/index.d.ts",
       "default": "./lib/index.js"
     },
     "./invariant": {
@@ -20,12 +20,9 @@
   },
   "files": [
     "lib/index.js",
-    "lib/index.d.ts",
     "lib/invariant.js",
-    "lib/invariant.d.ts",
     "lib/types/**/*.d.ts",
     "lib/types/**/*.d.ts.map",
-    "lib/**/*.map",
     "src"
   ],
   "license": "BSD-3-Clause",

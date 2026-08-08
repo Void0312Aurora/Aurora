@@ -65,10 +65,11 @@ describe('tierExternalDeps', () => {
 
   it('classifies a packaged app\'s electron devDependency as runtime (build-carried)', () => {
     const { manifests, names } = workspace({
-      // apps/desktop really has zero runtime dependencies; electron and
-      // electron-builder are dev-only declarations.
+      // The desktop's workspace runtime dependency is excluded from external
+      // notices; Electron itself is build-carried despite its dev declaration.
       'apps/desktop/package.json': {
         name: '@deepseek-ai/dsh-desktop',
+        dependencies: { '@deepseek-ai/dsh-process-tree': 'workspace:^' },
         devDependencies: { electron: '^43', 'electron-builder': '^26' },
       },
     })
@@ -76,6 +77,7 @@ describe('tierExternalDeps', () => {
     // electron-builder packs the Electron runtime into every installer, so it
     // must be disclosed as runtime even though it is declared dev-only.
     expect(tierExternalDeps(manifests, names).get('electron')).toBe(true)
+    expect(tierExternalDeps(manifests, names).has('@deepseek-ai/dsh-process-tree')).toBe(false)
     // electron-builder itself never ships in the installer; dev-only.
     expect(tierExternalDeps(manifests, names).get('electron-builder')).toBe(false)
   })

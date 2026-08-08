@@ -1,7 +1,7 @@
 # dsh-desktop packaging (electron-builder). The app payload is lib/ (the
 # Electron main), build/ (icons), and deploy/ (the materialized dsh web
-# closure from `pnpm run deploy:closure`); this package's own node_modules
-# carries only devDependencies, which electron-builder never packs.
+# closure from `pnpm run deploy:closure`). Workspace runtime imports are
+# materialized under lib/, so this whitelist intentionally excludes node_modules.
 appId: ai.deepseek.dsh-desktop
 productName: DSH Desktop
 directories:

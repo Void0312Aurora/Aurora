@@ -8,18 +8,14 @@
  *
  * The tree kill is delegated to the `@deepseek-ai/dsh-process-tree` primitive
  * (taskkill /T /F on Windows; SIGTERM with SIGKILL escalation against the
- * server's detached process group on POSIX). Its escalation timer is what
- * keeps this process alive until the kill lands; once it fires, the event
- * loop drains and the reaper exits on its own.
+ * server's detached process group on POSIX). Its Promise keeps this process
+ * alive through taskkill completion on Windows or verified process-group
+ * quiescence on POSIX; the reaper then exits when the event loop drains.
  *
  * Usage: node reaper.js <mainPid> <serverPid>
  */
 
-// The same lib-relative import src/main.ts uses: the packaged app has no
-// node_modules, and this script runs from the unpacked tree (Electron-as-Node
-// cannot read inside app.asar), so the primitive ships as plain files under
-// lib/process-tree/ — packed and unpacked by electron-builder.
-import { killProcessTree } from '../lib/process-tree/index.js'
+import { killProcessTree } from '@deepseek-ai/dsh-process-tree'
 
 const mainPid = Number(process.argv[2])
 const serverPid = Number(process.argv[3])
@@ -49,8 +45,8 @@ const timer = setInterval(() => {
  * `@deepseek-ai/dsh-process-tree` primitive — the same kill `main.ts`'s
  * killTree performs, with the reaper's log prefix. The returned Promise
  * keeps this process alive (on Windows: until taskkill exits; on POSIX:
- * until the SIGKILL escalation timer fires), so the reaper cannot exit
- * before the kill lands.
+ * until the process group is absent), so the reaper cannot exit before its
+ * platform completion boundary.
  */
 function killServerTree(): Promise<void> {
   return killProcessTree(serverPid, {

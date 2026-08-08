@@ -41,7 +41,7 @@ export interface SpawnInternals {
   /** Directory for spill files (defaults to the OS temp dir). */
   spillDir?: string
   /** Windows tree-termination runner (defaults to `taskkill /PID <pid> /T /F`). */
-  taskkill?: (pid: number) => void
+  taskkill?: (pid: number) => void | Promise<void>
   /** Host platform override for signalling decisions. */
   platform?: NodeJS.Platform
 }
@@ -229,23 +229,6 @@ export class OutputCollector {
 }
 
 /**
- * Send `sig` to a detached POSIX process group. Never throws: delivery races
- * process exit and may run in a timer callback, so failures are contained and
- * a non-positive pid is a no-op.
- *
- * Delegates to {@link killProcessTree} with a zero grace period (the caller
- * owns escalation timing) and a silent logger (errors are contained, matching
- * the original contract).
- *
- * @param pid - the group leader's pid; non-positive means the spawn failed and the call is a no-op.
- * @param _sig - historical parameter; `killProcessTree` always begins with SIGTERM.
- */
-export function killGroup(pid: number, _sig: NodeJS.Signals): void {
-  if (pid <= 0) return
-  void killProcessTree(pid, { platform: 'linux', graceMs: 0, logger: () => {} })
-}
-
-/**
  * Terminate one Windows process tree with `taskkill /T /F`. Contained like
  * POSIX group signalling — delivery races tree exit, so an absent tree, a
  * nonzero status, or a missing taskkill binary must not break idempotent
@@ -256,9 +239,9 @@ export function killGroup(pid: number, _sig: NodeJS.Signals): void {
  *
  * @param pid - root process id; non-positive is a no-op.
  */
-export function taskkillProcessTree(pid: number): void {
-  if (pid <= 0) return
-  void killProcessTree(pid, { platform: 'win32', logger: () => {} })
+export function taskkillProcessTree(pid: number): Promise<void> {
+  if (pid <= 0) return Promise.resolve()
+  return killProcessTree(pid, { platform: 'win32', logger: () => {} })
 }
 
 /**
@@ -310,7 +293,7 @@ export function spawnSubprocess(spec: SubprocessSpawnSpec, internals: SpawnInter
   const stdoutCollector = collectStream(outMode, child.stdout, 'stdout')
   const stderrCollector = collectStream(errMode, child.stderr, 'stderr')
 
-  let graceTimer: NodeJS.Timeout | undefined
+  let terminationStarted = false
   let settled = false
 
   // Failed spawns use pid -1 so signalling remains a no-op.
@@ -340,45 +323,42 @@ export function spawnSubprocess(spec: SubprocessSpawnSpec, internals: SpawnInter
     }
   }
 
-  // POSIX signal callback that preserves the original signalTree fallback:
-  // when a group signal fails (EPERM-style), try the direct child before
-  // giving up. This is a safety net that killProcessTree's default signal
-  // does not include.
+  // A direct-child fallback may still shorten a failed group teardown, but it
+  // cannot prove group-wide delivery. Preserve the group error so the shared
+  // primitive stops instead of polling an unsignalled group indefinitely.
   const signalWithFallback = (p: number, sig: NodeJS.Signals): void => {
     try {
       process.kill(p, sig)
-    } catch {
+      return
+    } catch (groupError) {
       try {
         child.kill(sig)
       } catch {
-        // The direct child already exited; teardown remains idempotent.
+        // A rejected direct-child fallback is subsumed by the authoritative
+        // group-delivery failure reported below.
       }
+      throw groupError
     }
   }
 
-  // Wrap the injected sync taskkill so it satisfies killProcessTree's
-  // `(pid: number) => Promise<void>` contract.
-  // oxlint-disable-next-line typescript/require-await -- wrapping sync call for interface compat
-  const asyncTaskkill = async (p: number): Promise<void> => { taskkill(p) }
+  /** Await either a synchronous test seam or the default asynchronous taskkill. */
+  const asyncTaskkill = async (p: number): Promise<void> => { await taskkill(p) }
 
   const terminate = (): void => {
-    if (graceTimer !== undefined) return // escalation already in flight
+    if (terminationStarted) return
     if (!treeAlive()) return
-    // killProcessTree handles platform dispatch and SIGTERM→grace→SIGKILL
-    // escalation internally; the returned Promise keeps the event loop alive
-    // until the force-kill lands so a parent that exits before it fires
-    // would not orphan a trapped survivor.
+    terminationStarted = true
+    // The shared controller keeps the event loop alive through escalation and
+    // POSIX group quiescence; handle.waitForExit remains the consumer-visible
+    // observation boundary.
     void killProcessTree(pid, {
       platform,
       graceMs: spec.graceMs,
       signal: signalWithFallback,
       taskkill: asyncTaskkill,
+      treeAlive,
+      logger: () => {},
     })
-    // Track that escalation started; never cleared — once the tree is being
-    // killed, duplicate terminate() calls are no-ops (treeAlive guards the
-    // surviving helper case where escalation outlives settlement).
-    graceTimer = setTimeout(() => {}, 86_400_000) // placeholder, unref'd below
-    graceTimer.unref()
   }
 
   // The caller owns timeout classification; this layer only reacts to abort.
@@ -420,9 +400,6 @@ export function spawnSubprocess(spec: SubprocessSpawnSpec, internals: SpawnInter
     })
     child.on('close', settle)
     function cleanup(): void {
-      // graceTimer (escalation guard) deliberately NOT cleared: the SIGKILL
-      // escalation must be able to reach tree survivors after the direct child
-      // settles. killProcessTree's internal timer stays ref'd independently.
       if (pipeDrainTimer !== undefined) clearTimeout(pipeDrainTimer)
       spec.signal?.removeEventListener('abort', onAbort)
     }

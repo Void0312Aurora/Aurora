@@ -36,7 +36,6 @@
   },
   "devDependencies": {
     "@deepseek-ai/dsh-invariants": "workspace:^",
-    "@deepseek-ai/dsh-process-tree": "workspace:^",
     "@deepseek-ai/dsh-subprocess": "workspace:^",
     "cordis": "^4.0.0-rc.7"
   }

@@ -1,178 +1,227 @@
 /**
- * Electron lifecycle smoke tests. These spawn the real Electron app with
- * DSH_DESKTOP_TEST=1 (which skips server spawn, hosts about:blank, and
- * waits for a quit-file touch), then verify the process-level lifecycle:
- * boot → window/tray ready → quit.
- *
- * These tests need a display server (real desktop or Xvfb); they are skipped
- * when the CI or DSH_DESKTOP_SKIP_E2E env var is set.
+ * Built Electron lifecycle smoke. The only test hook is a file-triggered quit:
+ * every case otherwise resolves and starts the real `dsh web`, waits for HTTP
+ * readiness, creates the shipping window and tray, and uses the production
+ * process-tree teardown.
  */
 
 import { spawn, type ChildProcess, type SpawnOptions } from 'node:child_process'
-import { writeFileSync, unlinkSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { afterEach, describe, expect, it } from 'vitest'
+import { killProcessTree } from '@deepseek-ai/dsh-process-tree'
+import { afterAll, afterEach, describe, expect, it } from 'vitest'
 
-const __dirname = fileURLToPath(new URL('.', import.meta.url))
-const packageDir = join(__dirname, '..')
+const packageDir = fileURLToPath(new URL('..', import.meta.url))
+const builtMain = join(packageDir, 'lib', 'types', 'main.js')
 const require_ = createRequire(import.meta.url)
-// `require('electron')` returns the path to the Electron binary from the npm
-// package; in the test harness (vitest/Node) this is the correct way to locate it.
-// The spawned child clears ELECTRON_RUN_AS_NODE so the binary starts its browser
-// process rather than acting as plain Node.
 const electronPath = require_('electron') as string
+const READY_PATTERN = /(?:^|\n)DSH_DESKTOP_READY (\d+)(?:\r?\n|$)/u
+const SECOND_INSTANCE_MARKER = 'DSH_DESKTOP_SECOND_INSTANCE'
+const testRoot = mkdtempSync(join(tmpdir(), 'dsh-desktop-lifecycle-'))
+const userDataDir = join(testRoot, 'electron-user-data')
+const dshHome = join(testRoot, 'dsh-home')
 
-const READY_MARKER = 'DSH_DESKTOP_READY'
+interface ElectronSubject {
+  child: ChildProcess
+  quitFile: string
+  output: string
+  serverPid?: number
+}
 
-/** Track spawned children so afterEach can clean them up between tests. */
-const spawned: ChildProcess[] = []
+const subjects: ElectronSubject[] = []
 
-/**
- * Spawn Electron in test mode. Explicitly clears ELECTRON_RUN_AS_NODE so the
- * Electron binary starts its browser process instead of acting as plain Node.
- * `undefined` in a spawn env object stringifies to `"undefined"` (truthy),
- * so we must delete the key from the inherited environment instead.
- *
- * Quit signalling uses a temp file rather than stdin because stdin pipes are
- * unreliable in Windows GUI processes (the 'data' event never fires).
- */
-function spawnElectron(
-  extraEnv: Record<string, string> = {},
-): { child: ChildProcess; quitFile: string } {
+/** Spawn the compiled Electron package with isolated application and harness state. */
+function spawnElectron(): ElectronSubject {
   const parentEnv = { ...process.env }
   delete parentEnv.ELECTRON_RUN_AS_NODE
-  const quitFile = join(tmpdir(), `dsh-desktop-test-quit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.txt`)
-  // Clean up any leftover from a previous run.
-  try { unlinkSync(quitFile) } catch { /* ignore */ }
-  const opts: SpawnOptions = {
+  delete parentEnv.DSH_BIN
+  const quitFile = join(testRoot, `quit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.txt`)
+  const options: SpawnOptions = {
     cwd: packageDir,
     env: {
       ...parentEnv,
       DSH_DESKTOP_TEST: '1',
       DSH_DESKTOP_TEST_QUIT_FILE: quitFile,
-      ...extraEnv,
+      DSH_HOME: dshHome,
+      DSH_PERMISSION_MODE: 'danger-full-access',
     },
-    stdio: ['pipe', 'pipe', 'pipe'],
+    stdio: ['ignore', 'pipe', 'pipe'],
+    // The failure cleanup uses the same process-group primitive as production;
+    // make Electron the group leader so a timed-out smoke cannot leak helpers.
+    detached: process.platform !== 'win32',
   }
-  const child = spawn(electronPath, ['.'], opts)
-  spawned.push(child)
-  return { child, quitFile }
+  const child = spawn(electronPath, [`--user-data-dir=${userDataDir}`, '.'], options)
+  const subject: ElectronSubject = { child, quitFile, output: '' }
+  subjects.push(subject)
+  for (const stream of [child.stdout, child.stderr]) {
+    stream?.setEncoding('utf8')
+    stream?.on('data', (chunk: string) => {
+      subject.output += chunk
+      const match = READY_PATTERN.exec(subject.output)
+      if (match?.[1] !== undefined) subject.serverPid = Number(match[1])
+    })
+  }
+  return subject
 }
 
-/** Signal the Electron app to quit by touching the agreed-upon temp file. */
-function sendQuit(quitFile: string): void {
-  writeFileSync(quitFile, 'quit')
+/** Signal the same app.quit path the tray's Quit item invokes. */
+function sendQuit(subject: ElectronSubject): void {
+  writeFileSync(subject.quitFile, 'quit')
 }
 
-/** Resolve once the child prints the READY_MARKER; reject on timeout. */
-function waitForReady(child: ChildProcess, timeoutMs = 15_000): Promise<void> {
-  return new Promise((resolve, reject) => {
+/** Wait until captured process output satisfies a predicate. */
+function waitForOutput(
+  subject: ElectronSubject,
+  predicate: (output: string) => boolean,
+  label: string,
+  timeoutMs = 90_000,
+): Promise<void> {
+  if (predicate(subject.output)) return Promise.resolve()
+  return new Promise((resolvePromise, reject) => {
     const timer = setTimeout(() => {
-      reject(new Error(`electron did not emit ${READY_MARKER} within ${timeoutMs}ms`))
+      cleanup()
+      reject(new Error(`electron did not emit ${label} within ${String(timeoutMs)}ms\n${subject.output}`))
     }, timeoutMs)
-
-    let buf = ''
-    child.stdout!.setEncoding('utf8')
-    child.stdout!.on('data', (chunk: string) => {
-      buf += chunk
-      if (buf.includes(READY_MARKER)) {
-        clearTimeout(timer)
-        resolve()
-      }
-    })
-
-    child.on('exit', (code) => {
+    const onData = (): void => {
+      if (!predicate(subject.output)) return
+      cleanup()
+      resolvePromise()
+    }
+    const onExit = (code: number | null, signal: NodeJS.Signals | null): void => {
+      cleanup()
+      reject(new Error(`electron exited (code ${String(code)}, signal ${String(signal)}) before ${label}\n${subject.output}`))
+    }
+    const cleanup = (): void => {
       clearTimeout(timer)
-      reject(new Error(`electron exited (code ${code}) before emitting ${READY_MARKER}`))
-    })
-
-    child.on('error', (err) => {
-      clearTimeout(timer)
-      reject(err)
-    })
+      subject.child.stdout?.off('data', onData)
+      subject.child.stderr?.off('data', onData)
+      subject.child.off('exit', onExit)
+    }
+    subject.child.stdout?.on('data', onData)
+    subject.child.stderr?.on('data', onData)
+    subject.child.once('exit', onExit)
   })
 }
 
-/** Returns the platform skip reason, or empty string if tests should run. */
-function skipReason(): string {
-  if (process.env.CI || process.env.DSH_DESKTOP_SKIP_E2E) {
-    return 'CI / DSH_DESKTOP_SKIP_E2E: skipping Electron lifecycle tests'
+/** Wait for a child to exit, retaining output in timeout diagnostics. */
+function waitForExit(subject: ElectronSubject, timeoutMs = 30_000): Promise<number | null> {
+  if (subject.child.exitCode !== null || subject.child.signalCode !== null) {
+    return Promise.resolve(subject.child.exitCode)
   }
-  // Windows GUI apps need a desktop session; when there is no display the
-  // spawn will fail or time out, so the test author opt-in by clearing the
-  // env var instead of us auto-detecting.
-  return ''
+  return new Promise((resolvePromise, reject) => {
+    const timer = setTimeout(() => {
+      subject.child.off('exit', onExit)
+      reject(new Error(`electron did not exit within ${String(timeoutMs)}ms\n${subject.output}`))
+    }, timeoutMs)
+    const onExit = (code: number | null): void => {
+      clearTimeout(timer)
+      resolvePromise(code)
+    }
+    subject.child.once('exit', onExit)
+  })
 }
 
-const describeOrSkip = skipReason() ? describe.skip : describe
+/** Probe whether a PID is still owned by a process. */
+function pidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code
+    if (code === 'ESRCH') return false
+    if (process.platform === 'win32' && code === 'EINVAL') return false
+    return true
+  }
+}
 
-describeOrSkip('Electron lifecycle', () => {
-  afterEach(() => {
-    // Kill any remaining children and give the OS a moment to release the
-    // single-instance lock before the next test.
-    for (const child of spawned.splice(0)) {
-      try { child.kill() } catch { /* ignore */ }
+/** Wait until a PID is absent, retaining a precise timeout diagnostic. */
+async function waitForPidExit(pid: number, timeoutMs = 15_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (pidAlive(pid)) {
+    if (Date.now() >= deadline) {
+      throw new Error(`pid ${String(pid)} remained live after ${String(timeoutMs)}ms`)
     }
-    return new Promise(r => setTimeout(r, 800))
-  })
+    await new Promise(resolve => setTimeout(resolve, 100))
+  }
+}
 
-  it('boots, emits the readiness marker, and exits cleanly on quit signal', { timeout: 20_000 }, async () => {
-    const { child, quitFile } = spawnElectron()
+/** Resolve why the host cannot run a GUI smoke, or undefined when it can. */
+function skipReason(): string | undefined {
+  if (process.env.DSH_DESKTOP_SKIP_E2E === '1') return 'DSH_DESKTOP_SKIP_E2E=1'
+  if (!existsSync(builtMain)) return 'desktop build output is absent'
+  if (process.platform === 'linux' && process.env.DISPLAY === undefined && process.env.WAYLAND_DISPLAY === undefined) {
+    return 'Linux display server is absent'
+  }
+  return undefined
+}
 
-    await waitForReady(child)
-    expect(child.exitCode, 'process must still be alive after readiness').toBeNull()
+const reason = skipReason()
+const itLifecycle = reason === undefined ? it : it.skip
 
-    const exited = new Promise<number | null>(resolve => child.on('exit', resolve))
-    sendQuit(quitFile)
-
-    const code = await exited
-    expect(code).toBe(0)
-
-    try { unlinkSync(quitFile) } catch { /* ignore */ }
-  })
-
-  it('second instance exits immediately (single-instance lock)', { timeout: 20_000 }, async () => {
-    const { child: first, quitFile } = spawnElectron()
-    await waitForReady(first)
-
-    // Second instance: requestSingleInstanceLock() → false → app.quit().
-    const { child: second, quitFile: _qf2 } = spawnElectron()
-    const secondCode = await new Promise<number | null>(resolve => second.on('exit', resolve))
-
-    expect(secondCode).toBe(0)
-
-    // On Windows, Electron 43 has a known issue where the first instance may
-    // also exit when a second instance calls requestSingleInstanceLock().
-    // When the first instance is still alive, quit it via the agreed file;
-    // otherwise the incidental exit is a clean pass (exit code 0).
-    if (first.exitCode === null) {
-      const firstExited = new Promise<number | null>(resolve => first.on('exit', resolve))
-      sendQuit(quitFile)
-      const firstCode = await firstExited
-      expect(firstCode).toBe(0)
+describe('Electron lifecycle', () => {
+  afterEach(async () => {
+    for (const subject of subjects.splice(0)) {
+      if (subject.child.pid !== undefined && subject.child.exitCode === null && subject.child.signalCode === null) {
+        await killProcessTree(subject.child.pid, { graceMs: 0 })
+      }
+      if (subject.serverPid !== undefined && pidAlive(subject.serverPid)) {
+        await killProcessTree(subject.serverPid, { graceMs: 0 })
+      }
+      rmSync(subject.quitFile, { force: true })
     }
-
-    try { unlinkSync(quitFile) } catch { /* ignore */ }
   })
 
-  it('quit with a fake server pid exercises the killTree path without hanging', { timeout: 20_000 }, async () => {
-    // A high, guaranteed-non-existent pid exercises the full killTree path:
-    // POSIX → SIGTERM on -99999 → ESRCH → silent, no escalation.
-    // Windows → taskkill /T /F /PID 99999 → process not found, exits non-zero.
-    const { child, quitFile } = spawnElectron({ DSH_DESKTOP_TEST_TREE_PID: '99999' })
+  afterAll(() => { rmSync(testRoot, { recursive: true, force: true }) })
 
-    await waitForReady(child)
+  itLifecycle('boots real dsh web and reaches process-tree quiescence before Electron exits', { timeout: 125_000 }, async () => {
+    const subject = spawnElectron()
+    await waitForOutput(subject, output => READY_PATTERN.test(output), 'DSH_DESKTOP_READY')
 
-    const exited = new Promise<number | null>(resolve => child.on('exit', resolve))
-    sendQuit(quitFile)
+    const serverPid = subject.serverPid
+    expect(serverPid, subject.output).toBeTypeOf('number')
+    expect(pidAlive(serverPid!), 'the reported dsh web pid must be live at readiness').toBe(true)
 
-    const code = await exited
-    // before-quit → killTree(99999) → resolves → app.exit(0).
-    expect(code).toBe(0)
+    sendQuit(subject)
+    expect(await waitForExit(subject)).toBe(0)
+    expect(pidAlive(serverPid!), 'dsh web must be gone when Electron reports exit').toBe(false)
+  })
 
-    try { unlinkSync(quitFile) } catch { /* ignore */ }
+  itLifecycle('keeps the first instance alive and delivers its second-instance event', { timeout: 125_000 }, async () => {
+    const first = spawnElectron()
+    await waitForOutput(first, output => READY_PATTERN.test(output), 'DSH_DESKTOP_READY')
+
+    const second = spawnElectron()
+    expect(await waitForExit(second)).toBe(0)
+    await waitForOutput(first, output => output.includes(SECOND_INSTANCE_MARKER), SECOND_INSTANCE_MARKER, 15_000)
+    expect(first.child.exitCode, `first instance exited unexpectedly\n${first.output}`).toBeNull()
+
+    sendQuit(first)
+    expect(await waitForExit(first)).toBe(0)
+  })
+
+  itLifecycle('reaps real dsh web after the Electron main is hard-killed', { timeout: 125_000 }, async () => {
+    const subject = spawnElectron()
+    await waitForOutput(subject, output => READY_PATTERN.test(output), 'DSH_DESKTOP_READY')
+
+    const serverPid = subject.serverPid
+    expect(serverPid, subject.output).toBeTypeOf('number')
+    expect(pidAlive(serverPid!), 'the reported dsh web pid must be live at readiness').toBe(true)
+
+    // POSIX kills Electron's entire terminal-facing group, reproducing the
+    // Ctrl+C/crash boundary the detached reaper must survive. Windows has no
+    // negative-PID group signal, so terminate only the Electron main there.
+    const electronPid = subject.child.pid
+    if (electronPid === undefined) throw new Error('Electron main did not report a pid')
+    if (process.platform === 'win32') {
+      expect(subject.child.kill('SIGKILL')).toBe(true)
+    } else {
+      process.kill(-electronPid, 'SIGKILL')
+    }
+    await waitForExit(subject)
+    await waitForPidExit(serverPid!)
+    expect(pidAlive(serverPid!), 'the reaper must remove dsh web after a hard kill').toBe(false)
   })
 })

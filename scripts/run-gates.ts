@@ -386,6 +386,7 @@ function ciConsumerGates(): Gate[] {
     }),
     snapshotGate(validatedBuild),
     webSnapshotGate(validatedBuild),
+    desktopElectronLifecycleGate(validatedBuild),
     pnpmScript('doc-typecheck', 'doc-typecheck', {
       needs: validatedBuild,
       env: { DSH_DOC_TYPECHECK_USE_BUILD_OUTPUT: '1' },
@@ -396,6 +397,18 @@ function ciConsumerGates(): Gate[] {
     }),
     builtBinSmokeGate(validatedBuild),
   ]
+}
+
+function desktopElectronLifecycleGate(needs: string[]): Gate {
+  const invocation = pnpmInvocation(['run', 'test:desktop:electron'])
+  return {
+    id: 'desktop-electron-lifecycle',
+    label: 'desktop Electron lifecycle',
+    displayCommand: 'xvfb-run --auto-servernum pnpm run test:desktop:electron',
+    command: 'xvfb-run',
+    args: ['--auto-servernum', invocation.command, ...invocation.args],
+    needs,
+  }
 }
 
 function webSnapshotGate(needs: string[]): Gate {

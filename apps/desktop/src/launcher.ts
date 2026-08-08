@@ -13,7 +13,7 @@ import { join } from 'node:path'
 export const WEB_ARGS = ['web', '--host', '127.0.0.1', '--port', '0'] as const
 
 /** The stdout prefix `dsh web` prints once the server listens. */
-export const READY_LINE_PREFIX = 'dsh web: '
+const READY_LINE_PREFIX = 'dsh web: '
 
 /** How to spawn the Web server: executable, argv, extra env, cwd, and the resolution source for diagnostics. */
 export interface WebServerLaunch {
@@ -51,7 +51,7 @@ export interface LaunchEnvironment {
  * for every `dsh` invocation; an explicit non-empty `DSH_PERMISSION_MODE`
  * always wins.
  */
-export const WINDOWS_PERMISSION_FALLBACK = 'danger-full-access' as const
+const WINDOWS_PERMISSION_FALLBACK = 'danger-full-access' as const
 
 /**
  * Resolve how to launch `dsh web`. Order: `DSH_BIN` env → embedded deploy
