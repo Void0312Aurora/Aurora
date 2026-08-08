@@ -182,7 +182,7 @@
     { "path": "./packages/support/acp-snapshot" },
     { "path": "./packages/support/loader-smoke" },
     { "path": "./packages/support/llm-mock-server" },
-    { "path": "./packages/support/process-tree" },
+    { "path": "./packages/util/process-tree" },
     { "path": "./packages/subagent/subagent" },
     { "path": "./packages/subagent/tool-subagent" },
     { "path": "./packages/subagent/tool-subagent-control" },

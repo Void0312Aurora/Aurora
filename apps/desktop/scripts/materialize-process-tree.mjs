@@ -21,7 +21,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
-const primitiveDir = join(repoRoot, 'packages', 'support', 'process-tree')
+const primitiveDir = join(repoRoot, 'packages', 'util', 'process-tree')
 const primitiveConfig = join(primitiveDir, 'tsconfig.json')
 const primitiveRuntime = join(primitiveDir, 'lib', 'types', 'index.js')
 const destination = join(repoRoot, 'apps', 'desktop', 'lib', 'process-tree')

@@ -12,6 +12,7 @@ flowchart TD
     pkg_brand["brand"]
     pkg_native_command["native-command"]
     pkg_paths["paths"]
+    pkg_process_tree["process-tree"]
     pkg_retention["retention"]
     pkg_timeout["timeout"]
   end
@@ -275,6 +276,7 @@ flowchart TD
   pkg_brand --> pkg_invariants
   pkg_native_command --> pkg_invariants
   pkg_paths --> pkg_invariants
+  pkg_process_tree --> pkg_invariants
   pkg_retention --> pkg_invariants
   pkg_timeout --> pkg_invariants
   pkg_scope --> pkg_invariants
@@ -1080,6 +1082,7 @@ flowchart TD
 | [`brand`](../packages/util/brand) | `util` | [`invariants`](../packages/support/invariants) |
 | [`native-command`](../packages/util/native-command) | `util` | [`invariants`](../packages/support/invariants) |
 | [`paths`](../packages/util/paths) | `util` | [`invariants`](../packages/support/invariants) |
+| [`process-tree`](../packages/util/process-tree) | `util` | [`invariants`](../packages/support/invariants) |
 | [`retention`](../packages/util/retention) | `util` | [`invariants`](../packages/support/invariants) |
 | [`timeout`](../packages/util/timeout) | `util` | [`invariants`](../packages/support/invariants) |
 | [`scope`](../packages/core/scope) | `core` | [`invariants`](../packages/support/invariants) |

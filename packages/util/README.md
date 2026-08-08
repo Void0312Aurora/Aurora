@@ -12,6 +12,7 @@ Zero-dependency primitives shared across the other groups. A package lands here 
 | `retention/` | Bounded model-facing output — `ItemRetainer`/`TextRetainer` + neutral notice helpers (pure, no harness deps); business semantics stay in each tool |
 | `atomic-write/` | Atomic file replacement — `writeFileAtomic` (exclusive-create temp + rename carrying the caller-stated mode); shared by the settings and credentials stores |
 | `native-command/` | No-shell `execFile` runner for host-native OS integrations — utf8 capture, abort propagation, Windows hide (no harness deps); command choice stays in each caller |
+| `process-tree/` | Cross-platform process-tree termination — awaited taskkill on Windows and verified process-group quiescence on POSIX (no harness deps) |
 
 `dsh-brand` is the canonical case: it owns ONLY the `Branded<B>` helper, so a capability package can brand the ids it owns (`dsh-tasks`'s `TaskId`, `dsh-session`'s `SessionId`, …) by depending on `dsh-brand` alone, without pulling in an unrelated package just to reach `Branded`.
 
