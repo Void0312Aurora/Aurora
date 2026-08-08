@@ -119,7 +119,7 @@ const SENTENCE_MODEL_EXPERIENCE: Readonly<Record<string, SentenceContract>> = {
   'packages/support/loader-smoke': { kind: 'none', reason: 'The test harness observes child-process streams without changing live requests.' },
   'packages/support/llm-mock-server': { kind: 'none', reason: 'The test server substitutes provider wire behavior without invoking a real model.' },
   'packages/support/llm-replay': { kind: 'none', reason: 'The keyless adapter invokes no provider model.' },
-  'packages/support/process-tree': { kind: 'none', reason: 'The host-side process lifecycle primitive registers no model surface.' },
+  'packages/util/process-tree': { kind: 'none', reason: 'The host-side process lifecycle primitive registers no model surface.' },
   'packages/typert/generator': { kind: 'none', reason: 'The build-time generator runs outside any agent runtime and touches no model request.' },
   'packages/tasks/tasks': { kind: 'indirect', reason: 'Producer and control-surface plugins own all model rendering over the task registry.' },
   'packages/tasks/tasks-local': { kind: 'indirect', reason: 'The registry backend delegates model rendering to producer plugins and dsh-tool-tasks.' },

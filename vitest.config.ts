@@ -39,6 +39,13 @@ const testIncludes = [
   'scripts/**/*.spec.ts',
 ]
 
+// These specs consume emitted desktop files and belong only to the artifact
+// lane, whose dedicated config runs after the build.
+const desktopArtifactTests = [
+  'apps/desktop/tests/built-entry.spec.ts',
+  'apps/desktop/tests/electron-lifecycle.spec.ts',
+]
+
 // The instrumented coverage gate sets this env; the exempt heavy suites then
 // run beside it uninstrumented (membership contract in scripts/coverage-exempt.ts).
 // A set-but-not-'1' value is a misconfiguration, not a silent no-op.
@@ -67,7 +74,10 @@ export default defineConfig({
     setupFiles: ['./scripts/test-invariants.ts'],
     // .tsx: client component specs (jsdom via per-file @vitest-environment pragma).
     include: testIncludes,
-    exclude: windowsUnsupportedPackages.map(path => `${path}/tests/**/*.spec.ts`),
+    exclude: [
+      ...windowsUnsupportedPackages.map(path => `${path}/tests/**/*.spec.ts`),
+      ...desktopArtifactTests,
+    ],
     // One coverage invocation aggregates both projects. Regular suites fork on
     // POSIX for Node stability and use threads on Windows; process-bound suites
     // always fork.
@@ -88,6 +98,7 @@ export default defineConfig({
           exclude: [
             ...windowsUnsupportedPackages.map(path => `${path}/tests/**/*.spec.ts`),
             ...processBoundTests,
+            ...desktopArtifactTests,
             ...coverageExemptExcludes,
           ],
         },

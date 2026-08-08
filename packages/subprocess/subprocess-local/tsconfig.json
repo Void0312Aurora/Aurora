@@ -21,7 +21,7 @@
       "path": "../../support/invariants"
     },
     {
-      "path": "../../support/process-tree"
+      "path": "../../util/process-tree"
     }
   ]
 }

@@ -49,12 +49,14 @@ interface PackageManifest {
     | undefined
   >
   files?: string[]
+  dependencies?: Record<string, string>
+  optionalDependencies?: Record<string, string>
   peerDependencies?: Record<string, string>
   devDependencies?: Record<string, string>
 }
 
 /** One workspace manifest and its repo-relative path. */
-interface WorkspaceManifest {
+export interface WorkspaceManifest {
   dir: string
   manifest: PackageManifest
 }
@@ -92,6 +94,45 @@ function workspaceManifests(): WorkspaceManifest[] {
     }
   }
 
+  return manifests
+}
+
+const supportRuntimeDependencyAllowlist = new Set([
+  // Runtime invariant companions are development diagnostics intentionally
+  // injected into product packages through the shared peer contract.
+  '@deepseek-ai/dsh-invariants',
+])
+
+/**
+ * Reject product runtime edges into the development-only support group.
+ * @param manifests - package and application manifests to inspect.
+ * @returns stable diagnostics for every forbidden runtime dependency edge.
+ */
+export function checkSupportRuntimeDependencyEdges(manifests: readonly WorkspaceManifest[]): string[] {
+  const supportPackages = new Set(manifests
+    .filter(({ dir }) => dir.startsWith('packages/support/'))
+    .flatMap(({ manifest }) => manifest.name === undefined ? [] : [manifest.name]))
+  const fields = ['dependencies', 'optionalDependencies', 'peerDependencies'] as const
+  const errors: string[] = []
+
+  for (const { dir, manifest } of manifests) {
+    if (dir.startsWith('packages/support/') || dir.startsWith('vendor/') || dir === '.') continue
+    for (const field of fields) {
+      for (const dependency of Object.keys(manifest[field] ?? {})) {
+        if (!supportPackages.has(dependency) || supportRuntimeDependencyAllowlist.has(dependency)) continue
+        errors.push(`${dir}/package.json: ${field} must not target support package ${dependency}`)
+      }
+    }
+  }
+  return errors
+}
+
+/** Product package and app manifests used by the support-edge boundary. */
+function runtimeDependencyManifests(): WorkspaceManifest[] {
+  const manifests = workspaceManifests().filter(({ dir }) => dir.startsWith('packages/'))
+  for (const dir of packageDirs('apps', 1)) {
+    manifests.push({ dir, manifest: readJson(join(root, dir, 'package.json')) })
+  }
   return manifests
 }
 
@@ -247,6 +288,7 @@ const errors = [
   ...checkRepositoryVersion(),
   ...workspaceManifests().flatMap(checkWorkspace),
   ...checkHierarchyShape(),
+  ...checkSupportRuntimeDependencyEdges(runtimeDependencyManifests()),
 ]
 if (errors.length > 0) {
   console.error(errors.join('\n'))
