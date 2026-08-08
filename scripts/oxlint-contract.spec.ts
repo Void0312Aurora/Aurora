@@ -44,7 +44,13 @@ async function writeContractConfig(suffix: string): Promise<string> {
   return path
 }
 
-describe('Oxlint executable contract', () => {
+// Every case here spawns a real Oxlint over a workspace-wide type-aware
+// program. That costs 1.5s on CI but 6s-49s on a slower or contended host, for
+// identical work, so the default 5s timeout fails by machine speed rather than
+// by behavior. One suite-wide budget covers the worst observed run; keep it
+// here rather than per case, so a new case cannot inherit the default by
+// omission (the `reports an unused suppression` case did exactly that).
+describe('Oxlint executable contract', { timeout: 90_000 }, () => {
   it('discovers the owning TypeScript project for every file class', async () => {
     const suffix = randomUUID()
     const configPath = await writeContractConfig(suffix)
@@ -101,7 +107,7 @@ probePromise()
         rm(configPath, { force: true }),
       ])
     }
-  }, 20_000)
+  })
 
   it('runs JavaScript compatibility and nursery rules', async () => {
     const suffix = randomUUID()
@@ -148,7 +154,7 @@ export const longProbe = 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 +
         rm(configPath, { force: true }),
       ])
     }
-  }, 20_000)
+  })
 
   it('keeps formatter rules aligned with Oxlint validation', async () => {
     const oxlintPath = join(repositoryRoot, '.oxlintrc.json')
@@ -246,5 +252,5 @@ export const longProbe = 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 +
         rm(configPath, { force: true }),
       ])
     }
-  }, 20_000)
+  })
 })
