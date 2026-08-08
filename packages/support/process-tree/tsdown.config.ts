@@ -3,9 +3,8 @@ import { defineConfig } from 'tsdown'
 /**
  * Bundles the tsc output of `src/index.ts` to the package's `lib/index.js`,
  * keeping the root config's fixed `.js` ESM extension (per-package configs do
- * not inherit `fixedExtension: false`). The adjacent `lib/index.d.ts` is not
- * produced here — tsdown's dts plugin did not emit one in practice — but by
- * the `tsconfig.dts.json` declaration-only project (see that file).
+ * not inherit `fixedExtension: false`). TypeScript owns declarations under
+ * `lib/types/`; this build produces runtime bundles only.
  */
 export default defineConfig({
   entry: ['lib/types/index.js', 'lib/types/invariant.js'],
@@ -14,5 +13,6 @@ export default defineConfig({
   platform: 'node',
   target: 'es2024',
   fixedExtension: false,
+  dts: false,
   clean: false,
 })

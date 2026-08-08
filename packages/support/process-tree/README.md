@@ -2,19 +2,20 @@
 
 English | [中文](README.zh.md)
 
-Zero-dependency process-tree termination shared by the desktop shell (`@deepseek-ai/dsh-desktop`): its main process and its orphan reaper used to each carry their own copy of the kill logic, and both now call this primitive. The subprocess backend's own tree-kill seams are a planned future consumer.
+Zero-dependency process-tree termination shared by the desktop shell (`@deepseek-ai/dsh-desktop`) and the local subprocess backend (`@deepseek-ai/dsh-subprocess-local`). The desktop main process and orphan reaper await this primitive during shutdown; subprocess-local uses it behind its tree-kill seams.
 
 ## Surface
 
 ```ts
 import { killProcessTree } from '@deepseek-ai/dsh-process-tree'
 
-// Terminate pid and its whole tree: taskkill /T /F on Windows; on POSIX the
-// group gets SIGTERM and SIGKILL five seconds later if it ignored the signal.
-killProcessTree(serverPid)
+declare const serverPid: number
+
+// Terminate pid and its whole tree, then await the platform completion boundary.
+await killProcessTree(serverPid)
 ```
 
-One call, never throws, ESRCH is silent (the tree is already gone — the desired outcome), and every other failure is logged through the injectable `logger` (default `console.error`). Windows uses `taskkill /T /F` because `child.kill()` is `TerminateProcess` of the direct child only. POSIX requires the tree root to be spawned detached so it leads its own process group: a negated pid signals the whole group — SIGTERM first, SIGKILL after `graceMs` (default 5000). The escalation timer is a plain `setTimeout`, so a detached, short-lived caller (the desktop reaper) stays alive until the force kill lands.
+One awaited call never throws. Windows uses `taskkill /T /F` because `child.kill()` is `TerminateProcess` of the direct child only and resolves after command completion. POSIX requires the tree root to be spawned detached so it leads its own process group: a negated pid signals the whole group with SIGTERM, escalates to SIGKILL after `graceMs` (default 5000) if needed, and, when signalling and liveness probes succeed, polls until the group is absent. ESRCH is silent because the tree is already gone; other delivery, probe, or taskkill-launch errors are logged through the injectable `logger` (default `console.error`) and resolve best-effort. The Promise and its timers keep a detached, short-lived caller such as the desktop reaper alive through the successful platform completion boundary.
 
 ## Model Experience
 
@@ -26,7 +27,5 @@ None; nothing here enters a request prefix.
 
 ## Known Limitations and Deferred Work
 
-- **Escalation is fire-and-forget** — `killProcessTree` returns immediately after scheduling; the SIGKILL cannot be cancelled and the timer is not returned. Desktop callers (quit paths, the reaper) never needed the handle.
 - **Windows gets no graceful phase** — taskkill `/T /F` terminates immediately; a Windows graceful-dispose channel is deferred with the desktop shell's own v1 decision.
-- **No pid-ownership check** — the primitive signals whatever tree the pid names; callers own the responsibility that the pid is theirs (desktop only ever kills its own spawned child).
-- **subprocess-local still carries its own kill seams** — `killGroup`/`taskkillProcessTree`/`signalTree` in `packages/subprocess/subprocess-local/src/spawn.ts` predate this package; migrating them is a separate step because that package's teardown races and idempotency contract differ from the desktop's escalation flow.
+- **No pid-ownership check** — the primitive terminates whatever tree the pid names; callers must own the pid they pass.

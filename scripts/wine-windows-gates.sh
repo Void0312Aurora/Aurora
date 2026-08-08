@@ -187,9 +187,10 @@ wine_node() {
 cd "$scratch/tree"
 tsc_js='node_modules/typescript/bin/tsc'
 tsdown_js='node_modules/tsdown/dist/run.mjs'
+fixup_js='apps/desktop/scripts/fixup-import-paths.mjs'
 vitepress_js='node_modules/vitepress/bin/vitepress.js'
 [ -f "$vitepress_js" ] || vitepress_js='website/node_modules/vitepress/bin/vitepress.js'
-for entry in "$tsc_js" "$tsdown_js" "$vitepress_js"; do
+for entry in "$tsc_js" "$tsdown_js" "$fixup_js" "$vitepress_js"; do
   [ -f "$entry" ] || { echo "wine-windows-gates: expected entrypoint missing after hoisted install: $entry" >&2; exit 1; }
 done
 # VitePress links vue into the site's node_modules at build time; Wine cannot
@@ -213,9 +214,11 @@ build_gate() {
   # compiles and copies in. Materialize it with the host Node first: the
   # primitive is platform-neutral JS (no Wine-specific paths), so host
   # compilation is equivalent to compiling under Wine, and the Wine tsc -b
-  # below resolves the import from the materialized lib/.
+  # below resolves the import from the materialized lib/. The host-side
+  # fixup then rewrites the emitted package edge before Wine runs tsdown.
   node apps/desktop/scripts/materialize-process-tree.mjs || return $?
   wine_node "$scratch/logs/tsc.log" "$tsc_js" -b --pretty false || return $?
+  node "$fixup_js" > "$scratch/logs/fixup.log" 2>&1 || return $?
   wine_node "$scratch/logs/tsdown.log" "$tsdown_js"
 }
 site_gate() {
@@ -242,7 +245,7 @@ report() {
     for log in "$@"; do tail -n 200 "$log" >&2 || true; done
   fi
 }
-report 'build (tsc -b, tsdown)' "$build_status" "$scratch/logs/tsc.log" "$scratch/logs/tsdown.log"
+report 'build (tsc -b, fixup, tsdown)' "$build_status" "$scratch/logs/tsc.log" "$scratch/logs/fixup.log" "$scratch/logs/tsdown.log"
 report 'production site (vitepress build)' "$site_status" "$scratch/logs/site.log"
 if (( build_status != 0 )); then exit "$build_status"; fi
 exit "$site_status"

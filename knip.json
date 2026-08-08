@@ -28,7 +28,8 @@
         "scripts/**/*.mjs"
       ],
       "ignoreDependencies": [
-        "playwright"
+        "playwright",
+        "lefthook"
       ]
     },
     "examples": {
@@ -638,10 +639,8 @@
     },
     "apps/desktop": {
       "entry": [
-        "src/main.ts",
         "src/reaper.ts",
-        "tests/**/*.spec.ts",
-        "scripts/generate-icons.mjs"
+        "tests/**/*.spec.ts"
       ],
       "project": [
         "src/**/*.ts",

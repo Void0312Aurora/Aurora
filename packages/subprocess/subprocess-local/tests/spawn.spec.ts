@@ -1,8 +1,9 @@
+import { ChildProcess } from 'node:child_process'
 import { mkdtempSync, readFileSync, statSync, unlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { killGroup, OutputCollector, spawnSubprocess, taskkillProcessTree } from '../src/spawn.ts'
+import { OutputCollector, spawnSubprocess, taskkillProcessTree } from '../src/spawn.ts'
 import type { SubprocessHandle, SubprocessOutputReader } from '@deepseek-ai/dsh-subprocess'
 
 const { failNextClose, failNextUnlink } = vi.hoisted(() => ({
@@ -428,20 +429,6 @@ describe('OutputCollector', () => {
   })
 })
 
-describe('killGroup', () => {
-  it('ignores non-positive pids', () => {
-    expect(() => { killGroup(-1, 'SIGTERM') }).not.toThrow()
-    expect(() => { killGroup(0, 'SIGTERM') }).not.toThrow()
-  })
-
-  it('swallows ESRCH for vanished groups', async () => {
-    const running = spawnSubprocess(spec('true'))
-    await running.done
-    expect(() => { killGroup(running.pid, 'SIGTERM') }).not.toThrow()
-  })
-
-})
-
 describe('stdio dispositions', () => {
   it("'pipe' exposes raw streams for caller-owned protocol decoding", async () => {
     const running = spawnSubprocess({
@@ -528,6 +515,31 @@ describe('waitForExit', () => {
   })
 })
 
+describe('signal delivery failure containment', () => {
+  it('does not poll forever when group and direct-child delivery both fail', async () => {
+    const running = spawnSubprocess(spec('sleep 60'), { spillDir, platform: 'linux' })
+    const realKill = process.kill.bind(process)
+    const groupFailure = Object.assign(new Error('simulated group EPERM'), { code: 'EPERM' })
+    const processKill = vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
+      if (pid === -running.pid && signal !== 0) throw groupFailure
+      return realKill(pid, signal)
+    })
+    const childKill = vi.spyOn(ChildProcess.prototype, 'kill').mockReturnValue(false)
+
+    try {
+      vi.useFakeTimers()
+      running.terminate()
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      vi.useRealTimers()
+      processKill.mockRestore()
+      childKill.mockRestore()
+      realKill(running.pid, 'SIGKILL')
+    }
+    await running.done
+  })
+})
+
 describe('tree-survivor escalation (terminate and bounded waits reach helpers the leader left behind)', () => {
   it('terminate() SIGKILLs a TERM-trapping descendant after the direct child settles', async () => {
     // The leader spawns a TERM-trapping helper with all stdio detached from
@@ -585,13 +597,12 @@ describe('tree-survivor escalation (terminate and bounded waits reach helpers th
 })
 
 describe('coverage seams', () => {
-  it('taskkillProcessTree ignores non-positive pids and contains a missing binary', () => {
-    expect(() => { taskkillProcessTree(-1) }).not.toThrow()
-    expect(() => { taskkillProcessTree(0) }).not.toThrow()
-    // On POSIX there is no taskkill; spawnSync reports the failure in its
-    // result and the function stays silent — the same containment Windows
-    // relies on for an already-absent tree.
-    expect(() => { taskkillProcessTree(2 ** 30) }).not.toThrow()
+  it('taskkillProcessTree ignores non-positive pids and contains a missing binary', async () => {
+    await expect(taskkillProcessTree(-1)).resolves.toBeUndefined()
+    await expect(taskkillProcessTree(0)).resolves.toBeUndefined()
+    // On POSIX there is no taskkill; the spawn-error path resolves silently —
+    // the same containment Windows relies on for an already-absent tree.
+    await expect(taskkillProcessTree(2 ** 30)).resolves.toBeUndefined()
   })
 
   it('a spawn-failed handle rejects done while waitForExit reports gone', async () => {
@@ -796,17 +807,6 @@ describe('environment and spill-file hardening', () => {
     expect(dir).toMatch(/dsh-subprocess-/)
     const mode = statSync(dir).mode & 0o777
     expect(mode).toBe(0o700)
-  })
-
-  it('killGroup never throws, even for EPERM-style failures', () => {
-    const spy = vi.spyOn(process, 'kill').mockImplementation(() => {
-      throw Object.assign(new Error('EPERM'), { code: 'EPERM' })
-    })
-    try {
-      expect(() => { killGroup(12345, 'SIGTERM') }).not.toThrow()
-    } finally {
-      spy.mockRestore()
-    }
   })
 
   it('honors AbortSignal on background-style runs (no timeout)', async () => {
