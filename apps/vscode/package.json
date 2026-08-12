@@ -1,5 +1,5 @@
 {
-  "name": "@deepseek-ai/dsh-vscode",
+  "name": "dsh-vscode",
   "displayName": "DeepSeek Harness Panel",
   "description": "VS Code panel hosting the full DeepSeek Harness GUI: a managed dsh web per window, the complete client stack in a webview, and editor-side integrations",
   "version": "0.0.1",
@@ -8,6 +8,11 @@
   "publisher": "deepseek-ai",
   "main": "./dist/extension.js",
   "license": "BSD-3-Clause",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dsh2026/test-Void0312Aurora.git",
+    "directory": "apps/vscode"
+  },
   "engines": {
     "vscode": "^1.125.0"
   },
@@ -36,6 +41,8 @@
     "build": "tsdown && vite build --config webview/vite.config.ts",
     "build:host": "tsdown",
     "build:webview": "vite build --config webview/vite.config.ts",
+    "deploy:closure": "node -e \"require('node:fs').rmSync('deploy',{recursive:true,force:true})\" && pnpm --filter dsh-vscode-closure deploy --prod --config.node-linker=hoisted --config.inject-workspace-packages=true --config.allow-unused-patches=true --config.strict-dep-builds=false deploy && node -e \"for (const f of ['pnpm-lock.yaml','pnpm-workspace.yaml']) require('node:fs').rmSync('deploy/'+f,{force:true})\"",
+    "package": "pnpm -w run build:lib && pnpm -w run build:web && pnpm run deploy:closure && pnpm run build && node scripts/package-vsix.mjs",
     "test:electron": "node tests/vscode/run.mjs"
   },
   "dependencies": {
@@ -72,6 +79,7 @@
     "@vitejs/plugin-react": "^4.0.0",
     "@vscode/test-electron": "^3.1.0",
     "mocha": "^11.8.0",
+    "@vscode/vsce": "^3.6.2",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "tsdown": "^0.15.6",

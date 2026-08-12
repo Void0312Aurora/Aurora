@@ -4,7 +4,7 @@ Status: implemented
 
 [English](2026-08-12-vscode-rich-ui-extension.md) | 中文
 
-> Scope：新的产品装配 `apps/vscode`（`@deepseek-ai/dsh-vscode`），在 VS Code webview 面板中承载完整 DeepSeek Harness Web GUI —— 每窗口一个受管 `dsh web`、把完整 dsh 客户端栈静态打包进 webview，以及跨扩展宿主边界的 postMessage↔fetch 桥。本笔记负责面板/服务器/桥基础；[原生交互](2026-08-12-vscode-native-interactions.md)与[编辑器上下文注入](2026-08-12-vscode-ide-context-injection.md)分别负责对应的编辑器侧集成。
+> Scope：新的产品装配 `apps/vscode`（workspace 名 `dsh-vscode`——未加 scope，因为 `vsce` 拒绝带 scope 的扩展 `name`；`deepseek-ai` publisher 使扩展 id 为 `deepseek-ai.dsh-vscode`），在 VS Code webview 面板中承载完整 DeepSeek Harness Web GUI —— 每窗口一个受管 `dsh web`、把完整 dsh 客户端栈静态打包进 webview，以及跨扩展宿主边界的 postMessage↔fetch 桥。本笔记负责面板/服务器/桥基础；[原生交互](2026-08-12-vscode-native-interactions.md)与[编辑器上下文注入](2026-08-12-vscode-ide-context-injection.md)分别负责对应的编辑器侧集成。打包闭包与 vsix 细节另见自包含打包 note。
 
 > 与社区 `dsh-external/dsh-vscode` 的关系：那个扩展是原生 VS Code Chat Participant（`@dsh`），刻意不做 trajectory 页与嵌入式 Web UI。本装配占据相反的点 —— 通过承载真实客户端栈保留富 GUI（Plan Mode、trajectory、slot 化工具卡、设置）。两者互补，只共享 `dsh web` 服务器契约。
 
