@@ -8,15 +8,15 @@ import {
   waitForHttpOk,
   waitForReadyLine,
   WEB_ARGS,
-} from '../src/launcher.ts'
+} from '../src/index.ts'
 
 // Fixture paths are built with the host's `join` because the launcher resolves
 // its candidates with the host's `node:path`; a Windows literal would not
-// normalize on POSIX (`join('C:\\repo\\apps\\desktop', '..', '..')` is `C:..`).
+// normalize on POSIX (`join('C:\\repo\\apps\\shell', '..', '..')` is `C:..`).
 // `platform` is injected separately and only selects the permission fallback,
 // so the win32 default below is independent of the path flavor.
 const REPO_ROOT = join('repo')
-const APP_DIR = join(REPO_ROOT, 'apps', 'desktop')
+const APP_DIR = join(REPO_ROOT, 'apps', 'shell')
 const EXEC_PATH = join(REPO_ROOT, 'node_modules', 'electron', 'dist', 'electron')
 
 function launchWith(
@@ -44,6 +44,12 @@ describe('parseReadyLine', () => {
 
   it('returns undefined when the URL part is not a URL', () => {
     expect(parseReadyLine('dsh web: not a url')).toBeUndefined()
+  })
+
+  it('rejects a port-less URL as a chunk-split fragment', () => {
+    // `http://127` parses as a valid URL; only the explicit port marks a
+    // complete readiness line.
+    expect(parseReadyLine('dsh web: http://127.0.0.1')).toBeUndefined()
   })
 })
 
@@ -125,6 +131,25 @@ describe('resolveWebLaunch', () => {
     const launch = launchWith(() => false, { DSH_PERMISSION_MODE: '' })
     expect(launch.env).toEqual({ DSH_PERMISSION_MODE: 'danger-full-access' })
   })
+
+  it('uses the real filesystem and platform when exists/platform are omitted', () => {
+    // No fixture paths exist on the real filesystem, so resolution walks to
+    // the PATH fallback; the permission env then reflects the host platform.
+    const launch = resolveWebLaunch({ env: {}, appDir: APP_DIR, execPath: EXEC_PATH })
+    expect(launch.command).toBe('dsh')
+    expect(launch.source).toBe('PATH')
+    expect(launch.env).toEqual(process.platform === 'win32' ? { DSH_PERMISSION_MODE: 'danger-full-access' } : {})
+  })
+
+  it('honors an explicit nodeCommand for checkout launches', () => {
+    const launch = resolveWebLaunch({
+      ...base,
+      nodeCommand: join('custom', 'node'),
+      exists: path => path.endsWith(join('apps', 'cli', 'lib', 'bin.js')),
+    })
+    expect(launch.command).toBe(join('custom', 'node'))
+    expect(launch.source).toBe('checkout lib')
+  })
 })
 
 describe('waitForReadyLine', () => {
@@ -178,12 +203,65 @@ describe('waitForReadyLine', () => {
     await new Promise(resolve => setTimeout(resolve, 20))
     expect(stream.destroyed).toBe(true)
   })
+
+  it('swallows a post-readiness stream error instead of rejecting late', async () => {
+    const stream = new PassThrough()
+    const urlPromise = waitForReadyLine(stream)
+    stream.write('dsh web: http://127.0.0.1:1234\n')
+    const url = await urlPromise
+    expect(url.href).toBe('http://127.0.0.1:1234/')
+    // The consumption loop is still draining; a stream error now reaches the
+    // catch arm after resolution and must not surface anywhere.
+    stream.destroy(new Error('post-readiness pipe error'))
+    await new Promise(resolve => setTimeout(resolve, 20))
+  })
+
+  it('times out cleanly on an iterator without return or destroy', async () => {
+    // A minimal AsyncIterable (no generator machinery): the timeout path's
+    // iterator.return?./destroy?. calls must tolerate both being absent.
+    const stream: AsyncIterable<string> = {
+      [Symbol.asyncIterator]: () => ({
+        next: () => new Promise<IteratorResult<string>>(() => {}),
+      }),
+    }
+    await expect(waitForReadyLine(stream, { timeoutMs: 10 })).rejects.toThrow(/within 10ms/)
+  })
+
+  it('rejects with the iteration error when the stream throws', async () => {
+    const stream = (async function* (): AsyncGenerator<string> {
+      yield 'noise\n'
+      throw new Error('pipe collapsed')
+    })()
+    await expect(waitForReadyLine(stream)).rejects.toThrow('pipe collapsed')
+  })
+
+  it('wraps a non-Error iteration failure', async () => {
+    const stream = (async function* (): AsyncGenerator<string> {
+      yield 'noise\n'
+      // A bare string throw exercises the non-Error rejection arm.
+      throw 'not an error'
+    })()
+    await expect(waitForReadyLine(stream)).rejects.toThrow('not an error')
+  })
 })
 
 describe('waitForHttpOk', () => {
   it('resolves when the server answers 200', async () => {
     const fetchImpl = vi.fn(async () => new Response('ok', { status: 200 }))
     await expect(waitForHttpOk(new URL('http://127.0.0.1:1/'), { fetchImpl, timeoutMs: 100, pollIntervalMs: 5 })).resolves.toBeUndefined()
+  })
+
+  it('defaults to global fetch and the standing timeouts when options are omitted', async () => {
+    // An immediate 200 returns on the first attempt, so the default 30s
+    // deadline and 250ms cadence are exercised without ever waiting on them.
+    const stubbed = vi.fn(async () => new Response('ok', { status: 200 }))
+    vi.stubGlobal('fetch', stubbed)
+    try {
+      await expect(waitForHttpOk(new URL('http://127.0.0.1:1/'))).resolves.toBeUndefined()
+      expect(stubbed).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 
   it('resolves once a failing server recovers', async () => {

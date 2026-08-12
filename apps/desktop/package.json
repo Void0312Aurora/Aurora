@@ -7,7 +7,7 @@
   "main": "lib/types/main.js",
   "author": "DeepSeek Harness",
   "scripts": {
-    "build": "node scripts/materialize-process-tree.mjs && tsc -p tsconfig.json && node scripts/fixup-import-paths.mjs",
+    "build": "node scripts/materialize-workspace-deps.mjs && tsc -p tsconfig.json && node scripts/fixup-import-paths.mjs",
     "watch": "tsc -p tsconfig.json --watch",
     "dev": "pnpm run build && node scripts/run-electron.mjs",
     "icons": "node scripts/generate-icons.mjs",
@@ -17,7 +17,8 @@
   },
   "license": "BSD-3-Clause",
   "dependencies": {
-    "@deepseek-ai/dsh-process-tree": "workspace:^"
+    "@deepseek-ai/dsh-process-tree": "workspace:^",
+    "@deepseek-ai/dsh-web-launcher": "workspace:^"
   },
   "devDependencies": {
     "@resvg/resvg-js": "^2.6.2",

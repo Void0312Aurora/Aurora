@@ -13,6 +13,7 @@
 | `atomic-write/` | 原子文件替换：`writeFileAtomic`（独占创建临时文件 + 携带调用方所声明 mode 的 rename）；由设置与凭据存储共用 |
 | `native-command/` | 宿主原生 OS 集成的免 shell `execFile` 运行器——utf8 捕获、abort 传播、Windows 窗口隐藏（无 harness 依赖）；命令选择保留在各调用方 |
 | `process-tree/` | 跨平台进程树终止——Windows 上等待 taskkill 完成，POSIX 上验证进程组完全停稳（无 harness 依赖） |
+| `web-launcher/` | 供外壳宿主共享的 `dsh web` 启动解析与就绪探测——`resolveWebLaunch`/`waitForReadyLine`/`waitForHttpOk`（无 harness 依赖）；spawn 与关停保留在各外壳中 |
 
 `dsh-brand` 是规范示例：它只负责 `Branded<B>` 辅助工具，因此功能包可以为自己拥有的 id 添加品牌（`dsh-tasks` 的 `TaskId`、`dsh-session` 的 `SessionId` 等），而只需依赖 `dsh-brand`，无需仅为使用 `Branded` 而引入不相关的包。
 

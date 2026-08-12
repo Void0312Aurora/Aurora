@@ -494,7 +494,7 @@ importers:
         version: 15.0.0
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
       js-yaml:
         specifier: ^4.2.0
         version: 4.2.0
@@ -517,6 +517,9 @@ importers:
       '@deepseek-ai/dsh-process-tree':
         specifier: workspace:^
         version: link:../../packages/util/process-tree
+      '@deepseek-ai/dsh-web-launcher':
+        specifier: workspace:^
+        version: link:../../packages/util/web-launcher
     devDependencies:
       '@resvg/resvg-js':
         specifier: ^2.6.2
@@ -1239,7 +1242,7 @@ importers:
         version: link:../../ui/user-approval
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/bash/bash:
     devDependencies:
@@ -1254,7 +1257,7 @@ importers:
         version: link:../../subprocess/subprocess
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/bash/bash-local:
     dependencies:
@@ -1279,7 +1282,7 @@ importers:
         version: link:../../util/timeout
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/bash/bash-sandbox:
     devDependencies:
@@ -1306,7 +1309,7 @@ importers:
         version: link:../../subprocess/subprocess-local
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
       node-addon-landlock-run:
         specifier: 0.0.0-test.0
         version: 0.0.0-test.0
@@ -1379,7 +1382,7 @@ importers:
         version: link:../../ui/user-approval
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/client/connection:
     dependencies:
@@ -1410,7 +1413,7 @@ importers:
         version: link:../../support/invariants
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/client/hmr:
     dependencies:
@@ -1432,7 +1435,7 @@ importers:
         version: link:../../support/invariants
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/client/locale:
     devDependencies:
@@ -1453,7 +1456,7 @@ importers:
         version: 18.3.31
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
       react:
         specifier: ^18.2.0
         version: 18.3.1
@@ -1471,7 +1474,7 @@ importers:
         version: link:../../support/invariants
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/client/runtime:
     dependencies:
@@ -1526,7 +1529,7 @@ importers:
         version: 18.3.31
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/client/schema-form:
     dependencies:
@@ -1539,7 +1542,7 @@ importers:
         version: link:../../support/invariants
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/client/test-runtime:
     dependencies:
@@ -1576,7 +1579,7 @@ importers:
         version: 18.3.7(@types/react@18.3.31)
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
       react:
         specifier: ^18.2.0
         version: 18.3.1
@@ -1622,7 +1625,7 @@ importers:
         version: 18.3.31
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
       react:
         specifier: ^18.2.0
         version: 18.3.1
@@ -1680,7 +1683,7 @@ importers:
         version: 18.3.31
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
       react:
         specifier: ^18.2.0
         version: 18.3.1
@@ -1722,7 +1725,7 @@ importers:
         version: 18.3.31
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
       react:
         specifier: ^18.2.0
         version: 18.3.1
@@ -1752,7 +1755,7 @@ importers:
         version: 18.3.31
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
       react:
         specifier: ^18.2.0
         version: 18.3.1
@@ -1794,7 +1797,7 @@ importers:
         version: 2.1.1
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
       react:
         specifier: ^18.2.0
         version: 18.3.1
@@ -1836,7 +1839,7 @@ importers:
         version: 18.3.31
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
       react:
         specifier: ^18.2.0
         version: 18.3.1
@@ -1881,7 +1884,7 @@ importers:
         version: 18.3.31
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
       react:
         specifier: ^18.2.0
         version: 18.3.1
@@ -1923,7 +1926,7 @@ importers:
         version: 18.3.31
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
       react:
         specifier: ^18.2.0
         version: 18.3.1
@@ -1984,7 +1987,7 @@ importers:
         version: 18.3.7(@types/react@18.3.31)
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/client/ui-question:
     dependencies:
@@ -2036,7 +2039,7 @@ importers:
         version: 18.3.31
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/client/ui-settings:
     dependencies:
@@ -2070,7 +2073,7 @@ importers:
         version: 18.3.7(@types/react@18.3.31)
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
       react:
         specifier: ^18.2.0
         version: 18.3.1
@@ -2119,7 +2122,7 @@ importers:
         version: 18.3.31
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
       react:
         specifier: ^18.2.0
         version: 18.3.1
@@ -2156,7 +2159,7 @@ importers:
         version: 18.3.31
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
       react:
         specifier: ^18.2.0
         version: 18.3.1
@@ -2180,7 +2183,7 @@ importers:
         version: link:../../support/invariants
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/client/ui-slash:
     dependencies:
@@ -2211,7 +2214,7 @@ importers:
         version: 18.3.31
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
       react:
         specifier: ^18.2.0
         version: 18.3.1
@@ -2226,7 +2229,7 @@ importers:
         version: 18.3.31
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/client/ui-subagent:
     dependencies:
@@ -2269,7 +2272,7 @@ importers:
         version: 18.3.31
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/client/ui-theme:
     dependencies:
@@ -2300,7 +2303,7 @@ importers:
         version: 18.3.31
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
       react:
         specifier: ^18.2.0
         version: 18.3.1
@@ -2331,7 +2334,7 @@ importers:
         version: 18.3.31
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
       react:
         specifier: ^18.2.0
         version: 18.3.1
@@ -2371,7 +2374,7 @@ importers:
         version: 18.3.31
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
       react:
         specifier: ^18.2.0
         version: 18.3.1
@@ -2423,7 +2426,7 @@ importers:
         version: 18.3.7(@types/react@18.3.31)
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -2448,7 +2451,7 @@ importers:
         version: 18.3.31
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/code-runtime/code-runtime:
     devDependencies:
@@ -2457,7 +2460,7 @@ importers:
         version: link:../../support/invariants
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/code-runtime/code-runtime-worker:
     dependencies:
@@ -2479,7 +2482,7 @@ importers:
         version: link:../../util/timeout
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/compact/command-compact:
     devDependencies:
@@ -2509,7 +2512,7 @@ importers:
         version: link:../../core/session
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/compact/compact:
     devDependencies:
@@ -2524,7 +2527,7 @@ importers:
         version: link:../../core/session
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/compact/compact-basic:
     dependencies:
@@ -2573,7 +2576,7 @@ importers:
         version: link:../../core/tools
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/compact/compact-tool-result-prune:
     dependencies:
@@ -2598,7 +2601,7 @@ importers:
         version: link:../../core/session
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/context/session-reference:
     dependencies:
@@ -2629,7 +2632,7 @@ importers:
         version: link:../../session-query/session-query
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/context/time-context:
     dependencies:
@@ -2666,7 +2669,7 @@ importers:
         version: link:../../core/tools
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/context/tmux-context:
     dependencies:
@@ -2694,7 +2697,7 @@ importers:
         version: link:../../core/system-prompt
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/context/workspace-context:
     dependencies:
@@ -2743,7 +2746,7 @@ importers:
         version: link:../../core/tools
       cordis:
         specifier: ^4.0.0-rc.6
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/cordis/repository-plugin:
     dependencies:
@@ -2777,7 +2780,7 @@ importers:
         version: link:../../core/tools
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/cordis/tool-cordis:
     dependencies:
@@ -2820,7 +2823,7 @@ importers:
         version: link:../../core/tools
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/core/agent:
     devDependencies:
@@ -2844,7 +2847,7 @@ importers:
         version: link:../system-prompt
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/core/agent-loop:
     dependencies:
@@ -2881,7 +2884,7 @@ importers:
         version: link:../tools
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/core/scope:
     devDependencies:
@@ -2890,7 +2893,7 @@ importers:
         version: link:../../support/invariants
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/core/session:
     devDependencies:
@@ -2908,7 +2911,7 @@ importers:
         version: link:../scope
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/core/system-prompt:
     dependencies:
@@ -2927,7 +2930,7 @@ importers:
         version: link:../scope
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/core/tools:
     dependencies:
@@ -2961,7 +2964,7 @@ importers:
         version: link:../../ui/user-approval
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/credentials/credentials:
     devDependencies:
@@ -2973,7 +2976,7 @@ importers:
         version: link:../../support/invariants
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/credentials/credentials-local:
     dependencies:
@@ -3001,7 +3004,7 @@ importers:
         version: link:../../util/paths
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/examples/acp-demo:
     devDependencies:
@@ -3049,7 +3052,7 @@ importers:
         version: link:../../context/workspace-context
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
       schemastery:
         specifier: ^3.17.0
         version: link:../../../vendor/schemastery
@@ -3158,7 +3161,7 @@ importers:
         version: link:../../context/workspace-context
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
       node-addon-landlock-run:
         specifier: 0.0.0-test.0
         version: 0.0.0-test.0
@@ -3206,7 +3209,7 @@ importers:
         version: link:../../context/workspace-context
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
       schemastery:
         specifier: ^3.17.0
         version: link:../../../vendor/schemastery
@@ -3222,7 +3225,7 @@ importers:
         version: link:../../support/invariants
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/fs/fs:
     devDependencies:
@@ -3240,7 +3243,7 @@ importers:
         version: link:../../sandbox/sandbox
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/fs/fs-local:
     dependencies:
@@ -3262,7 +3265,7 @@ importers:
         version: link:../../llm/llm
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/fs/fs-policy:
     devDependencies:
@@ -3277,7 +3280,7 @@ importers:
         version: link:../../llm/llm
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/fs/fs-sandbox:
     devDependencies:
@@ -3298,7 +3301,7 @@ importers:
         version: link:../../sandbox/sandbox-policy
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/fs/tool-fs:
     dependencies:
@@ -3356,7 +3359,7 @@ importers:
         version: link:../../ui/user-approval
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/fs/tool-fs-search:
     dependencies:
@@ -3399,7 +3402,7 @@ importers:
         version: link:../../core/tools
       cordis:
         specifier: ^4.0.0-rc.6
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/fs/tool-str-replace-editor:
     dependencies:
@@ -3445,7 +3448,7 @@ importers:
         version: link:../../core/tools
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/goal/command-goal:
     devDependencies:
@@ -3472,7 +3475,7 @@ importers:
         version: link:../../core/session
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/goal/goal:
     dependencies:
@@ -3509,7 +3512,7 @@ importers:
         version: link:../../session-projection/session-projection
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/goal/goal-session:
     devDependencies:
@@ -3542,7 +3545,7 @@ importers:
         version: link:../../core/tools
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/goal/tool-goal:
     dependencies:
@@ -3576,7 +3579,7 @@ importers:
         version: link:../../core/tools
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/guard/repeat-tool-guard:
     dependencies:
@@ -3607,7 +3610,7 @@ importers:
         version: link:../../core/tools
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/hooks/hook-protocol:
     devDependencies:
@@ -3622,7 +3625,7 @@ importers:
         version: link:../../core/session
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/hooks/hooks-claude:
     dependencies:
@@ -3674,7 +3677,7 @@ importers:
         version: link:../../core/tools
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/hooks/hooks-codex:
     dependencies:
@@ -3723,7 +3726,7 @@ importers:
         version: link:../../core/tools
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/host/apiproxy:
     dependencies:
@@ -3808,7 +3811,7 @@ importers:
         version: link:../../storage/storage-domain
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/host/directory-picker:
     devDependencies:
@@ -3817,7 +3820,7 @@ importers:
         version: link:../../support/invariants
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/host/directory-picker-auto:
     devDependencies:
@@ -3844,7 +3847,7 @@ importers:
         version: link:../../support/invariants
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/host/directory-picker-browse:
     dependencies:
@@ -3884,7 +3887,7 @@ importers:
         version: 18.3.31
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
       react:
         specifier: ^18.2.0
         version: 18.3.1
@@ -3915,7 +3918,7 @@ importers:
         version: 18.3.31
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
       react:
         specifier: ^18.2.0
         version: 18.3.1
@@ -3931,7 +3934,7 @@ importers:
         version: link:../../support/invariants
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/llm/llm:
     dependencies:
@@ -3950,7 +3953,7 @@ importers:
         version: link:../../util/timeout
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/llm/llm-deepseek:
     dependencies:
@@ -3978,7 +3981,7 @@ importers:
         version: link:../../util/timeout
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/llm/llm-pi-ai:
     dependencies:
@@ -4009,7 +4012,7 @@ importers:
         version: link:../../util/timeout
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/llm/llm-retry:
     dependencies:
@@ -4064,7 +4067,7 @@ importers:
         version: link:../../core/tools
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/llm/token-meter:
     dependencies:
@@ -4089,7 +4092,7 @@ importers:
         version: link:../../session-projection/session-projection
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/lsp/lsp:
     devDependencies:
@@ -4104,7 +4107,7 @@ importers:
         version: link:../../llm/llm
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/lsp/lsp-local:
     dependencies:
@@ -4135,7 +4138,7 @@ importers:
         version: link:../../util/timeout
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -4181,7 +4184,7 @@ importers:
         version: link:../../core/tools
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/mcp/mcp-client:
     dependencies:
@@ -4215,7 +4218,7 @@ importers:
         version: 2026.7.10(zod@4.4.3)
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/plan/plan-mode:
     dependencies:
@@ -4258,7 +4261,7 @@ importers:
         version: link:../../ui/user-interaction
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/pty/pty:
     devDependencies:
@@ -4276,7 +4279,7 @@ importers:
         version: link:../../core/session
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/pty/pty-local:
     dependencies:
@@ -4310,7 +4313,7 @@ importers:
         version: link:../../subprocess/subprocess
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/pty/tool-bash-persistent:
     dependencies:
@@ -4359,7 +4362,7 @@ importers:
         version: link:../../core/tools
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/pty/tool-pty:
     dependencies:
@@ -4417,7 +4420,7 @@ importers:
         version: link:../../core/tools
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/sandbox/sandbox:
     devDependencies:
@@ -4429,7 +4432,7 @@ importers:
         version: link:../../llm/llm
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/sandbox/sandbox-local:
     dependencies:
@@ -4451,7 +4454,7 @@ importers:
         version: link:../sandbox
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/sandbox/sandbox-policy:
     dependencies:
@@ -4476,7 +4479,7 @@ importers:
         version: link:../../core/system-prompt
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/sdk/create-sdk:
     dependencies:
@@ -4492,7 +4495,7 @@ importers:
         version: link:../../support/invariants
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/sdk/helper:
     dependencies:
@@ -4541,7 +4544,7 @@ importers:
         version: link:../../web/tool-web
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/sdk/scripts:
     dependencies:
@@ -4566,7 +4569,7 @@ importers:
         version: link:../../support/invariants
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
       tsdown:
         specifier: ^0.22.2
         version: 0.22.2(oxc-resolver@11.20.0)(publint@0.3.21)(tsx@4.22.4)(typescript@6.0.3)
@@ -4590,7 +4593,7 @@ importers:
         version: link:../../core/session
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/sdk/sdk-protocol:
     devDependencies:
@@ -4608,7 +4611,7 @@ importers:
         version: link:../../subagent/subagent
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/sdk/telemetry:
     dependencies:
@@ -4627,7 +4630,7 @@ importers:
         version: link:../../util/paths
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/session-persistence/session-checkpoint-policy:
     devDependencies:
@@ -4666,7 +4669,7 @@ importers:
         version: link:../../core/tools
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/session-persistence/session-persistence:
     devDependencies:
@@ -4684,7 +4687,7 @@ importers:
         version: link:../../core/session
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/session-persistence/session-persistence-jsonl:
     dependencies:
@@ -4706,7 +4709,7 @@ importers:
         version: link:../session-persistence
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/session-persistence/session-persistence-sqlite:
     dependencies:
@@ -4725,7 +4728,7 @@ importers:
         version: link:../session-persistence
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/session-projection/session-projection:
     dependencies:
@@ -4741,7 +4744,7 @@ importers:
         version: link:../../core/session
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/session-projection/session-projection-cache:
     dependencies:
@@ -4772,7 +4775,7 @@ importers:
         version: link:../../storage/storage-domain
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/session-query/session-query:
     devDependencies:
@@ -4796,7 +4799,7 @@ importers:
         version: link:../../session-title/session-title
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/session-query/session-query-sqlite:
     dependencies:
@@ -4824,7 +4827,7 @@ importers:
         version: link:../session-query
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/session-query/tool-session-query:
     dependencies:
@@ -4873,7 +4876,7 @@ importers:
         version: link:../../core/tools
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/session-title/session-title:
     dependencies:
@@ -4907,7 +4910,7 @@ importers:
         version: link:../../session-projection/session-projection
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/session-title/session-title-all-messages-llm:
     dependencies:
@@ -4932,7 +4935,7 @@ importers:
         version: link:../session-title-llm
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/session-title/session-title-first-message-llm:
     dependencies:
@@ -4966,7 +4969,7 @@ importers:
         version: link:../session-title-llm
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/session-title/session-title-llm:
     dependencies:
@@ -4991,7 +4994,7 @@ importers:
         version: link:../../util/timeout
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/settings/settings:
     devDependencies:
@@ -5003,7 +5006,7 @@ importers:
         version: link:../../support/invariants
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
       schemastery:
         specifier: ^3.18.0
         version: link:../../../vendor/schemastery
@@ -5034,7 +5037,7 @@ importers:
         version: link:../settings
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/skill/skill:
     dependencies:
@@ -5047,7 +5050,7 @@ importers:
         version: link:../../support/invariants
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/skill/skill-local:
     dependencies:
@@ -5075,7 +5078,7 @@ importers:
         version: link:../skill
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/skill/tool-skill:
     dependencies:
@@ -5109,7 +5112,7 @@ importers:
         version: link:../../core/tools
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/spill/spill:
     devDependencies:
@@ -5127,7 +5130,7 @@ importers:
         version: link:../../core/session
       cordis:
         specifier: ^4.0.0-rc.6
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/spill/spill-local:
     dependencies:
@@ -5152,7 +5155,7 @@ importers:
         version: link:../spill
       cordis:
         specifier: ^4.0.0-rc.6
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/spill/spill-policy:
     dependencies:
@@ -5186,7 +5189,7 @@ importers:
         version: link:../../core/tools
       cordis:
         specifier: ^4.0.0-rc.6
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/storage/storage:
     devDependencies:
@@ -5195,7 +5198,7 @@ importers:
         version: link:../../support/invariants
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/storage/storage-domain:
     dependencies:
@@ -5214,7 +5217,7 @@ importers:
         version: link:../storage
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/storage/storage-json:
     dependencies:
@@ -5230,7 +5233,7 @@ importers:
         version: link:../storage
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/storage/storage-sqlite:
     dependencies:
@@ -5246,7 +5249,7 @@ importers:
         version: link:../storage
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/subagent/subagent:
     dependencies:
@@ -5289,7 +5292,7 @@ importers:
         version: link:../../core/tools
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/subagent/subagent-acp:
     dependencies:
@@ -5329,7 +5332,7 @@ importers:
         version: link:../../subprocess/subprocess-local
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/subagent/subagent-dsh-sdk:
     dependencies:
@@ -5369,7 +5372,7 @@ importers:
         version: link:../../subprocess/subprocess
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/subagent/subagent-fork:
     dependencies:
@@ -5409,7 +5412,7 @@ importers:
         version: link:../subagent-spawn
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/subagent/subagent-inprocess:
     devDependencies:
@@ -5454,7 +5457,7 @@ importers:
         version: link:../../ui/user-approval
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/subagent/subagent-spawn:
     dependencies:
@@ -5506,7 +5509,7 @@ importers:
         version: link:../tool-subagent
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/subagent/tool-subagent:
     dependencies:
@@ -5558,7 +5561,7 @@ importers:
         version: link:../../core/tools
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/subagent/tool-subagent-control:
     devDependencies:
@@ -5600,7 +5603,7 @@ importers:
         version: link:../../core/tools
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/subagent/tool-subagent-report:
     dependencies:
@@ -5646,7 +5649,7 @@ importers:
         version: link:../../core/tools
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/subprocess/subprocess:
     devDependencies:
@@ -5655,7 +5658,7 @@ importers:
         version: link:../../support/invariants
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/subprocess/subprocess-local:
     dependencies:
@@ -5671,7 +5674,7 @@ importers:
         version: link:../subprocess
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/support/acp-snapshot:
     dependencies:
@@ -5690,7 +5693,7 @@ importers:
         version: link:../invariants
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/support/agent-loop-testkit:
     devDependencies:
@@ -5717,7 +5720,7 @@ importers:
         version: link:../../core/tools
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/support/invariants:
     dependencies:
@@ -5727,7 +5730,7 @@ importers:
     devDependencies:
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/support/llm-mock-server:
     devDependencies:
@@ -5736,7 +5739,7 @@ importers:
         version: link:../invariants
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/support/llm-replay:
     devDependencies:
@@ -5751,7 +5754,7 @@ importers:
         version: link:../../core/session
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/support/loader-smoke:
     dependencies:
@@ -5767,7 +5770,7 @@ importers:
         version: link:../invariants
       cordis:
         specifier: ^4.0.0-rc.6
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/tasks/tasks:
     devDependencies:
@@ -5785,7 +5788,7 @@ importers:
         version: link:../../core/session
       cordis:
         specifier: ^4.0.0-rc.6
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/tasks/tasks-local:
     devDependencies:
@@ -5809,7 +5812,7 @@ importers:
         version: link:../../util/timeout
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/tasks/tool-tasks:
     dependencies:
@@ -5846,7 +5849,7 @@ importers:
         version: link:../../core/tools
       cordis:
         specifier: ^4.0.0-rc.6
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/telemetry/session-telemetry:
     devDependencies:
@@ -5861,7 +5864,7 @@ importers:
         version: link:../../core/session
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/telemetry/session-telemetry-otel:
     dependencies:
@@ -5910,7 +5913,7 @@ importers:
         version: link:../session-telemetry
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/timeout/timeout-policy:
     devDependencies:
@@ -5928,7 +5931,7 @@ importers:
         version: link:../../core/tools
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/todo/tool-todo:
     dependencies:
@@ -5971,7 +5974,7 @@ importers:
         version: link:../../ui/user-interaction
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/typert/generator:
     dependencies:
@@ -5990,7 +5993,7 @@ importers:
         version: link:../registry
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -6012,7 +6015,7 @@ importers:
         version: link:../registry
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -6028,7 +6031,7 @@ importers:
         version: link:../../support/invariants
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/ui/app-boot:
     dependencies:
@@ -6062,7 +6065,7 @@ importers:
         version: 4.0.9
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/ui/commands:
     devDependencies:
@@ -6083,7 +6086,7 @@ importers:
         version: link:../../core/session
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/ui/jsonrpc:
     dependencies:
@@ -6126,7 +6129,7 @@ importers:
         version: link:../../subagent/subagent
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/ui/permission:
     dependencies:
@@ -6166,7 +6169,7 @@ importers:
         version: link:../user-approval
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/ui/tool-ask-user:
     devDependencies:
@@ -6190,7 +6193,7 @@ importers:
         version: link:../user-interaction
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/ui/tui:
     dependencies:
@@ -6281,7 +6284,7 @@ importers:
         version: 5.5.0
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/ui/user-approval:
     dependencies:
@@ -6312,7 +6315,7 @@ importers:
         version: link:../../core/system-prompt
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/ui/user-interaction:
     devDependencies:
@@ -6327,7 +6330,7 @@ importers:
         version: link:../../llm/llm
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/util/atomic-write:
     devDependencies:
@@ -6336,7 +6339,7 @@ importers:
         version: link:../../support/invariants
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/util/brand:
     devDependencies:
@@ -6345,7 +6348,7 @@ importers:
         version: link:../../support/invariants
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/util/native-command:
     devDependencies:
@@ -6354,7 +6357,7 @@ importers:
         version: link:../../support/invariants
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/util/paths:
     devDependencies:
@@ -6363,7 +6366,7 @@ importers:
         version: link:../../support/invariants
       cordis:
         specifier: ^4.0.0-rc.6
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/util/process-tree:
     devDependencies:
@@ -6372,7 +6375,7 @@ importers:
         version: link:../../support/invariants
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/util/retention:
     devDependencies:
@@ -6381,7 +6384,7 @@ importers:
         version: link:../../support/invariants
       cordis:
         specifier: ^4.0.0-rc.6
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/util/timeout:
     devDependencies:
@@ -6390,7 +6393,16 @@ importers:
         version: link:../../support/invariants
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
+
+  packages/util/web-launcher:
+    devDependencies:
+      '@deepseek-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../support/invariants
+      cordis:
+        specifier: ^4.0.0-rc.7
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/web/tool-web:
     dependencies:
@@ -6445,7 +6457,7 @@ importers:
         version: 5.0.6
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/web/web:
     dependencies:
@@ -6461,7 +6473,7 @@ importers:
         version: link:../../llm/llm
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/web/web-fetch-local:
     dependencies:
@@ -6480,7 +6492,7 @@ importers:
         version: link:../web
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/web/web-search-deepseek:
     dependencies:
@@ -6508,7 +6520,7 @@ importers:
         version: link:../web
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/web/web-search-exa:
     dependencies:
@@ -6524,7 +6536,7 @@ importers:
         version: link:../web
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/web/web-search-perplexity:
     dependencies:
@@ -6540,7 +6552,7 @@ importers:
         version: link:../web
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/workflow/tool-ralph:
     dependencies:
@@ -6592,7 +6604,7 @@ importers:
         version: link:../workflow-workerthread
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/workflow/tool-workflow:
     dependencies:
@@ -6629,7 +6641,7 @@ importers:
         version: link:../workflow-workerthread
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/workflow/workflow:
     devDependencies:
@@ -6650,7 +6662,7 @@ importers:
         version: link:../../core/session
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   packages/workflow/workflow-workerthread:
     dependencies:
@@ -6696,7 +6708,7 @@ importers:
         version: link:../workflow
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
       tsx:
         specifier: ^4.19.2
         version: 4.22.4
@@ -6727,7 +6739,7 @@ importers:
         version: link:../../storage/storage-domain
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../../../vendor/cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   python/sdk-runtime:
     dependencies:
@@ -7053,7 +7065,7 @@ importers:
         version: link:../loader
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
 
   vendor/hmr:
     dependencies:
@@ -7068,7 +7080,7 @@ importers:
         version: 4.0.3
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
       cosmokit:
         specifier: ^1.8.1
         version: link:../cosmokit
@@ -7096,7 +7108,7 @@ importers:
         version: link:../loader
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
       cosmokit:
         specifier: ^1.8.1
         version: link:../cosmokit
@@ -7108,7 +7120,7 @@ importers:
     dependencies:
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
       cosmokit:
         specifier: ^1.8.1
         version: link:../cosmokit
@@ -7123,7 +7135,7 @@ importers:
     dependencies:
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
       cosmokit:
         specifier: ^1.8.1
         version: link:../cosmokit
@@ -7147,7 +7159,7 @@ importers:
     dependencies:
       cordis:
         specifier: ^4.0.0-rc.7
-        version: link:../cordis
+        version: 4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader)
       cosmokit:
         specifier: ^1.8.1
         version: link:../cosmokit
@@ -9841,6 +9853,7 @@ packages:
   '@xmldom/xmldom@0.8.13':
     resolution: {integrity: sha512-KRYzxepc14G/CEpEGc3Yn+JKaAeT63smlDr+vjB8jRfgTBBI9wRj/nkQEO+ucV8p8I9bfKLWp37uHgFrbntPvw==}
     engines: {node: '>=10.0.0'}
+    deprecated: this version has critical issues, please update to the latest version
 
   '@xterm/headless@5.5.0':
     resolution: {integrity: sha512-5xXB7kdQlFBP82ViMJTwwEc3gKCLGKR/eoxQm4zge7GPBl86tCdI0IdPJjoKd8mUSFXz5V7i/25sfsEkP4j46g==}
@@ -10198,6 +10211,18 @@ packages:
     resolution: {integrity: sha512-7Vv6asjS4gMOuILabD3l739tsaxFQmC+a7pLZm02zyvs8p977bL3zEgq3yDk5rn9B0PbYgIv++jmHcuUab4RhA==}
     engines: {node: '>=18'}
 
+  cordis@4.0.0-rc.8:
+    resolution: {integrity: sha512-vXaYK6XZJlIFTnODp4Rd973Qnd/gm3cwFzWsMTaeu6cQQheA7N+aA0GqHRNl0cFIrxMXWU8dst1ZXHlUQvfyRw==}
+    hasBin: true
+    peerDependencies:
+      '@cordisjs/plugin-include': ^1.0.4
+      '@cordisjs/plugin-loader': ^1.0.0-rc.5
+    peerDependenciesMeta:
+      '@cordisjs/plugin-include':
+        optional: true
+      '@cordisjs/plugin-loader':
+        optional: true
+
   core-util-is@1.0.3:
     resolution: {integrity: sha512-ZQBvi1DcpJ4GDqanjucZ2Hj3wEO5pZDS89BWbkcrvdxksJorwUDDZamX9ldFkp9aw2lmBDLgkObEA4DWNJ9FYQ==}
 
@@ -10210,6 +10235,9 @@ packages:
 
   cose-base@2.2.0:
     resolution: {integrity: sha512-AzlgcsCbUMymkADOJtQm3wO9S3ltPfYOFD5033keQn9NJzIbtnZj+UdBJe7DYml/8TdbtHJW3j58SOnKhWY/5g==}
+
+  cosmokit@1.8.1:
+    resolution: {integrity: sha512-PDBv4l90xZKrUsZ0vtoycgZpO/j4iFsqJXrAxsyBDsnQRI7ZMJXIjgDJsKNjd5L8jnVnnlrDCdhkFbTncgCVjQ==}
 
   cross-dirname@0.1.0:
     resolution: {integrity: sha512-+R08/oI0nl3vfPcqftZRpytksBXDzOUveBq/NBVx0sUp1axwzPQrKinNx5yd5sxPu8j1wIy8AfnVQ+5eFdha6Q==}
@@ -16115,6 +16143,14 @@ snapshots:
     dependencies:
       is-what: 5.5.0
 
+  cordis@4.0.0-rc.8(@cordisjs/plugin-include@vendor+include)(@cordisjs/plugin-loader@vendor+loader):
+    dependencies:
+      '@standard-schema/spec': 1.1.0
+      cosmokit: 1.8.1
+    optionalDependencies:
+      '@cordisjs/plugin-include': link:vendor/include
+      '@cordisjs/plugin-loader': link:vendor/loader
+
   core-util-is@1.0.3: {}
 
   cors@2.8.6:
@@ -16129,6 +16165,8 @@ snapshots:
   cose-base@2.2.0:
     dependencies:
       layout-base: 2.0.1
+
+  cosmokit@1.8.1: {}
 
   cross-dirname@0.1.0:
     optional: true
