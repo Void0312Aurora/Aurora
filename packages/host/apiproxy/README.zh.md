@@ -24,6 +24,8 @@
 
 绑定到 Agent 的通用会话、命令与目标操作只服务普通会话。对于由会话支撑的 subagent，它们会返回 `agent-busy`，而不是恢复或驱动它；显式 id 的 `session.create` 接纳与仅针对已附加会话的队列控件也会执行同一所有权边界。subagent 对话读取与继续执行使用专用的 `subagent.*` 领域，该领域保留目录 mode 与直接 parent 授权。
 
+`session.injectContext` 是 `Agent.inject()` 面向独立发布 IDE 客户端的 wire 面：它把调用方的 `ContentBlock[]` 以 `ide-context` 来源（`{ kind: 'plugin', plugin: 'ide', rpcId }`）追加为持久 `user/message` 而不唤醒模型——下一个被接纳的 step 会排空它；对空闲会话则立即追加且不开 turn。它绝不派发斜杠命令，错误映射与 `session.prompt` 一致（[决策](../../../.agents/notes/implemented/architecture/2026-08-12-wire-protocol-version-and-ide-context-injection.md)）。
+
 待处理的 inbox 输入属于实时控制平面契约，而非会话历史。网关镜像来自 `agent/inbox/*` 的 `InboxItem` 入队项及其 `queued` 或 `steering` placement，并在每次变更和重连时广播权威的 `session/queue` 快照。steering 入队项会一直保留在该投影中，直到对应的持久 `steering/message` 已发布，从而在交接期间保持 Host 的线性事件顺序。`session.updateQueue` 通过 `InboxItemId` 寻址单个项：编辑会替换待处理内容，移除会将其丢弃，严格 steering 会把其完整消息转移到当前 next-step 窗口。窗口关闭时返回 `steer-unavailable`，且不改变该行。`session.cancel` 仅中止活动轮次，并保留待处理 inbox 工作；取消达到完全停稳且结束中的轮次完成 flush 后，AgentLoop 按 FIFO 顺序认领下一个可唤醒入队项。浏览器绝不重发或提升该入队项。驱动器在接纳前退役寻址标识，因此认领会赢得竞态；之后的操作返回 `queue-item-not-found`。队列操作只查询当前已挂载的普通会话 Agent，绝不恢复冷会话，因为进程本地 inbox 标识无法在重启或资源释放后存活。客户端绝不根据轮次或状态事件推断项已退役。
 
 Workspace 列表与 Session 列表是相互独立的重连基线。`workspace.create({ name })` 会在配置根目录下创建显示标题唯一的目录，而 `workspace.create({ path })` 会接纳已有的规范目录，并允许由 basename 派生的标题重复。`workspace.delete` 只移除 Workspace 注册记录，`session.create` 接受可选的预分配 Session id，`host/workspace-changed`、`host/workspace-removed` 与 `host/session-added` 则以任意到达顺序携带已提交的增量。`workspace.archiveSession` 向注册表级全局归档集合添加一个会话，并应答完整的更新后集合；`workspace.list` 携带该集合作为重连基线，`host/archived-sessions-changed` 在每次持久变更后推送完整快照。归档只把会话从各分组视图中隐藏，不触碰其日志和 workspace 记账；既非实时也未持久化的会话以 `session-not-found` 失败。删除注册记录会保留目录和会话日志；相关 Session 仍留在 `session.list` 中，并进入 Ungrouped。`SessionSummary.blank` 与 `host/session-added` 帧携带派生的零事件位：客户端隐藏空白会话并按 workspace 复用它们，在首个 `host/session-status(running:true)` 时翻转 blank，并以 `session.list` 作为重连权威；冷会话摘要永远不是空白：惰性持久化让从未追加过事件的会话根本不出现在 `list()` 中。`session.list` 摘要与 `host/session-added` 帧还会携带可选的持久化分类 `origin: 'subagent'`，使导航在实时创建与重连后都能隐藏重复的 child 行；该标记绝不是继续执行的权威依据。
@@ -57,8 +59,8 @@ Workspace 列表与 Session 列表是相互独立的重连基线。`workspace.cr
 ## 已知限制与延期工作
 
 - **`respond` 路由已经发布，但待处理交互状态仍属宿主侧工作**：协议形状（POST `/api/respond`、`RpcReceipt`）已经定型；使延迟或重复回答具有明确语义的待处理表位于 `src/api-proxy.ts`，目前仍很精简（只支持问题，不支持审批）。
-- **预留 seam 不进入 `RpcMethodMap`**：`prompt.mode: 'inject'`、`task.list` 和描述字段 `hostInstanceId` 都是已记录的预留项（先前预留的 `host.listModels` 已作为 `llm.models` 交付）；未知方法会在信封解析时直接失败，而不会返回「尚未实现」错误码。
-- **没有协议版本字段**：客户端与宿主一同发布；只有出现独立发布的客户端后，`host.describe` 才会增加版本协商字段。
+- **预留 seam 不进入 `RpcMethodMap`**：`task.list` 和描述字段 `hostInstanceId` 都是已记录的预留项（先前预留的 `host.listModels` 已作为 `llm.models` 交付；先前预留的 `prompt.mode: 'inject'` 已作为独立方法 `session.injectContext` 交付）；未知方法会在信封解析时直接失败，而不会返回「尚未实现」错误码。
+- **`protocolVersion` 只为独立发布的客户端把门**：`host.describe` 返回 `API_PROTOCOL_VERSION`，供仓库外客户端（VS Code 扩展）把门；仓库内客户端与宿主一同发布并忽略它，除这个单一整数外没有其他协商机制（[决策](../../../.agents/notes/implemented/architecture/2026-08-12-wire-protocol-version-and-ide-context-injection.md)）。
 - **搜索失败会包含提供方诊断信息**：网关是单用户本地服务。将其暴露给多名用户的载体必须用可安全公开的诊断信息替代内部搜索细节。
 - **Linux 原生选择器依赖桌面工具**：在 `native` 能力下，Zenity 和 KDialog 均未安装时，`host.pickDirectory` 会给出包含解决建议的错误提示；组合层面的回退是 browse 后端（见 [native 后端 README](../directory-picker-native/README.md)）。
 - **冷会话的 `updatedAt` 会把一次单纯的拾起算作写入（仅逐文件后端）**：已附加投影排除了 `session/end-seed` 边界，因为接手一个会话不算活动；但冷会话的 `updatedAt` 取自其日志文件的 mtime，而每一次持久写入都会刷新它，包括这条边界。`session.history` 只执行检查，但绑定到 Agent 的普通会话操作会恢复冷会话并写入这条拾起边界。这只适用于 `locate()` 能解析出逐会话产物的场景，即 JSONL；SQLite 返回 `undefined`，因此它的冷会话回退到 `createdAt`，偏差方向相反——偏旧而不是偏新——且与这条边界无关。于是一个被触碰过却没有在里面工作过的会话，在重新附加之前会按晚于其最后一次真实活动的时间排序。要把两者区分开需要读取日志，而这恰恰是 mtime 路径存在的目的；在索引中存储一个最后活动字段可以从源头修好它，范围见[最后活动索引 Agent Note（agent 决策记录）](../../../.agents/notes/proposed/architecture/2026-07-29-durable-last-activity-index.md)。

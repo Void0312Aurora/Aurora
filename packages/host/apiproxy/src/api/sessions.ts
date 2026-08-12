@@ -23,6 +23,15 @@ declare module '@deepseek-ai/dsh-llm' {
      * carries no transport vocabulary; rpcId is an extra durable-JSON field passed back to the client with the event.
      */
     'user-rpc': { kind: 'user'; rpcId: RpcId }
+    /**
+     * Context injected over the wire by `session.injectContext`. kind stays
+     * `'plugin'` — to the model this is environment context like any host
+     * context plugin's, not a user utterance — with the fixed `'ide'` plugin
+     * tag distinguishing wire injection from host-plugin injection, and the
+     * request's rpcId as the durable audit/reconciliation field (the same
+     * pattern as `user-rpc`).
+     */
+    'ide-context': { kind: 'plugin'; plugin: 'ide'; rpcId: RpcId }
   }
 }
 
@@ -284,6 +293,17 @@ export interface SessionsApi {
   /** Sends a message to an ordinary session Agent. Session-backed subagents reject with `agent-busy` and use `subagent.prompt`. */
   prompt(request: RpcRequest<{ sessionId: SessionId; mode: 'queue' | 'steer'; content: ContentBlock[] }>):
   Promise<RpcResponse<{ accepted: true; command?: { kind: 'success'; text?: string } }>>
+
+  /**
+   * Appends model-facing context to an ordinary session without waking the
+   * model (`Agent.inject` on the wire): the content becomes a durable
+   * `user/message` with the `ide-context` source that the next admitted step
+   * drains; on an idle session it appends immediately without opening a turn.
+   * Never dispatches slash commands. Session-backed subagents reject with
+   * `agent-busy`.
+   */
+  injectContext(request: RpcRequest<{ sessionId: SessionId; content: ContentBlock[] }>):
+  Promise<RpcResponse<{ accepted: true }>>
 
   /**
    * Edits, removes, or strictly steers one pending queued occurrence on an ordinary session.

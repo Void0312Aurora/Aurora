@@ -1,9 +1,17 @@
 /**
- * host domain contract. No protocol version: client and host ship
- * together; introduce protocolVersion only when an independently released client appears.
+ * host domain contract.
  */
 
 import type { RpcRequest, RpcResponse } from './rpc.ts'
+
+/**
+ * Wire protocol version advertised by `host.describe`. Independently released
+ * clients (the VS Code extension is the first) gate on it before consuming
+ * frames: bump it on any breaking change to methods, payloads, or frame
+ * shapes, and note the change in the api-contracts document. In-repo clients
+ * ship with the host and never check it.
+ */
+export const API_PROTOCOL_VERSION = 1
 
 /** One directory row of a listing: a child entry or a breadcrumb ancestor. */
 export interface DirectoryEntry {
@@ -36,6 +44,7 @@ export interface DirectoryListing {
 export interface HostApi {
   /**
    * One-shot host snapshot. Empty payload uses the literal `{}` (extend in place when fields arrive).
+   * protocolVersion = {@link API_PROTOCOL_VERSION}, the independently-released-client gate;
    * version = the host app's (apps/cli) package.json version; cwd = the host process working
    * directory (root for session persistence and tool execution); provider/model = the defaults
    * applied when a new agent doesn't specify them explicitly, absent when the host configures
@@ -43,6 +52,7 @@ export interface HostApi {
    * attachedSessions = count of currently attached sessions (those with a live agent);
    */
   describe(request: RpcRequest<{}>): Promise<RpcResponse<{
+    protocolVersion: number
     version: string
     cwd: string
     provider?: string
