@@ -647,6 +647,19 @@
         "scripts/**/*.mjs"
       ]
     },
+    "apps/vscode": {
+      "entry": [
+        "webview/main.ts",
+        "webview/theme.ts",
+        "webview/node-module-stub.ts",
+        "tests/**/*.spec.ts"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "webview/**/*.ts",
+        "tests/**/*.ts"
+      ]
+    },
     "packages/client/modules": {
       "entry": [
         "tests/**/*.spec.ts"
