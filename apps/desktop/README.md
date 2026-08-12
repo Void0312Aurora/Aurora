@@ -7,14 +7,14 @@ Electron shell for the DeepSeek Harness Web GUI: it spawns `dsh web`, waits for 
 
 ## Running from the checkout
 
-Build the repo first — `pnpm run build` produces the CLI lib, the web dist, and this package's lib (the `build:lib` step compiles the tree-kill primitive into `lib/process-tree/` automatically). `deploy:closure` is needed only to run the embedded closure instead of the checkout branches (see below):
+Build the repo first — `pnpm run build` produces the CLI lib, the web dist, and this package's lib (the `build:lib` step compiles the tree-kill and web-launcher primitives into `lib/process-tree/` and `lib/web-launcher/` automatically). `deploy:closure` is needed only to run the embedded closure instead of the checkout branches (see below):
 
 ```sh
 pnpm run deploy:closure
 pnpm --filter @deepseek-ai/dsh-desktop dev
 ```
 
-The launcher resolves `dsh web` in this order:
+The launcher (the shared [`@deepseek-ai/dsh-web-launcher`](../../packages/util/web-launcher/README.md) primitive) resolves `dsh web` in this order:
 
 1. `DSH_BIN` — an explicit executable path (useful for a custom CLI build);
 2. the embedded closure at `deploy/node_modules/@deepseek-ai/dsh/lib/bin.js` (whenever `deploy/` is materialized — always in packaged builds, and in a dev checkout after `deploy:closure`; see Packaging);
@@ -46,4 +46,4 @@ Icons (`build/icon.png`, `build/tray-icon.png`) are rasterized from `apps/web/pu
 
 ## Tests
 
-`tests/launcher.spec.ts` covers the pure launcher logic — command resolution, readiness-line parsing, and the readiness polls — keyless and without launching Electron.
+The pure launcher logic — command resolution, readiness-line parsing, and the readiness polls — lives in [`@deepseek-ai/dsh-web-launcher`](../../packages/util/web-launcher/README.md) with its own keyless suite; this package's tests cover the built-entry import graph and the assembled Electron lifecycle.

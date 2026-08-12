@@ -1,8 +1,8 @@
 /**
- * dsh-desktop launcher: resolve the `dsh` command, spawn the Web server, and
- * wait for it to report readiness. Pure Node logic with no Electron imports,
- * so the unit suite can exercise it without a window; Electron glue lives in
- * `main.ts`.
+ * Shared `dsh web` launcher: resolve how a shell spawns the Web server, parse
+ * its readiness line, and poll for HTTP readiness. Pure Node logic with no
+ * Electron or VS Code imports; consumers (the desktop shell, the VS Code
+ * extension host) own spawning, window/tray glue, and teardown.
  */
 
 import type { ChildProcess } from 'node:child_process'
@@ -28,13 +28,19 @@ export interface WebServerLaunch {
 export interface LaunchEnvironment {
   env: NodeJS.ProcessEnv
   /**
-   * Directory holding this package's payload: `apps/desktop` in dev, the
-   * **unpacked** app root (`<resources>/app.asar.unpacked`) when packaged —
-   * the embedded closure and the reaper run under Electron-as-Node, which
-   * cannot read inside `app.asar`.
+   * Directory holding the consuming app's runnable payload. The launcher
+   * derives two conventional locations from it: the embedded closure at
+   * `<appDir>/deploy/node_modules/@deepseek-ai/dsh/lib/bin.js`, and — for
+   * `apps/<name>` dev checkouts — the repository root at `<appDir>/../..`.
+   * Packaged consumers whose payload lives outside a checkout simply miss
+   * the checkout candidates and fall through to PATH.
    */
   appDir: string
-  /** The running executable — Electron's own binary, reused as Node when the embedded closure is selected. */
+  /**
+   * The running executable, reused as Node via `ELECTRON_RUN_AS_NODE` when
+   * the embedded closure is selected (Electron in the desktop shell, VS
+   * Code's Electron in the extension host).
+   */
   execPath: string
   /** Node executable for checkout launches; defaults to `node` on PATH. */
   nodeCommand?: string
@@ -45,19 +51,20 @@ export interface LaunchEnvironment {
 
 /**
  * The harness has no confinement backend on Windows, so its default
- * `workspace-write` permission mode cannot boot there. The shell falls back to
- * `danger-full-access` when the mode is unset (an explicit empty string counts
- * as unset too), exactly the environment a Windows user must otherwise supply
- * for every `dsh` invocation; an explicit non-empty `DSH_PERMISSION_MODE`
- * always wins.
+ * `workspace-write` permission mode cannot boot there. The launcher falls
+ * back to `danger-full-access` when the mode is unset (an explicit empty
+ * string counts as unset too), exactly the environment a Windows user must
+ * otherwise supply for every `dsh` invocation; an explicit non-empty
+ * `DSH_PERMISSION_MODE` always wins.
  */
 const WINDOWS_PERMISSION_FALLBACK = 'danger-full-access' as const
 
 /**
  * Resolve how to launch `dsh web`. Order: `DSH_BIN` env → embedded deploy
  * closure (`deploy/node_modules/@deepseek-ai/dsh/lib/bin.js`, run under
- * Electron-as-Node) → this checkout's CLI (built `lib/bin.js` on Node, else
- * the tsx source launch the repo's own `pnpm run dsh` uses) → `dsh` on PATH.
+ * Electron-as-Node) → the surrounding checkout's CLI (built `lib/bin.js` on
+ * Node, else the tsx source launch the repo's own `pnpm run dsh` uses) →
+ * `dsh` on PATH.
  * @param options - environment facts; `exists` defaults to the real filesystem.
  * @returns the spawn descriptor.
  */
@@ -117,6 +124,7 @@ export function parseReadyLine(line: string): URL | undefined {
   const trimmed = line.trim()
   if (!trimmed.startsWith(READY_LINE_PREFIX)) return undefined
   const candidate = trimmed.slice(READY_LINE_PREFIX.length).split(' ')[0]
+  /* v8 ignore next -- noUncheckedIndexedAccess guard: split always yields at least one element */
   if (candidate === undefined) return undefined
   try {
     const url = new URL(candidate)
@@ -128,6 +136,7 @@ export function parseReadyLine(line: string): URL | undefined {
   }
 }
 
+/** Timeout and logging hooks for {@link waitForReadyLine}. */
 export interface ReadyLineOptions {
   /** How long to wait for the readiness line before failing. */
   timeoutMs?: number
@@ -162,7 +171,7 @@ export function waitForReadyLine(stdout: AsyncIterable<string>, options: ReadyLi
       void iterator.return?.()
       const destroyable = stdout as AsyncIterable<string> & { destroy?: () => void }
       destroyable.destroy?.()
-      reject(new Error(`dsh-desktop: no readiness line from dsh web within ${timeoutMs}ms`))
+      reject(new Error(`dsh-web-launcher: no readiness line from dsh web within ${timeoutMs}ms`))
     }, timeoutMs)
     void (async () => {
       try {
@@ -176,6 +185,7 @@ export function waitForReadyLine(stdout: AsyncIterable<string>, options: ReadyLi
           if (resolved) continue
           buffer += chunk
           const lines = buffer.split(/\r?\n/)
+          /* v8 ignore next -- noUncheckedIndexedAccess guard: split always yields at least one element to pop */
           buffer = lines.pop() ?? ''
           for (const line of lines) {
             const url = parseReadyLine(line)
@@ -196,7 +206,7 @@ export function waitForReadyLine(stdout: AsyncIterable<string>, options: ReadyLi
           return
         }
         clearTimeout(timer)
-        reject(new Error('dsh-desktop: dsh web exited before printing its readiness line'))
+        reject(new Error('dsh-web-launcher: dsh web exited before printing its readiness line'))
       } catch (error) {
         if (resolved) return
         clearTimeout(timer)
@@ -206,6 +216,7 @@ export function waitForReadyLine(stdout: AsyncIterable<string>, options: ReadyLi
   })
 }
 
+/** Deadline, cadence, and fetch injection for {@link waitForHttpOk}. */
 export interface HttpOkOptions {
   timeoutMs?: number
   pollIntervalMs?: number
@@ -234,7 +245,7 @@ export async function waitForHttpOk(url: URL, options: HttpOkOptions = {}): Prom
     }
     await new Promise(resolve => setTimeout(resolve, pollIntervalMs))
   }
-  throw new Error(`dsh-desktop: server not reachable at ${url.href} within ${timeoutMs}ms (last error: ${String(lastError)})`)
+  throw new Error(`dsh-web-launcher: server not reachable at ${url.href} within ${timeoutMs}ms (last error: ${String(lastError)})`)
 }
 
 /**
@@ -244,6 +255,7 @@ export async function waitForHttpOk(url: URL, options: HttpOkOptions = {}): Prom
  * the signal). A child that never spawned (spawn error) reports neither, which
  * this returns as not-exited; callers treat the spawn-error event separately.
  * @param child - the child process to probe.
+ * @returns true once the child has exited by code or signal.
  */
 export function childExited(child: Pick<ChildProcess, 'exitCode' | 'signalCode'>): boolean {
   return child.exitCode !== null || child.signalCode !== null

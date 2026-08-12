@@ -7,14 +7,14 @@ DeepSeek Harness Web GUI 的 Electron 外壳：它启动 `dsh web`，等待服�
 
 ## 从检出目录运行
 
-先构建仓库——`pnpm run build` 产出 CLI lib、web dist 与本包的 lib（`build:lib` 步骤会自动把 tree-kill 原语编译进 `lib/process-tree/`）。只有在想运行嵌入闭包而非检出分支时才需要 `deploy:closure`（见下文）：
+先构建仓库——`pnpm run build` 产出 CLI lib、web dist 与本包的 lib（`build:lib` 步骤会自动把 tree-kill 与 web-launcher 原语编译进 `lib/process-tree/` 与 `lib/web-launcher/`）。只有在想运行嵌入闭包而非检出分支时才需要 `deploy:closure`（见下文）：
 
 ```sh
 pnpm run deploy:closure
 pnpm --filter @deepseek-ai/dsh-desktop dev
 ```
 
-启动器按以下顺序解析 `dsh web`：
+启动器（共享的 [`@deepseek-ai/dsh-web-launcher`](../../packages/util/web-launcher/README.md) 原语）按以下顺序解析 `dsh web`：
 
 1. `DSH_BIN` —— 显式指定的可执行文件路径（适合自定义 CLI 构建）；
 2. 嵌入闭包 `deploy/node_modules/@deepseek-ai/dsh/lib/bin.js`（只要 `deploy/` 已物化——打包版必然有，dev 检出目录在 `deploy:closure` 之后也会有；见「打包」）；
@@ -46,4 +46,4 @@ pnpm --filter @deepseek-ai/dsh-desktop dist:dir    # unpacked dir only, for a qu
 
 ## 测试
 
-`tests/launcher.spec.ts` 覆盖纯启动器逻辑——命令解析、就绪行解析与就绪轮询——无密钥、不启动 Electron。
+纯启动器逻辑——命令解析、就绪行解析与就绪轮询——位于 [`@deepseek-ai/dsh-web-launcher`](../../packages/util/web-launcher/README.md)，自带无密钥测试套件；本包的测试覆盖构建产物 import 图与装配后的 Electron 生命周期。

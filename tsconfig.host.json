@@ -183,6 +183,7 @@
     { "path": "./packages/support/loader-smoke" },
     { "path": "./packages/support/llm-mock-server" },
     { "path": "./packages/util/process-tree" },
+    { "path": "./packages/util/web-launcher" },
     { "path": "./packages/subagent/subagent" },
     { "path": "./packages/subagent/tool-subagent" },
     { "path": "./packages/subagent/tool-subagent-control" },
