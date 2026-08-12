@@ -50,6 +50,19 @@ import './base.css'
 /** Module transport seams the shell passes through (jsdom tests replace the <script> path). */
 export type BootSeams = Pick<ClientModuleSystemOptions, 'fetchBundle' | 'executeBundle'>
 
+/** Boot options: the transport seams plus the hosting shell's static plugin table. */
+export type BootOptions = BootSeams & {
+  /**
+   * Graph-row plugin implementations the hosting shell bundled statically
+   * (embedder webviews whose CSP or origin cannot fetch bundles from the
+   * server). Keys are manifest row ids; each registers through the module
+   * system's statics table, so import resolves without any fetch/execute
+   * round and `prefetch` short-circuits. The shell-own app-shell and modules
+   * ids stay kernel-owned and must not appear here.
+   */
+  staticPlugins?: Record<string, unknown>
+}
+
 /**
  * The modules package's own graph row id. The kernel adopts that entry
  * itself (its wrapper is statically registered — shell-bundled code, never
@@ -67,7 +80,7 @@ const MODULES_ID = '@deepseek-ai/dsh-client-modules'
  */
 export class AppWebEntry {
   private readonly el: HTMLElement
-  private readonly seams: BootSeams | undefined
+  private readonly options: BootOptions | undefined
   private readonly status = createLoaderStatusStore()
   private readonly settled = createSignal(false)
   private readonly error = createSignal<string | undefined>(undefined)
@@ -80,11 +93,12 @@ export class AppWebEntry {
   /**
    * Hold the mount point; all work happens in {@link run}.
    * @param el - mount point (the app's #root).
-   * @param seams - optional module transport overrides (test environments).
+   * @param options - optional module transport overrides (test environments)
+   * and the hosting shell's static plugin table (embedder webviews).
    */
-  constructor(el: HTMLElement, seams?: BootSeams) {
+  constructor(el: HTMLElement, options?: BootOptions) {
     this.el = el
-    this.seams = seams
+    this.options = options
   }
 
   /**
@@ -97,8 +111,9 @@ export class AppWebEntry {
   async run(): Promise<void> {
     this.manifest = parseBootManifest((globalThis as DshWindow).__DSH_BOOT__)
 
+    const { staticPlugins, ...seams } = this.options ?? {}
     this.modules = new ClientModuleSystem({
-      modules: this.manifest.modules, staticModules: getStaticModules(), ...this.seams,
+      modules: this.manifest.modules, staticModules: getStaticModules(), ...seams,
     })
     // The app-shell assembly is the only shell-own module: every other graph
     // row is a plugin bundle arriving through fetch (web2 single package form).
@@ -109,6 +124,12 @@ export class AppWebEntry {
     // trigger a real fetch), and put the instance on the kernel slot the
     // wrapper's apply reads to provide ctx.modules.
     this.modules.registerStatic(MODULES_ID, ModulesClient)
+    // Hosting-shell statics (embedder webviews): each graph row the shell
+    // bundled statically resolves like the two kernel modules above — no
+    // fetch, no execute, prefetch short-circuits.
+    for (const [id, module] of Object.entries(staticPlugins ?? {})) {
+      this.modules.registerStatic(id, module)
+    }
     ;(globalThis as DshWindow).__DSH_MODULES__ = this.modules
 
     this.root = createRoot(this.el)

@@ -1,0 +1,232 @@
+/**
+ * PostMessageApiClient transport behavior over a fake embedder port: unary
+ * round-trips ride the full base-client path (envelope wrap, zod parse), SSE
+ * responses rebuild as streamed frames, aborts cross the port both before and
+ * after the response head, and transport errors reject the calls that own
+ * them. The extension-host side of the port is faked here; its real replay
+ * loop lives with the VS Code extension.
+ */
+
+import { describe, expect, it } from 'vitest'
+import type { BridgeRequestMessage, BridgeResponseMessage } from '../src/client/webview-bridge.ts'
+import { PostMessageApiClient } from '../src/client/webview-bridge.ts'
+
+interface FakePort {
+  sent: BridgeRequestMessage[]
+  emit(message: BridgeResponseMessage): void
+  listenerCount(): number
+  port: {
+    postMessage(message: BridgeRequestMessage): void
+    onMessage(listener: (message: BridgeResponseMessage) => void): () => void
+  }
+}
+
+function fakePort(): FakePort {
+  const sent: BridgeRequestMessage[] = []
+  const listeners = new Set<(message: BridgeResponseMessage) => void>()
+  return {
+    sent,
+    emit: (message) => { for (const listener of [...listeners]) listener(message) },
+    listenerCount: () => listeners.size,
+    port: {
+      postMessage: (message) => { sent.push(message) },
+      onMessage: (listener) => {
+        listeners.add(listener)
+        return () => { listeners.delete(listener) }
+      },
+    },
+  }
+}
+
+function requestBodyOf(message: BridgeRequestMessage): { rpcId: string } {
+  if (message.type !== 'dsh-fetch' || message.body === undefined) throw new Error('expected a dsh-fetch with a body')
+  return JSON.parse(message.body) as { rpcId: string }
+}
+
+async function settle(): Promise<void> {
+  await new Promise(resolve => setTimeout(resolve, 0))
+}
+
+describe('PostMessageApiClient', () => {
+  it('round-trips a unary call through the port with the full envelope path', async () => {
+    const fake = fakePort()
+    const client = new PostMessageApiClient(fake.port)
+    const call = client.host.describe({})
+    await settle()
+
+    expect(fake.sent).toHaveLength(1)
+    const start = fake.sent[0]!
+    expect(start.type).toBe('dsh-fetch')
+    if (start.type !== 'dsh-fetch') throw new Error('unreachable')
+    expect(start.path).toBe('/api/host.describe')
+    expect(start.method).toBe('POST')
+    expect(start.headers['content-type']).toBe('application/json')
+
+    const { rpcId } = requestBodyOf(start)
+    const value = { protocolVersion: 1, version: 'v', cwd: '/w', attachedSessions: 0 }
+    fake.emit({ id: start.id, type: 'dsh-fetch-head', status: 200 })
+    fake.emit({
+      id: start.id,
+      type: 'dsh-fetch-chunk',
+      chunk: JSON.stringify({ type: 'server-response', rpcId, result: { ok: true, value } }),
+    })
+    fake.emit({ id: start.id, type: 'dsh-fetch-end' })
+
+    const response = await call
+    expect(response.result).toEqual({ ok: true, value })
+    expect(fake.listenerCount()).toBe(0)
+  })
+
+  it('streams SSE frames chunk by chunk, including a frame split across chunks', async () => {
+    const fake = fakePort()
+    const client = new PostMessageApiClient(fake.port)
+    const abort = new AbortController()
+    let opened = false
+    const stream = client.events.mux({}, abort.signal, () => { opened = true })
+    const frames: unknown[] = []
+    const consumed = (async () => {
+      for await (const frame of stream) frames.push(frame.payload)
+    })()
+    await settle()
+
+    const start = fake.sent[0]!
+    if (start.type !== 'dsh-fetch') throw new Error('expected the stream start')
+    expect(start.path).toBe('/api/events.mux')
+    fake.emit({ id: start.id, type: 'dsh-fetch-head', status: 200 })
+    await settle()
+    expect(opened).toBe(true)
+
+    const frame = { type: 'server-request', rpcId: 'frame-1', method: 'events.mux', payload: { type: 'session/subscribed', sessionId: 's1', lastSeq: -1 } }
+    const wire = `data: ${JSON.stringify(frame)}\n\n`
+    fake.emit({ id: start.id, type: 'dsh-fetch-chunk', chunk: wire.slice(0, 24) })
+    fake.emit({ id: start.id, type: 'dsh-fetch-chunk', chunk: wire.slice(24) })
+    fake.emit({ id: start.id, type: 'dsh-fetch-end' })
+    await consumed
+
+    expect(frames).toEqual([{ type: 'session/subscribed', sessionId: 's1', lastSeq: -1 }])
+  })
+
+  it('sends dsh-fetch-abort and rejects when aborted before the head', async () => {
+    const fake = fakePort()
+    const client = new PostMessageApiClient(fake.port)
+    const abort = new AbortController()
+    const stream = client.events.host({}, abort.signal)
+    const consumed = (async () => {
+      for await (const _frame of stream) { /* drain until the abort rejection */ }
+    })()
+    await settle()
+
+    abort.abort()
+    await expect(consumed).rejects.toThrow(/aborted/i)
+    expect(fake.sent.some(message => message.type === 'dsh-fetch-abort')).toBe(true)
+  })
+
+  it('fails the stream on a post-head abort', async () => {
+    const fake = fakePort()
+    const client = new PostMessageApiClient(fake.port)
+    const abort = new AbortController()
+    const stream = client.events.mux({}, abort.signal)
+    const consumed = (async () => {
+      for await (const _frame of stream) { /* drain until the abort error */ }
+    })()
+    await settle()
+
+    const start = fake.sent[0]!
+    fake.emit({ id: start.id, type: 'dsh-fetch-head', status: 200 })
+    await settle()
+    abort.abort()
+    await expect(consumed).rejects.toThrow(/aborted/i)
+  })
+
+  it('rejects immediately on an already-aborted signal without starting a request', async () => {
+    const fake = fakePort()
+    const client = new PostMessageApiClient(fake.port)
+    const aborted = AbortSignal.abort()
+    const stream = client.events.mux({}, aborted)
+    await expect((async () => {
+      for await (const _frame of stream) { /* drain until the abort rejection */ }
+    })()).rejects.toThrow(/aborted/i)
+    expect(fake.sent.filter(message => message.type === 'dsh-fetch')).toHaveLength(0)
+  })
+
+  it('rejects the owning call on a pre-head transport error and ignores foreign ids', async () => {
+    const fake = fakePort()
+    const client = new PostMessageApiClient(fake.port)
+    const call = client.sessions.list({})
+    await settle()
+
+    const start = fake.sent[0]!
+    // A foreign id must not settle this call.
+    fake.emit({ id: start.id + 999, type: 'dsh-fetch-error', message: 'someone else broke' })
+    fake.emit({ id: start.id, type: 'dsh-fetch-error', message: 'server unreachable' })
+    await expect(call).rejects.toThrow(/server unreachable/)
+  })
+
+  it('errors the stream body on a post-head transport error', async () => {
+    const fake = fakePort()
+    const client = new PostMessageApiClient(fake.port)
+    const abort = new AbortController()
+    const stream = client.events.mux({}, abort.signal)
+    const consumed = (async () => {
+      for await (const _frame of stream) { /* drain until the transport error */ }
+    })()
+    await settle()
+
+    const start = fake.sent[0]!
+    fake.emit({ id: start.id, type: 'dsh-fetch-head', status: 200 })
+    await settle()
+    fake.emit({ id: start.id, type: 'dsh-fetch-error', message: 'pipe collapsed' })
+    await expect(consumed).rejects.toThrow(/pipe collapsed/)
+  })
+
+  it('surfaces a non-2xx head as the base transport failure', async () => {
+    const fake = fakePort()
+    const client = new PostMessageApiClient(fake.port)
+    const call = client.sessions.list({})
+    await settle()
+
+    const start = fake.sent[0]!
+    fake.emit({ id: start.id, type: 'dsh-fetch-head', status: 503 })
+    await expect(call).rejects.toThrow(/HTTP 503/)
+  })
+
+  it('carries a signal-less user-paced call (the caller-signal-only unary policy)', async () => {
+    // host.pickDirectory without a caller signal reaches doFetch with no
+    // signal at all — the transport must not require one.
+    const fake = fakePort()
+    const client = new PostMessageApiClient(fake.port)
+    const call = client.host.pickDirectory({})
+    await settle()
+
+    const start = fake.sent[0]!
+    if (start.type !== 'dsh-fetch') throw new Error('expected the start')
+    fake.emit({ id: start.id, type: 'dsh-fetch-head', status: 200 })
+    fake.emit({ id: start.id, type: 'dsh-fetch-chunk', chunk: JSON.stringify({ type: 'server-response', rpcId: requestBodyOf(start).rpcId, result: { ok: true, value: { path: null } } }) })
+    fake.emit({ id: start.id, type: 'dsh-fetch-end' })
+    expect((await call).result).toEqual({ ok: true, value: { path: null } })
+  })
+
+  it('correlates concurrent requests by id', async () => {
+    const fake = fakePort()
+    const client = new PostMessageApiClient(fake.port)
+    const first = client.sessions.list({})
+    const second = client.host.describe({})
+    await settle()
+
+    const [a, b] = fake.sent
+    if (a?.type !== 'dsh-fetch' || b?.type !== 'dsh-fetch') throw new Error('expected two starts')
+    expect(a.id).not.toBe(b.id)
+
+    // Answer the second request first: correlation must route by id, not order.
+    const describeValue = { protocolVersion: 1, version: 'v', cwd: '/w', attachedSessions: 0 }
+    fake.emit({ id: b.id, type: 'dsh-fetch-head', status: 200 })
+    fake.emit({ id: b.id, type: 'dsh-fetch-chunk', chunk: JSON.stringify({ type: 'server-response', rpcId: requestBodyOf(b).rpcId, result: { ok: true, value: describeValue } }) })
+    fake.emit({ id: b.id, type: 'dsh-fetch-end' })
+    fake.emit({ id: a.id, type: 'dsh-fetch-head', status: 200 })
+    fake.emit({ id: a.id, type: 'dsh-fetch-chunk', chunk: JSON.stringify({ type: 'server-response', rpcId: requestBodyOf(a).rpcId, result: { ok: true, value: { items: [] } } }) })
+    fake.emit({ id: a.id, type: 'dsh-fetch-end' })
+
+    expect((await second).result).toEqual({ ok: true, value: describeValue })
+    expect((await first).result).toEqual({ ok: true, value: { items: [] } })
+  })
+})
