@@ -8,7 +8,8 @@ import { z } from 'zod'
 import {
   contentBlockSchema, sessionCancelRequestSchema, sessionCancelValueSchema, sessionCreateRequestSchema,
   sessionCreateValueSchema, sessionEventSchema, sessionHistoryRequestSchema, sessionHistoryValueSchema,
-  sessionIdSchema, sessionListRequestSchema, sessionListValueSchema, sessionModelsRequestSchema,
+  sessionIdSchema, sessionInjectContextRequestSchema, sessionInjectContextValueSchema,
+  sessionListRequestSchema, sessionListValueSchema, sessionModelsRequestSchema,
   sessionModelsValueSchema, sessionPromptRequestSchema, sessionPromptValueSchema,
   sessionSearchRequestSchema, sessionSearchValueSchema, sessionSelectModelRequestSchema,
   sessionSelectModelValueSchema, sessionSummarySchema,
@@ -266,6 +267,11 @@ describe('sessions domain schemas', () => {
     const prompt = sessionPromptRequestSchema.parse({ sessionId: 's1', mode: 'queue', content: [{ type: 'text', text: 'hi' }] })
     expect(prompt.mode).toBe('queue')
     expect(() => sessionPromptRequestSchema.parse({ sessionId: 's1', mode: 'inject', content: [] })).toThrow()
+    const inject = sessionInjectContextRequestSchema.parse({ sessionId: 's1', content: [{ type: 'text', text: 'ctx' }] })
+    expect(inject.sessionId).toBe('s1')
+    // Context injection carries content only — no mode, and never an empty batch.
+    expect(() => sessionInjectContextRequestSchema.parse({ sessionId: 's1', content: [] })).toThrow()
+    expect(sessionInjectContextValueSchema.parse({ accepted: true }).accepted).toBe(true)
     expect(sessionPromptValueSchema.parse({ accepted: true }).accepted).toBe(true)
     // The command slot appears only when the prompt dispatched a slash command.
     const dispatched = sessionPromptValueSchema.parse({ accepted: true, command: { kind: 'success', text: 'Goal set' } })
@@ -335,9 +341,12 @@ describe('subagent domain schemas', () => {
 describe('host domain schemas', () => {
   it('validates describe request/value', () => {
     expect(hostDescribeRequestSchema.parse({})).toEqual({})
-    const value = hostDescribeValueSchema.parse({ version: '1', cwd: '/x', provider: 'p', model: 'm', attachedSessions: 2 })
+    const value = hostDescribeValueSchema.parse({ protocolVersion: 1, version: '1', cwd: '/x', provider: 'p', model: 'm', attachedSessions: 2 })
     expect(value.attachedSessions).toBe(2)
-    expect(hostDescribeValueSchema.parse({ version: '1', cwd: '/x', attachedSessions: 0 }).provider).toBeUndefined()
+    expect(value.protocolVersion).toBe(1)
+    expect(hostDescribeValueSchema.parse({ protocolVersion: 1, version: '1', cwd: '/x', attachedSessions: 0 }).provider).toBeUndefined()
+    // The independently-released-client gate is mandatory in the value.
+    expect(() => hostDescribeValueSchema.parse({ version: '1', cwd: '/x', attachedSessions: 0 })).toThrow()
   })
 
   it('validates the browse listing/creation payloads', () => {

@@ -96,6 +96,9 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
       async prompt(request) {
         return { rpcId: request.rpcId, result: { ok: true, value: { accepted: true as const } } }
       },
+      async injectContext(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { accepted: true as const } } }
+      },
       async updateQueue(request) {
         return { rpcId: request.rpcId, result: { ok: true, value: { accepted: true as const } } }
       },
@@ -130,7 +133,7 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
     },
     host: {
       async describe(request) {
-        return { rpcId: request.rpcId, result: { ok: true, value: { version: 'v', cwd: '/w', attachedSessions: 0 } } }
+        return { rpcId: request.rpcId, result: { ok: true, value: { protocolVersion: 1, version: 'v', cwd: '/w', attachedSessions: 0 } } }
       },
       async pickDirectory(request) {
         return { rpcId: request.rpcId, result: { ok: true, value: { path: null } } }
@@ -321,6 +324,7 @@ describe('unary round trip (handler ⇄ client, no network)', () => {
     const renamed = await c.sessions.rename({ sessionId: 's' as never, title: 'named' })
     expect(renamed.result).toMatchObject({ ok: true, value: { title: 'named', seq: 0 } })
     expect((await c.sessions.prompt({ sessionId: 's' as never, mode: 'queue', content: [{ type: 'text', text: 'x' }] })).result.ok).toBe(true)
+    expect((await c.sessions.injectContext({ sessionId: 's' as never, content: [{ type: 'text', text: 'ctx' }] })).result.ok).toBe(true)
     expect((await c.sessions.updateQueue({
       sessionId: 's' as never,
       itemId: 'item-1' as never,
