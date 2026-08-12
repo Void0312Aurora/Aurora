@@ -14,7 +14,7 @@
     "website"
   ],
   "scripts": {
-    "build": "npm run build:lib && npm run build:web",
+    "build": "npm run build:lib && npm run build:web && pnpm --filter dsh-vscode run build",
     "build:lib": "node apps/desktop/scripts/materialize-workspace-deps.mjs && tsc -b && node apps/desktop/scripts/fixup-import-paths.mjs && tsdown",
     "build:web": "pnpm --filter @deepseek-ai/dsh-frontend run build",
     "clean": "tsx scripts/clean.ts",
