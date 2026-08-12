@@ -12,7 +12,8 @@
   "ignoreWorkspaces": [
     "vendor/*",
     "python/sdk-runtime",
-    "apps/desktop/closure"
+    "apps/desktop/closure",
+    "apps/vscode/closure"
   ],
   "ignoreDependencies": [
     "@yarnpkg/cli-dist",
@@ -645,6 +646,19 @@
         "src/**/*.ts",
         "tests/**/*.ts",
         "scripts/**/*.mjs"
+      ]
+    },
+    "apps/vscode": {
+      "entry": [
+        "webview/main.ts",
+        "webview/theme.ts",
+        "webview/node-module-stub.ts",
+        "tests/**/*.spec.ts"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "webview/**/*.ts",
+        "tests/**/*.ts"
       ]
     },
     "packages/client/modules": {
