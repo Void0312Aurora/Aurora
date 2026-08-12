@@ -7,11 +7,13 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { apply, type ConnectionHandle } from '../src/client/index.ts'
 import { FixtureApiClient } from '../src/client/fixture.ts'
 import { WebApiClient } from '../src/client/web-api-client.ts'
+import { PostMessageApiClient } from '../src/client/webview-bridge.ts'
 
 type Win = { location?: { hostname: string; search: string } }
 
 afterEach(() => {
   delete (globalThis as Win).location
+  globalThis.__DSH_WEBVIEW_BRIDGE__ = undefined
 })
 
 async function mount(): Promise<ConnectionHandle> {
@@ -42,6 +44,20 @@ describe('connection client apply', () => {
   it('reports non-loopback page authority through the connection handle', async () => {
     ;(globalThis as Win).location = { hostname: '192.0.2.20', search: '' }
     expect((await mount()).isLoopback).toBe(false)
+  })
+
+  it('selects the webview bridge transport when the bootstrap filled the global seat', async () => {
+    // A non-loopback page authority (the embedder origin) must not matter:
+    // the bridge reaches the server through the extension host's loopback fetch.
+    ;(globalThis as Win).location = { hostname: 'webview.invalid', search: '?fixture' }
+    globalThis.__DSH_WEBVIEW_BRIDGE__ = {
+      postMessage: () => {},
+      onMessage: () => () => {},
+    }
+    const handle = await mount()
+    // The bridge wins over the ?fixture switch too.
+    expect(handle.api).toBeInstanceOf(PostMessageApiClient)
+    expect(handle.isLoopback).toBe(true)
   })
 
   it('start() hands out one loop, rejects a second consumer, and stop() aborts the streams', async () => {
