@@ -1,0 +1,18 @@
+# The vsix ships only the runnable payload: the bundled extension host
+# (dist/extension.js), the static webview bundle (dist/webview/**), the
+# materialized dsh web closure (deploy/**), and media. Everything else —
+# sources, tests, tsconfig, the closure manifest, node_modules — is excluded.
+# The extension host is a self-contained tsdown bundle and the webview is a
+# self-contained vite bundle, so no node_modules is needed at runtime; the
+# closure is plain files the launcher runs under Electron-as-Node.
+src/**
+webview/**
+tests/**
+closure/**
+node_modules/**
+**/*.ts
+**/*.map
+tsconfig.json
+tsdown.config.ts
+.gitignore
+README.i18n.yaml
