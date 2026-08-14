@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-12-vscode-rich-ui-extension.md
-2026-08-12-vscode-rich-ui-extension.md: 74e4e582826f16acf3ff2e487bdbddd040382e5b
-2026-08-12-vscode-rich-ui-extension.zh.md: 141832d399350c2a26e4f7fc30abb5a6bbd59457
+2026-08-12-vscode-rich-ui-extension.md: 164dab9670f4f4e0a4ccf46b3e6c75e1c8584df7
+2026-08-12-vscode-rich-ui-extension.zh.md: 66cb3cc28db54ceaf698c1750a130eecd13c6214

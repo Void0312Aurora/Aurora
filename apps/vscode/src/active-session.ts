@@ -20,6 +20,13 @@ export interface ActiveSessionOptions {
   onActiveChanged?: (previous: string | undefined, current: string | undefined) => void
   /** Backoff before reopening a dropped stream; test seam. Defaults to 1000ms. */
   reconnectMs?: number
+  /**
+   * Fired after the active session id changes (including to undefined), with
+   * the previous id. Lets a consumer re-target work that follows the active
+   * session — the context feed re-injects the current editor context at the
+   * new session.
+   */
+  onActiveChanged?: (previous: string | undefined) => void
 }
 
 /**
@@ -85,6 +92,13 @@ export class ActiveSessionTracker {
         // Workspace, settings, model, and error frames do not move the cursor.
         break
     }
+  }
+
+  private setActive(sessionId: string | undefined): void {
+    if (this.activeId === sessionId) return
+    const previous = this.activeId
+    this.activeId = sessionId
+    this.options.onActiveChanged?.(previous)
   }
 
   /** Stop the loop. */

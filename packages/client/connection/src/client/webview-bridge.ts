@@ -170,7 +170,6 @@ export class PostMessageApiClient extends AbstractApiClient {
             break
           }
           case 'dsh-fetch-error': {
-            fail(new Error(message.message))
             break
           }
         }
