@@ -21,6 +21,8 @@ pnpm --filter @deepseek-ai/dsh-desktop dev
 3. 本检出目录的 CLI —— 有构建产物 `apps/cli/lib/bin.js` 时用它，否则用根 `pnpm run dsh` 脚本所用的 tsx 源码启动（`node --import tsx/esm apps/cli/src/bin.ts`）；
 4. `PATH` 上的 `dsh`。
 
+共享 spawn 边界无需启用通用 shell，也无需另行指定 JavaScript 入口点，即可运行由 `DSH_BIN` 或 `PATH` 解析到的 Windows npm 命令 shim。
+
 服务器始终监听 `127.0.0.1` 的 OS 分配端口（`--port 0`），因此永远不会与现有 `dsh web` 冲突；从 stdout 解析就绪行 `dsh web: http://127.0.0.1:<port>`，然后轮询 HTTP 200。回环请求默认通过 /api 浏览器信任栅栏，因此无需额外标志。若 `deploy/` 已物化（运行过 `deploy:closure` 或 `dist`），嵌入闭包会遮蔽检出目录分支——CLI 改动后需重新运行 `deploy:closure`，或设置 `DSH_BIN` 强制指定启动方式。
 
 ## 行为说明
@@ -46,4 +48,4 @@ pnpm --filter @deepseek-ai/dsh-desktop dist:dir    # unpacked dir only, for a qu
 
 ## 测试
 
-纯启动器逻辑——命令解析、就绪行解析与就绪轮询——位于 [`@deepseek-ai/dsh-web-launcher`](../../packages/util/web-launcher/README.md)，自带无密钥测试套件；本包的测试覆盖构建产物 import 图与装配后的 Electron 生命周期。
+纯启动器逻辑——命令解析、兼容 Windows 的 spawn、就绪行解析与就绪轮询——位于 [`@deepseek-ai/dsh-web-launcher`](../../packages/util/web-launcher/README.md)，自带无密钥测试套件；本包的测试覆盖构建产物 import 图与装配后的 Electron 生命周期。
