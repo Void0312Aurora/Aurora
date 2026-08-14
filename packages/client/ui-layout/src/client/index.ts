@@ -4,16 +4,15 @@
  * four child slots (declaration = exclusive render authority), seats the
  * layout store (panel geometry), and wires the panel-action service face.
  * ctx.layout is the cross-plugin panel-action seam; navigation state lives
- * with the runtime sessions service. A second effect seats the theme
- * presenter, which projects ctx.theme snapshots onto document.body.
+ * with the runtime sessions service. Theme projection onto the document is
+ * ui-theme's own presenter, not this shell's — a replaceable shell must not
+ * own it.
  */
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
-import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
 import type { PanelActions } from './service.ts'
 import { AppFrame } from './AppFrame.tsx'
 import { createLayoutStore } from './stores.ts'
 import { LayoutService } from './service.ts'
-import { ThemePresenter } from './theme-presenter.ts'
 
 // Contract surface only (export-convergence rule: cross-package consumers
 // keep a symbol exported; test-only/package-internal symbols live off /src).
@@ -64,8 +63,14 @@ export interface ConvOwnerProps {}
 /** Details owner share: empty — sessionId arrives as a framework-standard prop. */
 export interface DetailsOwnerProps {}
 
-/** Required services (cordis fiber inject — the loader passes the whole export surface as an object plugin). */
-export const inject = ['slots', 'theme']
+/**
+ * Required services (cordis fiber inject — the loader passes the whole export
+ * surface as an object plugin). Theme is absent on purpose: ui-theme seats its
+ * own document presenter, and every plugin's apply completes before the shell
+ * renders, so the palette is on the page by the first frame without an edge
+ * here.
+ */
+export const inject = ['slots']
 
 /**
  * Client plugin body: provide ctx.layout, then one register() call — AppFrame
@@ -100,16 +105,4 @@ export function apply(ctx: ClientContext): void {
       void disposeService()
     }
   }, 'ui-layout: service + root registration')
-
-  // Theme presentation: pure DOM writes from resolved snapshots — initial
-  // state through the getter once, then event-driven only; no React path.
-  ctx.effect(() => {
-    const presenter = new ThemePresenter()
-    presenter.apply(ctx.theme.getTheme())
-    const off = ctx.on('theme/change', (snapshot) => { presenter.apply(snapshot) })
-    return () => {
-      off()
-      presenter.dispose()
-    }
-  }, 'ui-layout: theme presenter')
 }

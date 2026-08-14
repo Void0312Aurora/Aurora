@@ -9,8 +9,11 @@
   bottom: calc(100% + 4px);
   left: 0;
   z-index: 100;
-  min-width: 260px;
-  max-width: 537px;
+  /* The design minimum, except where the host itself is narrower than it (an
+     editor sidebar): a floor wider than the viewport would push the menu past
+     the composer it belongs to. */
+  min-width: min(260px, calc(100vw - 16px));
+  max-width: min(537px, calc(100vw - 16px));
   /* Height cap: the 320px design maximum, clamped at runtime to the space
    * above the composer (inline max-height set in MenuView.tsx). */
   max-height: 320px;
