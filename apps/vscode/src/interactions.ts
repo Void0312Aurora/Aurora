@@ -59,6 +59,11 @@ interface CachedCall {
   view?: ToolCallView
 }
 
+/** Cache key scoping a provider callId to its session (mux multiplexes sessions). */
+function callKey(sessionId: string, callId: string): string {
+  return `${sessionId}\u0000${callId}`
+}
+
 /**
  * Consume the mux stream and drive native approval/question prompts. Start with
  * {@link run}; stop with {@link dispose}. Reconnection reopens the stream (the
@@ -66,6 +71,10 @@ interface CachedCall {
  * reconciliation is needed for this surface.
  */
 export class NativeInteractions {
+  // Cached tool calls, keyed by (sessionId, callId): mux multiplexes sessions
+  // and a provider callId is only unique within its session, so a bare callId
+  // key could surface another session's command in an approval. Entries are
+  // dropped when the call's tool/result arrives, bounding the cache.
   private readonly calls = new Map<string, CachedCall>()
   // Keyed by the correlation id a `*/resolved` frame carries: the approvalId
   // for approvals, the request rpcId for questions. Aborting closes a prompt
@@ -96,9 +105,27 @@ export class NativeInteractions {
         this.options.log(`mux stream dropped: ${error instanceof Error ? error.message : String(error)}`)
       }
       if (abort.signal.aborted) return
-      // A clean end or a drop both reopen after a short backoff; pending
-      // approval/question frames replay on the fresh open.
+      // The generation ended (drop or clean close). Close every open prompt:
+      // the reopened stream replays still-pending approval/question frames, so
+      // leaving the old prompts up would double them (and the reopened frame's
+      // handler would overwrite their pending entries). The replay recreates
+      // whatever is still pending.
+      this.resetPending()
       await new Promise(resolve => setTimeout(resolve, reconnectMs))
+    }
+  }
+
+  /** Abort and clear every open prompt (a stream generation ended). */
+  private resetPending(): void {
+    for (const controller of this.pending.values()) controller.abort()
+    this.pending.clear()
+  }
+
+  /** Drop every cached call for one session (its turn ended; the calls are settled). */
+  private purgeSessionCalls(sessionId: string): void {
+    const prefix = callKey(sessionId, '')
+    for (const key of this.calls.keys()) {
+      if (key.startsWith(prefix)) this.calls.delete(key)
     }
   }
 
@@ -106,12 +133,17 @@ export class NativeInteractions {
     const frame = envelope.payload
     switch (frame.type) {
       case 'session/event':
-        // Cache tool calls so an approval can show what it will do. The call's
-        // view (when the presenter produced one) rides the same frame.
+        // Cache tool calls so an approval can show what it will do (the call's
+        // view rides the same frame). A turn's calls are settled at turn/end
+        // (any approval already happened during the turn), so purge that
+        // session's cache there — this bounds the cache without needing the
+        // result event's callId.
         if (frame.event.type === 'tool/call') {
           const data = frame.event.data as { callId: string; name: string }
           const view = frame.view?.for === 'call' ? frame.view.view : undefined
-          this.calls.set(data.callId, { name: data.name, ...view === undefined ? {} : { view } })
+          this.calls.set(callKey(frame.sessionId, data.callId), { name: data.name, ...view === undefined ? {} : { view } })
+        } else if (frame.event.type === 'turn/end') {
+          this.purgeSessionCalls(frame.sessionId)
         }
         break
       case 'approval/requested':
@@ -142,10 +174,13 @@ export class NativeInteractions {
     correlationId: string,
     frame: Extract<MuxFrame, { type: 'approval/requested' }>,
   ): Promise<void> {
+    // A prompt is already open for this request (a duplicate frame within one
+    // generation); do not open a second.
+    if (this.pending.has(correlationId)) return
     const abort = new AbortController()
     this.pending.set(correlationId, abort)
     try {
-      const cached = frame.callId === undefined ? undefined : this.calls.get(frame.callId)
+      const cached = frame.callId === undefined ? undefined : this.calls.get(callKey(frame.sessionId, frame.callId))
       const prompt: ApprovalPrompt = {
         sessionId: frame.sessionId,
         toolName: frame.toolName,
@@ -156,7 +191,7 @@ export class NativeInteractions {
       if (outcome === 'dismissed' || abort.signal.aborted) return
       await this.respond(respondId, { sessionId: frame.sessionId, approvalId: frame.approvalId, outcome })
     } finally {
-      this.pending.delete(correlationId)
+      this.clearPending(correlationId, abort)
     }
   }
 
@@ -165,6 +200,7 @@ export class NativeInteractions {
     frame: Extract<MuxFrame, { type: 'question/requested' }>,
   ): Promise<void> {
     const correlationId = respondId as unknown as string
+    if (this.pending.has(correlationId)) return
     const abort = new AbortController()
     this.pending.set(correlationId, abort)
     try {
@@ -172,8 +208,13 @@ export class NativeInteractions {
       if (answer === undefined || abort.signal.aborted) return
       await this.respond(respondId, { sessionId: frame.sessionId, answer })
     } finally {
-      this.pending.delete(correlationId)
+      this.clearPending(correlationId, abort)
     }
+  }
+
+  /** Remove a pending entry only when it still holds this exact controller (a reset/replay may have replaced it). */
+  private clearPending(correlationId: string, abort: AbortController): void {
+    if (this.pending.get(correlationId) === abort) this.pending.delete(correlationId)
   }
 
   private async respond(rpcId: RpcId, value: unknown): Promise<void> {

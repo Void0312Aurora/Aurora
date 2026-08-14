@@ -45,6 +45,7 @@ export class ServerRuntime {
   private child: ChildProcess | undefined
   private urlValue: URL | undefined
   private startTask: Promise<URL> | undefined
+  private startAbort: AbortController | undefined
   private disposed = false
 
   /** @param options - environment facts and lifecycle sinks. */
@@ -53,6 +54,15 @@ export class ServerRuntime {
   /** The advertised server origin once readiness completed. */
   get url(): URL | undefined {
     return this.urlValue
+  }
+
+  /**
+   * True once {@link dispose} ran (set synchronously before the start abort
+   * fires, so a caller observing a rejected start sees it without a race).
+   * A start that rejects against a disposed runtime is teardown, not failure.
+   */
+  get isDisposed(): boolean {
+    return this.disposed
   }
 
   /**
@@ -73,6 +83,11 @@ export class ServerRuntime {
 
   private async performStart(): Promise<URL> {
     const { options } = this
+    // One controller per attempt: dispose() aborts it so the readiness poll
+    // (up to 30s) stops at once instead of running out against a server we are
+    // already tearing down.
+    const startAbort = new AbortController()
+    this.startAbort = startAbort
     const launch = resolveWebLaunch({
       env: options.env,
       appDir: options.appDir,
@@ -123,7 +138,10 @@ export class ServerRuntime {
       }),
       spawnFailure,
     ])
-    await waitForHttpOk(url, options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl })
+    await waitForHttpOk(url, {
+      signal: startAbort.signal,
+      ...options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl },
+    })
     // A 200 on the advertised port is not necessarily ours: if the child died
     // while the poll ran, some other local server may have answered. Adopting
     // a stranger's process would be wrong, so fail the start instead.
@@ -138,6 +156,8 @@ export class ServerRuntime {
   /** Terminate the server tree and refuse further starts. Idempotent. */
   async dispose(): Promise<void> {
     this.disposed = true
+    // Cancel an in-flight readiness poll so it does not run out its deadline.
+    this.startAbort?.abort()
     const child = this.child
     this.child = undefined
     this.urlValue = undefined

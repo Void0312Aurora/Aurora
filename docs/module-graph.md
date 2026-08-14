@@ -15,6 +15,7 @@ flowchart TD
     pkg_process_tree["process-tree"]
     pkg_retention["retention"]
     pkg_timeout["timeout"]
+    pkg_web_launcher["web-launcher"]
   end
   subgraph group_llm["packages/llm"]
     pkg_llm["llm"]
@@ -279,6 +280,7 @@ flowchart TD
   pkg_process_tree --> pkg_invariants
   pkg_retention --> pkg_invariants
   pkg_timeout --> pkg_invariants
+  pkg_web_launcher --> pkg_invariants
   pkg_scope --> pkg_invariants
   pkg_skill --> pkg_invariants
   pkg_acp_snapshot --> pkg_invariants
@@ -317,6 +319,9 @@ flowchart TD
   pkg_client_test_runtime --> pkg_client_web_react
   pkg_client_test_runtime --> pkg_host_apiproxy
   pkg_client_test_runtime --> pkg_invariants
+  pkg_client_ui_layout --> pkg_client_runtime
+  pkg_client_ui_layout --> pkg_client_ui_slots
+  pkg_client_ui_layout --> pkg_invariants
   pkg_client_ui_settings --> pkg_client_runtime
   pkg_client_ui_settings --> pkg_client_ui_primitives
   pkg_client_ui_settings --> pkg_client_ui_slots
@@ -452,10 +457,6 @@ flowchart TD
   pkg_app_boot --> pkg_invariants
   pkg_app_boot --> pkg_paths
   pkg_app_boot --> pkg_system_prompt
-  pkg_client_ui_layout --> pkg_client_runtime
-  pkg_client_ui_layout --> pkg_client_ui_slots
-  pkg_client_ui_layout --> pkg_client_ui_theme
-  pkg_client_ui_layout --> pkg_invariants
   pkg_client_ui_skill --> pkg_client_connection
   pkg_client_ui_skill --> pkg_client_runtime
   pkg_client_ui_skill --> pkg_client_ui_slash
@@ -1085,6 +1086,7 @@ flowchart TD
 | [`process-tree`](../packages/util/process-tree) | `util` | [`invariants`](../packages/support/invariants) |
 | [`retention`](../packages/util/retention) | `util` | [`invariants`](../packages/support/invariants) |
 | [`timeout`](../packages/util/timeout) | `util` | [`invariants`](../packages/support/invariants) |
+| [`web-launcher`](../packages/util/web-launcher) | `util` | [`invariants`](../packages/support/invariants) |
 | [`scope`](../packages/core/scope) | `core` | [`invariants`](../packages/support/invariants) |
 | [`skill`](../packages/skill/skill) | `skill` | [`invariants`](../packages/support/invariants) |
 | [`acp-snapshot`](../packages/support/acp-snapshot) | `support` | [`invariants`](../packages/support/invariants) |
@@ -1111,6 +1113,7 @@ flowchart TD
 | [`client-hmr`](../packages/client/hmr) | `client` | [`client-modules`](../packages/client/modules), [`host-webserver`](../packages/host/webserver), [`invariants`](../packages/support/invariants) |
 | [`client-locale`](../packages/client/locale) | `client` | [`client-runtime`](../packages/client/runtime), [`client-ui-primitives`](../packages/client/ui-primitives), [`client-ui-slots`](../packages/client/ui-slots), [`invariants`](../packages/support/invariants) |
 | [`client-test-runtime`](../packages/client/test-runtime) | `client` | [`client-runtime`](../packages/client/runtime), [`client-ui-slots`](../packages/client/ui-slots), [`client-web-react`](../packages/client/web-react), [`host-apiproxy`](../packages/host/apiproxy), [`invariants`](../packages/support/invariants) |
+| [`client-ui-layout`](../packages/client/ui-layout) | `client` | [`client-runtime`](../packages/client/runtime), [`client-ui-slots`](../packages/client/ui-slots), [`invariants`](../packages/support/invariants) |
 | [`client-ui-settings`](../packages/client/ui-settings) | `client` | [`client-runtime`](../packages/client/runtime), [`client-ui-primitives`](../packages/client/ui-primitives), [`client-ui-slots`](../packages/client/ui-slots), [`invariants`](../packages/support/invariants) |
 | [`client-ui-trajectory`](../packages/client/ui-trajectory) | `client` | [`client-runtime`](../packages/client/runtime), [`client-ui-primitives`](../packages/client/ui-primitives), [`invariants`](../packages/support/invariants) |
 | [`credentials`](../packages/credentials/credentials) | `credentials` | [`brand`](../packages/util/brand), [`invariants`](../packages/support/invariants) |
@@ -1150,7 +1153,6 @@ flowchart TD
 | [`session-persistence`](../packages/session-persistence/session-persistence) | `session-persistence` | [`brand`](../packages/util/brand), [`invariants`](../packages/support/invariants), [`session`](../packages/core/session) |
 | [`llm-replay`](../packages/support/llm-replay) | `support` | [`invariants`](../packages/support/invariants), [`llm`](../packages/llm/llm), [`session`](../packages/core/session) |
 | [`app-boot`](../packages/ui/app-boot) | `ui` | [`invariants`](../packages/support/invariants), [`paths`](../packages/util/paths), [`system-prompt`](../packages/core/system-prompt) |
-| [`client-ui-layout`](../packages/client/ui-layout) | `client` | [`client-runtime`](../packages/client/runtime), [`client-ui-slots`](../packages/client/ui-slots), [`client-ui-theme`](../packages/client/ui-theme), [`invariants`](../packages/support/invariants) |
 | [`client-ui-skill`](../packages/client/ui-skill) | `client` | [`client-connection`](../packages/client/connection), [`client-runtime`](../packages/client/runtime), [`client-ui-slash`](../packages/client/ui-slash), [`client-ui-slots`](../packages/client/ui-slots), [`invariants`](../packages/support/invariants) |
 | [`code-runtime-worker`](../packages/code-runtime/code-runtime-worker) | `code-runtime` | [`code-runtime`](../packages/code-runtime/code-runtime), [`invariants`](../packages/support/invariants), [`session`](../packages/core/session), [`timeout`](../packages/util/timeout) |
 | [`host-directory-picker-browse`](../packages/host/directory-picker-browse) | `host` | [`client-locale`](../packages/client/locale), [`client-runtime`](../packages/client/runtime), [`client-ui-primitives`](../packages/client/ui-primitives), [`client-ui-slots`](../packages/client/ui-slots), [`client-ui-workspace`](../packages/client/ui-workspace), [`invariants`](../packages/support/invariants) |

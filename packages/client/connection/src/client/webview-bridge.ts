@@ -83,12 +83,18 @@ export class PostMessageApiClient extends AbstractApiClient {
       const encoder = new TextEncoder()
       let bodyController: ReadableStreamDefaultController<Uint8Array> | undefined
       let settled = false
+      // One cleanup for every exit (head-then-end, error, abort, stream
+      // cancel): drop the port subscription and the abort listener so neither
+      // leaks past the request's life.
+      const cleanup = (): void => {
+        unsubscribe()
+        signal?.removeEventListener('abort', onAbort)
+      }
       // Callers guard on `settled` before invoking: after the head, failures
       // route to the body stream, never back to the fetch promise.
-      const finish = (): void => { unsubscribe() }
       const failBeforeHead = (error: Error): void => {
         settled = true
-        finish()
+        cleanup()
         reject(error)
       }
       const unsubscribe = this.port.onMessage((message) => {
@@ -98,6 +104,12 @@ export class PostMessageApiClient extends AbstractApiClient {
             settled = true
             const stream = new ReadableStream<Uint8Array>({
               start: (controller) => { bodyController = controller },
+              // The consumer cancelled the body (stopped reading): tell the
+              // host to abort the upstream fetch, then clean up.
+              cancel: () => {
+                this.port.postMessage({ type: 'dsh-fetch-abort', id })
+                cleanup()
+              },
             })
             resolve(new Response(stream, { status: message.status }))
             break
@@ -107,13 +119,13 @@ export class PostMessageApiClient extends AbstractApiClient {
             break
           case 'dsh-fetch-end':
             bodyController?.close()
-            finish()
+            cleanup()
             break
           case 'dsh-fetch-error': {
             const error = new Error(message.message)
             if (settled) bodyController?.error(error)
             else failBeforeHead(error)
-            finish()
+            cleanup()
             break
           }
         }
@@ -123,6 +135,7 @@ export class PostMessageApiClient extends AbstractApiClient {
         const error = new DOMException('The operation was aborted.', 'AbortError')
         if (settled) bodyController?.error(error)
         else failBeforeHead(error)
+        cleanup()
       }
       if (signal !== undefined) {
         if (signal.aborted) {

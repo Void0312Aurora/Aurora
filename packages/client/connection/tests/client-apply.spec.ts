@@ -34,7 +34,9 @@ describe('connection client apply', () => {
 
   it('selects the fixture client under ?fixture (and with no location at all stays real)', async () => {
     ;(globalThis as Win).location = { hostname: '127.0.0.1', search: '?fixture' }
-    expect((await mount()).api).toBeInstanceOf(FixtureApiClient)
+    const fixture = await mount()
+    expect(fixture.api).toBeInstanceOf(FixtureApiClient)
+    expect(fixture.isLoopback).toBe(false)
     delete (globalThis as Win).location
     const handle = await mount()
     expect(handle.api).toBeInstanceOf(WebApiClient)

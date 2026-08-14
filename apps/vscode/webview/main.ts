@@ -21,20 +21,25 @@ interface VsCodeWebviewApi {
 
 declare function acquireVsCodeApi(): VsCodeWebviewApi
 
-const vscodeApi = acquireVsCodeApi()
-const listeners = new Set<(message: BridgeResponseMessage) => void>()
-window.addEventListener('message', (event: MessageEvent<BridgeResponseMessage>) => {
-  for (const listener of [...listeners]) listener(event.data)
-})
+// `?fixture` is the keyless runnable-example mode used by the browser snapshot:
+// without a bridge seat, the shared connection plugin selects FixtureApiClient.
+// Production panel documents carry no query and always take the host bridge.
+if (!new URLSearchParams(location.search).has('fixture')) {
+  const vscodeApi = acquireVsCodeApi()
+  const listeners = new Set<(message: BridgeResponseMessage) => void>()
+  window.addEventListener('message', (event: MessageEvent<BridgeResponseMessage>) => {
+    for (const listener of [...listeners]) listener(event.data)
+  })
 
-// The bridge port must be seated before the client tree boots: the
-// connection plugin's apply reads it to select the postMessage transport.
-globalThis.__DSH_WEBVIEW_BRIDGE__ = {
-  postMessage: (message) => { vscodeApi.postMessage(message) },
-  onMessage: (listener) => {
-    listeners.add(listener)
-    return () => { listeners.delete(listener) }
-  },
+  // The bridge port must be seated before the client tree boots: the
+  // connection plugin's apply reads it to select the postMessage transport.
+  globalThis.__DSH_WEBVIEW_BRIDGE__ = {
+    postMessage: (message) => { vscodeApi.postMessage(message) },
+    onMessage: (listener) => {
+      listeners.add(listener)
+      return () => { listeners.delete(listener) }
+    },
+  }
 }
 ;(globalThis as unknown as DshWindow).__DSH_BOOT__ = staticBootGraph()
 

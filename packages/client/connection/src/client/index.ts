@@ -87,7 +87,11 @@ export function apply(ctx: Context): void {
     // A bridged webview reaches the server through the extension host's own
     // loopback fetch, so it carries loopback capability regardless of the
     // page authority (the embedder origin is never the wire authority).
-    isLoopback: bridgePort !== undefined || pageLocation === undefined || isLoopbackHostname(pageLocation.hostname),
+    // Fixture mode has no host behind it even when the page itself is served
+    // from loopback; host-only interactions must use their in-memory fallback.
+    isLoopback: bridgePort !== undefined
+      || pageLocation === undefined
+      || (!fixture && isLoopbackHostname(pageLocation.hostname)),
     start(sinks, config) {
       if (started) throw new Error('connection: the stream loop is already owned by another consumer')
       started = true

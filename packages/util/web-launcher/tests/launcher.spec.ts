@@ -287,6 +287,39 @@ describe('waitForHttpOk', () => {
     // The poll must have retried until the deadline, not given up after one attempt.
     expect(fetchImpl.mock.calls.length).toBeGreaterThan(1)
   })
+
+  it('stops immediately when the external signal is already aborted', async () => {
+    const fetchImpl = vi.fn(async () => new Response('ok', { status: 200 }))
+    await expect(waitForHttpOk(new URL('http://127.0.0.1:1/'), {
+      fetchImpl, timeoutMs: 30_000, pollIntervalMs: 5, signal: AbortSignal.abort(),
+    })).rejects.toThrow(/aborted/)
+    // The abort short-circuits before any fetch attempt.
+    expect(fetchImpl).not.toHaveBeenCalled()
+  })
+
+  it('rejects promptly when the external signal aborts mid-poll (not after the full timeout)', async () => {
+    const controller = new AbortController()
+    const fetchImpl = vi.fn(async () => { throw new Error('ECONNREFUSED') })
+    const poll = waitForHttpOk(new URL('http://127.0.0.1:1/'), {
+      fetchImpl, timeoutMs: 30_000, pollIntervalMs: 5, signal: controller.signal,
+    })
+    setTimeout(() => { controller.abort() }, 15)
+    await expect(poll).rejects.toThrow(/aborted/)
+  })
+
+  it('rejects from the catch arm when the signal aborts during a fetch attempt', async () => {
+    const controller = new AbortController()
+    // The fetch aborts in-flight (real fetch rejects on its signal); the catch
+    // arm sees the external abort and rejects instead of retrying.
+    const fetchImpl = vi.fn(async () => {
+      controller.abort()
+      throw new DOMException('The operation was aborted.', 'AbortError')
+    })
+    await expect(waitForHttpOk(new URL('http://127.0.0.1:1/'), {
+      fetchImpl, timeoutMs: 30_000, pollIntervalMs: 5, signal: controller.signal,
+    })).rejects.toThrow(/aborted/)
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('childExited', () => {

@@ -2,9 +2,11 @@
  * Browser theme registry over the `--dsw-*` token stylesheets. The service
  * owns the theme preference (light/dark/system), resolves `system` through
  * `prefers-color-scheme`, and publishes immutable snapshots; it never touches
- * the DOM — ui-layout's presenter consumes the resolved snapshot. The plugin
- * also registers the Appearance preference row into the settings General
- * section — the theme feature owns its own settings surface.
+ * the DOM itself — the plugin seats a separate {@link ThemePresenter} that
+ * projects each snapshot onto the document, so the palette reaches the page
+ * under any shell. The plugin also registers the Appearance preference row
+ * into the settings General section — the theme feature owns its own settings
+ * surface.
  */
 import type { Context } from 'cordis'
 import { deferRegistration, type BoundActions } from '@deepseek-ai/dsh-client-ui-slots'
@@ -15,6 +17,7 @@ import type { AppearanceRowInjected } from './AppearanceRow.tsx'
 import { AppearanceRow } from './AppearanceRow.tsx'
 import { createAppearanceRowStore } from './settings-store.ts'
 import { en, zh, type ThemeKey } from './locales.ts'
+import { ThemePresenter } from './theme-presenter.ts'
 
 export type { AppearanceRowComponentProps, AppearanceRowInjected } from './AppearanceRow.tsx'
 export type { AppearanceRowState } from './settings-store.ts'
@@ -228,14 +231,33 @@ function persistPreference(preference: ThemePreference): void {
 export const inject = ['slots', 'locale']
 
 /**
- * Client plugin body: provide the theme service and register the
- * feature-owned Appearance preference row into the General section's item
- * slot (a feature owns its settings surface).
+ * Client plugin body: provide the theme service, seat the presenter that puts
+ * resolved snapshots on the document, and register the feature-owned
+ * Appearance preference row into the General section's item slot (a feature
+ * owns its settings surface).
  * @param ctx - client cordis context.
  */
 export function apply(ctx: ClientContext): void {
   const theme = new ThemeService(ctx)
   ctx.provide('theme', theme)
+
+  // Theme presentation: pure DOM writes from resolved snapshots — initial
+  // state through the getter once, then event-driven only; no React path.
+  // It belongs to this plugin, not to a shell, because every shell needs it.
+  // Non-browser runs (node e2e booting the client tree) have no document, and
+  // a palette with nothing to project onto is simply absent — the same
+  // environment sensing the service applies to matchMedia and localStorage.
+  if (typeof document !== 'undefined') {
+    ctx.effect(() => {
+      const presenter = new ThemePresenter()
+      presenter.apply(theme.getTheme())
+      const off = ctx.on('theme/change', (snapshot) => { presenter.apply(snapshot) })
+      return () => {
+        off()
+        presenter.dispose()
+      }
+    }, 'ui-theme: theme presenter')
+  }
 
   ctx.effect(() => ctx.locale.register(SETTINGS_NS, { zh, en }), 'ui-theme: settings row dictionaries')
 

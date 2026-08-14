@@ -26,4 +26,4 @@ Status: implemented
 
 ## 后果
 
-handler 的编译器锁定表（`rpc-map.ts`、`UNARY_ROUTES`、`UNARY_VALUE_SCHEMAS`）迫使每个载体面都确认新方法——fixture 客户端（`packages/client/connection/src/client/fixture.ts`）将其实现为空闲态 no-wakeup 追加，因此无密钥 web 通道也演练帧形状。网关路由、来源标识与错误映射由 `packages/host/apiproxy/tests/api-proxy-inject.spec.ts` 覆盖；wire 往返由 `fetch-carrier.spec.ts` 覆盖；schema 接受/拒绝由 `rpc-schemas.spec.ts` 覆盖。注入本身的 no-wakeup/暂存语义仍归 agent-loop 套件所有。经真实 IDE 客户端的端到端覆盖随 VS Code 扩展自己的测试通道（`apps/vscode`）落地；在那之前没有任何已交付 UI 调用该方法——它是为本笔记所服务的仓库外客户端准备的 wire 面。
+handler 的编译器锁定表（`rpc-map.ts`、`UNARY_ROUTES`、`UNARY_VALUE_SCHEMAS`）迫使每个载体面都确认新方法——fixture 客户端（`packages/client/connection/src/client/fixture.ts`）将其实现为空闲态 no-wakeup 追加，因此无密钥 web 通道也演练帧形状。网关路由、来源标识与错误映射由 `packages/host/apiproxy/tests/api-proxy-inject.spec.ts` 覆盖；wire 往返由 `fetch-carrier.spec.ts` 覆盖；schema 接受/拒绝由 `rpc-schemas.spec.ts` 覆盖。注入本身的 no-wakeup/暂存语义仍归 agent-loop 套件所有。已交付的调用方是 VS Code 扩展的 IDE 上下文 feed（`apps/vscode`），它把活动编辑器上下文注入活动会话；经启动的 webview 的端到端覆盖随该扩展推迟的 `@vscode/test-electron` 通道落地。

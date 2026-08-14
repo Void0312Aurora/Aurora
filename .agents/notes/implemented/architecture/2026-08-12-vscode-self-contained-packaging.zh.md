@@ -18,7 +18,7 @@ Status: implemented
 
 **与桌面外壳不同，扩展宿主 bundle 无需 materialize/fixup。** 桌面 main 用 `tsc` 编译，必须把它的 workspace 原语拷进 `lib/` 并改写 specifier；扩展宿主是 `tsdown` bundle，已把 `dsh-process-tree` 与 `dsh-web-launcher` 内联进自包含的 `dist/extension.js`。只有服务器闭包被物化。
 
-**vsix 按平台。** 闭包携带 N-API 原生插件（node-pty、koffi），因此 `vsce package --target <target>` 每平台产一个 vsix；CI 矩阵打一整套。原生插件与 Electron-as-Node ABI 兼容，无需重编译。
+**vsix 按平台。** 闭包携带 N-API 原生插件（node-pty、koffi），因此 `vsce package --target <target>` 每平台产一个 vsix——target 经 `scripts/package-vsix.mjs`（Node 脚本，默认值在各操作系统上展开一致）取自 `DSH_VSIX_TARGET`，默认宿主平台；每次发布打一整套属于 CI/发布流水线，该流水线尚不存在。原生插件与 Electron-as-Node ABI 兼容，无需重编译。
 
 ## 考虑过的替代方案
 
@@ -29,4 +29,4 @@ Status: implemented
 
 ## 后果
 
-`DSH_VSIX_TARGET=<target> pnpm --filter @deepseek-ai/dsh-vscode run package` 产出自包含的按平台 vsix。闭包作为 workspace 成员解析（`apps/vscode/closure`，与桌面闭包一样被 knip 忽略），`deploy/` 被 gitignore。本设计携带的唯一发布关卡：内嵌闭包在 VS Code 的 Electron-as-Node 下运行，其必须满足 harness `node ^22.19 || >=24` 引擎范围——携带更旧 Node 的 VS Code 构建需改用基于 PATH 的兜底 vsix，而为目标 VS Code 版本确认该范围是打包期检查，非单测能断言。Marketplace 签名/发布是单独发布步骤；`keytar` 与 `@vscode/vsce-sign` 原生构建在 `pnpm-workspace.yaml` 中被拒绝，因为 `vsce package --no-dependencies` 两者都不需要。实际的 `vsce package` 运行与按平台矩阵在 CI/发布中，与桌面 `dist` 流水线一样——仓库携带配置与闭包清单，由闭包解析与启动器自身受测的解析顺序验证。
+`DSH_VSIX_TARGET=<target> pnpm --filter dsh-vscode run package` 产出自包含的按平台 vsix（workspace 成员名 `dsh-vscode`，未加 scope 以便 `vsce` 接受扩展 `name`）。闭包作为 workspace 成员解析（`apps/vscode/closure`，与桌面闭包一样被 knip 忽略），`deploy/` 被 gitignore。本设计携带的唯一发布关卡：内嵌闭包在 VS Code 的 Electron-as-Node 下运行，其必须满足 harness `node ^22.19 || >=24` 引擎范围——携带更旧 Node 的 VS Code 构建需改用基于 PATH 的兜底 vsix，而为目标 VS Code 版本确认该范围是打包期检查，非单测能断言。Marketplace 签名/发布是单独发布步骤；`keytar` 与 `@vscode/vsce-sign` 原生构建在 `pnpm-workspace.yaml` 中被拒绝，因为 `vsce package --no-dependencies` 两者都不需要。实际的 `vsce package` 运行与按平台矩阵在 CI/发布中，与桌面 `dist` 流水线一样——仓库携带配置与闭包清单，由闭包解析与启动器自身受测的解析顺序验证。

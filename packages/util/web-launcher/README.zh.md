@@ -20,7 +20,7 @@ const url = await waitForReadyLine(stdout)
 await waitForHttpOk(url)
 ```
 
-`resolveWebLaunch` 按固定顺序解析：`DSH_BIN` 环境变量；位于 `<appDir>/deploy/node_modules/@deepseek-ai/dsh/lib/bin.js` 的内嵌 deploy 闭包，以 Electron-as-Node 运行（`ELECTRON_RUN_AS_NODE=1` 加 `--expose-internals`，因为 harness 的 HMR 服务需要 Node internals，而 `node-addon-require-builtin` 兜底在 Electron 的 V8 下不可用）；所在 checkout 的 CLI（`<appDir>/../../apps/cli`，优先已构建的 `lib/bin.js`，否则 tsx 源码启动）；PATH 上的 `dsh`。Windows 上未设置或为空的 `DSH_PERMISSION_MODE` 回退为 `danger-full-access`，因为 harness 在该平台没有隔离后端。`waitForReadyLine` 会重组跨 chunk 拆分的行、要求显式端口（拆分片段永远无法匹配），并在就绪后继续排空流，避免存活的服务器因 EPIPE 死亡。`waitForHttpOk` 为每次尝试设置短促的中止期限。
+`resolveWebLaunch` 按固定顺序解析：`DSH_BIN` 环境变量；位于 `<appDir>/deploy/node_modules/@deepseek-ai/dsh/lib/bin.js` 的内嵌 deploy 闭包，以 Electron-as-Node 运行（`ELECTRON_RUN_AS_NODE=1` 加 `--expose-internals`，因为 harness 的 HMR 服务需要 Node internals，而 `node-addon-require-builtin` 兜底在 Electron 的 V8 下不可用）；所在 checkout 的 CLI（`<appDir>/../../apps/cli`，优先已构建的 `lib/bin.js`，否则 tsx 源码启动）；PATH 上的 `dsh`。Windows 上未设置或为空的 `DSH_PERMISSION_MODE` 回退为 `danger-full-access`，因为 harness 在该平台没有隔离后端。`waitForReadyLine` 会重组跨 chunk 拆分的行、要求显式端口（拆分片段永远无法匹配），并在就绪后继续排空流，避免存活的服务器因 EPIPE 死亡。`waitForHttpOk` 为每次尝试设置短促的中止期限，并接受外部 `signal` 一次性取消整个轮询（调用方在启动中途 dispose 时）。
 
 ## Model Experience
 

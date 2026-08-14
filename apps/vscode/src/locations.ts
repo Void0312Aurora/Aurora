@@ -43,14 +43,24 @@ export function editorTargets(view: ToolCallView | ToolResultView, cwd: string):
   }))
 }
 
-/** A native two-pane diff: absolute path plus the resolved before/after text. */
+/**
+ * A two-pane diff comparison, both panes drawn from the same wire material so
+ * they stay consistent: for an edit both are the hunk fragments the wire
+ * carried (3-line context), for a create the whole new file against an empty
+ * left. This deliberately does NOT reconstruct whole files from disk — mixing
+ * a disk whole-file left pane with a hunk-fragment right pane produces a
+ * nonsensical diff. A true whole-file view would apply the hunk to disk, which
+ * this defers to the (not-yet-wired) editor-diff trigger.
+ */
 export interface DiffMaterial {
   /** Absolute path of the changed file. */
   path: string
-  /** Left pane: prior whole-file content, or empty for a new file. */
+  /** Left pane: the prior hunk fragment, or empty for a create/overwrite. */
   before: string
-  /** Right pane: resulting whole-file content. */
+  /** Right pane: the resulting hunk fragment (or whole file for a create). */
   after: string
+  /** Whether the panes are hunk fragments (an edit) rather than whole files (a create). */
+  kind: 'hunk' | 'whole-file'
 }
 
 /** Diffs carried by either view shape (both the call and result diff cards carry `diffs`). */
@@ -59,31 +69,22 @@ function viewDiffs(view: ToolCallView | ToolResultView): FileDiff[] {
 }
 
 /**
- * Reconstruct whole-file diff materials from a view's diffs. The wire's
- * `oldText`/`newText` are hunk fragments (3-line context) for an edit, or the
- * whole file when there is no before-image (a create). Whole-file two-pane
- * fidelity needs the current on-disk text: {@link readFile} supplies it, and
- * this composes the panes — the model-facing `oldText` (or disk) on the left,
- * `newText` (or disk) on the right. A `null` `oldText` means create/overwrite,
- * so the left pane is empty.
+ * Extract consistent two-pane diff materials from a view's diffs. Both panes
+ * come from the same wire source: an edit compares `oldText`↔`newText` (hunk
+ * fragments), a create (`oldText === null`) compares an empty left against the
+ * whole new file. Paths resolve against the session cwd.
  * @param view - the tool view carrying diffs.
  * @param cwd - session cwd for path resolution.
- * @param readFile - reads current on-disk text; returns undefined when absent.
  * @returns one material per diff, in file order.
  */
-export function diffMaterials(
-  view: ToolCallView | ToolResultView,
-  cwd: string,
-  readFile: (path: string) => string | undefined,
-): DiffMaterial[] {
+export function diffMaterials(view: ToolCallView | ToolResultView, cwd: string): DiffMaterial[] {
   return viewDiffs(view).map((diff) => {
     const path = resolvePath(diff.path, cwd)
-    const disk = readFile(path)
-    // oldText null = create/overwrite (no prior content); otherwise the disk
-    // text is the truthful left pane, falling back to the hunk's oldText when
-    // the file is unreadable. newText is the model's resulting text.
-    const before = diff.oldText === null ? '' : disk ?? diff.oldText
-    const after = diff.newText
-    return { path, before, after }
+    if (diff.oldText === null) {
+      // Create/overwrite: no prior content on the wire, so an empty left pane
+      // against the whole new file.
+      return { path, before: '', after: diff.newText, kind: 'whole-file' as const }
+    }
+    return { path, before: diff.oldText, after: diff.newText, kind: 'hunk' as const }
   })
 }

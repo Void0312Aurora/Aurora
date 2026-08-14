@@ -11,6 +11,13 @@ import { describe, expect, it } from 'vitest'
 import type { BridgeRequestMessage, BridgeResponseMessage } from '../src/client/webview-bridge.ts'
 import { PostMessageApiClient } from '../src/client/webview-bridge.ts'
 
+/** Exposes the protected transport so a test can cancel a response body directly. */
+class ProbeClient extends PostMessageApiClient {
+  probeFetch(input: URL, init?: RequestInit): Promise<Response> {
+    return this.doFetch(input, init)
+  }
+}
+
 interface FakePort {
   sent: BridgeRequestMessage[]
   emit(message: BridgeResponseMessage): void
@@ -104,6 +111,54 @@ describe('PostMessageApiClient', () => {
     await consumed
 
     expect(frames).toEqual([{ type: 'session/subscribed', sessionId: 's1', lastSeq: -1 }])
+  })
+
+  it('drops its port listener after a completed unary round (no listener leak)', async () => {
+    const fake = fakePort()
+    const client = new PostMessageApiClient(fake.port)
+    const call = client.sessions.list({})
+    await settle()
+    const start = fake.sent[0]!
+    fake.emit({ id: start.id, type: 'dsh-fetch-head', status: 200 })
+    fake.emit({ id: start.id, type: 'dsh-fetch-chunk', chunk: JSON.stringify({ type: 'server-response', rpcId: requestBodyOf(start).rpcId, result: { ok: true, value: { items: [] } } }) })
+    fake.emit({ id: start.id, type: 'dsh-fetch-end' })
+    await call
+    expect(fake.listenerCount()).toBe(0)
+  })
+
+  it('drops its port listener and abort listener after a stream abort (no leak)', async () => {
+    const fake = fakePort()
+    const client = new PostMessageApiClient(fake.port)
+    const abort = new AbortController()
+    const stream = client.events.mux({}, abort.signal)
+    const consumed = (async () => {
+      for await (const _frame of stream) { /* drain until abort */ }
+    })()
+    await settle()
+    const start = fake.sent[0]!
+    fake.emit({ id: start.id, type: 'dsh-fetch-head', status: 200 })
+    await settle()
+    abort.abort()
+    await expect(consumed).rejects.toThrow(/aborted/i)
+    // The abort posts dsh-fetch-abort upstream and the doFetch cleanup drops
+    // the port subscription (the leak the fix closes).
+    expect(fake.sent.some(message => message.type === 'dsh-fetch-abort' && message.id === start.id)).toBe(true)
+    expect(fake.listenerCount()).toBe(0)
+  })
+
+  it('posts dsh-fetch-abort and cleans up when the response body is cancelled directly', async () => {
+    const fake = fakePort()
+    const client = new ProbeClient(fake.port)
+    const responsePromise = client.probeFetch(new URL('http://host/api/events.mux'))
+    await settle()
+    const start = fake.sent[0]!
+    fake.emit({ id: start.id, type: 'dsh-fetch-head', status: 200 })
+    const response = await responsePromise
+    // A consumer that cancels the body (not via the request signal) must still
+    // abort upstream and drop the port listener.
+    await response.body?.cancel()
+    expect(fake.sent.some(message => message.type === 'dsh-fetch-abort' && message.id === start.id)).toBe(true)
+    expect(fake.listenerCount()).toBe(0)
   })
 
   it('sends dsh-fetch-abort and rejects when aborted before the head', async () => {

@@ -1,5 +1,5 @@
 {
-  "name": "@deepseek-ai/dsh-vscode",
+  "name": "dsh-vscode",
   "displayName": "DeepSeek Harness Panel",
   "description": "VS Code panel hosting the full DeepSeek Harness GUI: a managed dsh web per window, the complete client stack in a webview, and editor-side integrations",
   "version": "0.0.1",
@@ -8,6 +8,11 @@
   "publisher": "deepseek-ai",
   "main": "./dist/extension.js",
   "license": "BSD-3-Clause",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dsh2026/test-Void0312Aurora.git",
+    "directory": "apps/vscode"
+  },
   "engines": {
     "vscode": "^1.125.0"
   },
@@ -19,25 +24,72 @@
   ],
   "activationEvents": [],
   "contributes": {
+    "viewsContainers": {
+      "secondarySidebar": [
+        {
+          "id": "dshSidebar",
+          "title": "DeepSeek Harness",
+          "icon": "$(comment-discussion)"
+        }
+      ]
+    },
+    "views": {
+      "dshSidebar": [
+        {
+          "id": "dsh.sidebar",
+          "name": "DeepSeek Harness",
+          "type": "webview"
+        }
+      ]
+    },
     "commands": [
       {
-        "command": "dsh.openPanel",
-        "title": "DeepSeek Harness: Open Panel",
+        "command": "dsh.focus",
+        "title": "DeepSeek Harness: Focus Sidebar",
         "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "dsh.showChat",
+        "title": "DeepSeek Harness: Show Conversation",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "dsh.showSessions",
+        "title": "DeepSeek Harness: Show Sessions",
+        "icon": "$(history)"
       },
       {
         "command": "dsh.restartServer",
         "title": "DeepSeek Harness: Restart Server",
         "icon": "$(debug-restart)"
       }
-    ]
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "dsh.showChat",
+          "when": "view == dsh.sidebar",
+          "group": "navigation@1"
+        },
+        {
+          "command": "dsh.showSessions",
+          "when": "view == dsh.sidebar",
+          "group": "navigation@2"
+        },
+        {
+          "command": "dsh.restartServer",
+          "when": "view == dsh.sidebar",
+          "group": "1_dsh"
+        }
+      ]
+    }
   },
   "scripts": {
     "build": "tsdown && vite build --config webview/vite.config.ts",
     "build:host": "tsdown",
     "build:webview": "vite build --config webview/vite.config.ts",
     "deploy:closure": "node -e \"require('node:fs').rmSync('deploy',{recursive:true,force:true})\" && pnpm --filter dsh-vscode-closure deploy --prod --config.node-linker=hoisted --config.inject-workspace-packages=true --config.allow-unused-patches=true --config.strict-dep-builds=false deploy && node -e \"for (const f of ['pnpm-lock.yaml','pnpm-workspace.yaml']) require('node:fs').rmSync('deploy/'+f,{force:true})\"",
-    "package": "pnpm -w run build:lib && pnpm -w run build:web && pnpm run deploy:closure && pnpm run build && vsce package --no-dependencies --target ${DSH_VSIX_TARGET:-win32-x64}"
+    "package": "pnpm -w run build:lib && pnpm -w run build:web && pnpm run deploy:closure && pnpm run build && node scripts/package-vsix.mjs"
   },
   "dependencies": {
     "@deepseek-ai/dsh-process-tree": "workspace:^",
@@ -67,11 +119,13 @@
     "@deepseek-ai/dsh-client-ui-trajectory": "workspace:^",
     "@deepseek-ai/dsh-client-ui-workspace": "workspace:^",
     "@deepseek-ai/dsh-client-web": "workspace:^",
+    "@testing-library/react": "^16.3.2",
     "@types/node": "^22.0.0",
     "@types/react": "~18.3.1",
     "@types/vscode": "^1.100.0",
     "@vitejs/plugin-react": "^4.0.0",
     "@vscode/vsce": "^3.6.2",
+    "playwright": "^1.61.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "tsdown": "^0.15.6",

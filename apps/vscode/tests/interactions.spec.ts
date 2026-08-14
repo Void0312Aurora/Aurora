@@ -177,4 +177,88 @@ describe('NativeInteractions', () => {
     expect(confirmApproval).toHaveBeenCalledTimes(1)
     native.dispose()
   })
+
+  it('closes an open prompt when its stream generation drops, before the replay reopens it', async () => {
+    const fake = fakeClient()
+    const signals: AbortSignal[] = []
+    let resolveCount = 0
+    const ui: NativeUi = {
+      confirmApproval: (_prompt, signal) => new Promise((resolve) => {
+        signals.push(signal)
+        signal.addEventListener('abort', () => { resolveCount++; resolve('dismissed') }, { once: true })
+      }),
+      askQuestions: async () => undefined,
+    }
+    const native = new NativeInteractions({ client: fake.client, ui, log: () => {}, reconnectMs: 1 })
+    void native.run()
+    await settle()
+    fake.emit(envelope('req-approve-5', { type: 'approval/requested', sessionId: 's1' as never, approvalId: 'ap5' as never, toolName: 'bash' }))
+    await settle()
+    expect(signals).toHaveLength(1)
+    // The generation drops: the open prompt must be aborted (not left dangling),
+    // and the reopened generation replays the frame into a fresh prompt.
+    fake.failStream(new Error('lost'))
+    await new Promise(resolve => setTimeout(resolve, 10))
+    expect(signals[0]?.aborted).toBe(true)
+    expect(resolveCount).toBe(1)
+    fake.emit(envelope('req-approve-5', { type: 'approval/requested', sessionId: 's1' as never, approvalId: 'ap5' as never, toolName: 'bash' }))
+    await settle()
+    expect(signals).toHaveLength(2) // a fresh prompt, not a leaked duplicate
+    native.dispose()
+  })
+
+  it('scopes the tool-call cache by session so an approval never shows another session\'s call', async () => {
+    const fake = fakeClient()
+    const prompts: Parameters<NativeUi['confirmApproval']>[0][] = []
+    const ui: NativeUi = {
+      confirmApproval: (prompt) => { prompts.push(prompt); return Promise.resolve('rejected') },
+      askQuestions: async () => undefined,
+    }
+    const native = new NativeInteractions({ client: fake.client, ui, log: () => {} })
+    void native.run()
+    await settle()
+    // Two sessions reuse the same provider callId 'c1' with different views.
+    fake.emit(envelope('e-a', {
+      type: 'session/event', sessionId: 's1' as never,
+      event: { type: 'tool/call', seq: 1, time: 0, data: { turn: 0, step: 0, callId: 'c1', name: 'write', arguments: '{}' } } as never,
+      view: { for: 'call', view: { card: 'diff', title: 'Write s1.ts', diffs: [{ path: 's1.ts', oldText: null, newText: 'x' }] } },
+    }))
+    fake.emit(envelope('e-b', {
+      type: 'session/event', sessionId: 's2' as never,
+      event: { type: 'tool/call', seq: 1, time: 0, data: { turn: 0, step: 0, callId: 'c1', name: 'write', arguments: '{}' } } as never,
+      view: { for: 'call', view: { card: 'diff', title: 'Write s2.ts', diffs: [{ path: 's2.ts', oldText: null, newText: 'y' }] } },
+    }))
+    fake.emit(envelope('req-s1', { type: 'approval/requested', sessionId: 's1' as never, approvalId: 'ap-s1' as never, toolName: 'write', callId: 'c1' as never }))
+    await settle()
+    // s1's approval must carry s1's view, not s2's (same callId, different session).
+    expect(prompts[0]?.call).toMatchObject({ title: 'Write s1.ts' })
+    native.dispose()
+  })
+
+  it('purges a session\'s cached calls at turn/end so the cache stays bounded', async () => {
+    const fake = fakeClient()
+    const prompts: Parameters<NativeUi['confirmApproval']>[0][] = []
+    const ui: NativeUi = {
+      confirmApproval: (prompt) => { prompts.push(prompt); return Promise.resolve('rejected') },
+      askQuestions: async () => undefined,
+    }
+    const native = new NativeInteractions({ client: fake.client, ui, log: () => {} })
+    void native.run()
+    await settle()
+    fake.emit(envelope('e-c', {
+      type: 'session/event', sessionId: 's1' as never,
+      event: { type: 'tool/call', seq: 1, time: 0, data: { turn: 0, step: 0, callId: 'c9', name: 'write', arguments: '{}' } } as never,
+      view: { for: 'call', view: { card: 'diff', title: 'Write x.ts', diffs: [{ path: 'x.ts', oldText: null, newText: 'x' }] } },
+    }))
+    // turn/end settles the turn; the cached call for c9 is dropped.
+    fake.emit(envelope('e-end', {
+      type: 'session/event', sessionId: 's1' as never,
+      event: { type: 'turn/end', seq: 2, time: 0, data: { turn: 0, reason: { kind: 'completed' } } } as never,
+    }))
+    fake.emit(envelope('req-late', { type: 'approval/requested', sessionId: 's1' as never, approvalId: 'ap-late' as never, toolName: 'write', callId: 'c9' as never }))
+    await settle()
+    // The purged cache means the approval has no cached view (not a stale one).
+    expect(prompts[0]?.call).toBeUndefined()
+    native.dispose()
+  })
 })

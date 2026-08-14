@@ -54,38 +54,30 @@ describe('editorTargets', () => {
 })
 
 describe('diffMaterials', () => {
-  it('uses on-disk text for the left pane of an edit', () => {
+  it('compares the hunk fragments for an edit (both panes from the same wire source)', () => {
     const view: ToolCallView = {
       card: 'diff',
       title: 'Edit a.ts',
-      diffs: [{ path: 'src/a.ts', oldText: 'hunk-old', newText: 'result-text' }],
+      diffs: [{ path: 'src/a.ts', oldText: 'hunk-old', newText: 'hunk-new' }],
     }
-    const materials = diffMaterials(view, CWD, path => (path === resolvePath('src/a.ts', CWD) ? 'whole disk file' : undefined))
-    expect(materials).toEqual([{ path: resolvePath('src/a.ts', CWD), before: 'whole disk file', after: 'result-text' }])
+    expect(diffMaterials(view, CWD)).toEqual([
+      { path: resolve(CWD, 'src/a.ts'), before: 'hunk-old', after: 'hunk-new', kind: 'hunk' },
+    ])
   })
 
-  it('falls back to the hunk oldText when the file is unreadable', () => {
-    const view: ToolCallView = {
-      card: 'diff',
-      title: 'Edit a.ts',
-      diffs: [{ path: 'src/a.ts', oldText: 'hunk-old', newText: 'result' }],
-    }
-    const materials = diffMaterials(view, CWD, () => undefined)
-    expect(materials[0]?.before).toBe('hunk-old')
-  })
-
-  it('leaves the left pane empty for a create/overwrite (null oldText)', () => {
+  it('compares an empty left against the whole new file for a create/overwrite (null oldText)', () => {
     const view: ToolCallView = {
       card: 'diff',
       title: 'Write new.ts',
       diffs: [{ path: 'new.ts', oldText: null, newText: 'created' }],
     }
-    const materials = diffMaterials(view, CWD, () => 'should be ignored')
-    expect(materials).toEqual([{ path: resolvePath('new.ts', CWD), before: '', after: 'created' }])
+    expect(diffMaterials(view, CWD)).toEqual([
+      { path: resolve(CWD, 'new.ts'), before: '', after: 'created', kind: 'whole-file' },
+    ])
   })
 
   it('returns nothing for a non-diff view', () => {
     const view: ToolCallView = { card: 'terminal', title: 'ls -la' }
-    expect(diffMaterials(view, CWD, () => undefined)).toEqual([])
+    expect(diffMaterials(view, CWD)).toEqual([])
   })
 })

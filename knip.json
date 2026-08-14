@@ -29,6 +29,7 @@
         "scripts/**/*.mjs"
       ],
       "ignoreDependencies": [
+        "lefthook",
         "playwright"
       ]
     },
@@ -652,13 +653,20 @@
       "entry": [
         "webview/main.ts",
         "webview/theme.ts",
+        "webview/route-bridge.ts",
+        "webview/shell/index.ts",
         "webview/node-module-stub.ts",
-        "tests/**/*.spec.ts"
+        "webview/loader-config-utils-stub.ts",
+        "tests/**/*.spec.ts",
+        "tests/**/*.spec.tsx",
+        "tests/**/*.e2e.ts",
+        "tests/**/*.snapshot.ts"
       ],
       "project": [
         "src/**/*.ts",
-        "webview/**/*.ts",
-        "tests/**/*.ts"
+        "webview/**/*.{ts,tsx}",
+        "tests/**/*.{ts,tsx}",
+        "scripts/**/*.mjs"
       ]
     },
     "packages/client/modules": {

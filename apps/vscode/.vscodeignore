@@ -10,8 +10,11 @@ webview/**
 tests/**
 closure/**
 node_modules/**
+lib/**
+scripts/**
 **/*.ts
 **/*.map
+*.vsix
 tsconfig.json
 tsdown.config.ts
 .gitignore

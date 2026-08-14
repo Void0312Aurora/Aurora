@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-12-vscode-native-interactions.md
-2026-08-12-vscode-native-interactions.md: f2a77795d52dc61a8227ff41d75f5d8e9f0e8342
-2026-08-12-vscode-native-interactions.zh.md: 7c11f40f018988e044c5fb17da860dbba47d7fd0
+2026-08-12-vscode-native-interactions.md: c5170fcb74f68041f5dec4bcfda258d4f84abdd7
+2026-08-12-vscode-native-interactions.zh.md: 5d6f1ab89be5e69cfe07b94f869fc0c727303b72

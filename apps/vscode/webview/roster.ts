@@ -3,8 +3,10 @@
  * this webview composes, bundled at build time (the webview cannot fetch
  * bundles — its origin never reaches the server directly). The set mirrors
  * the `dshClient` rows of `apps/cli/config/web.cordis.yml` minus dev-only
- * hmr, plus the VS Code theme adapter; the modules and app-shell rows stay
- * kernel-owned inside `AppWebEntry`.
+ * hmr, with two substitutions for the sidebar host: the narrow shell replaces
+ * the three-column one (both occupy 'root', so exactly one may load), and the
+ * VS Code theme adapter plus the host route bridge join. The modules and
+ * app-shell rows stay kernel-owned inside `AppWebEntry`.
  */
 
 import type { WebBootGraph } from '@deepseek-ai/dsh-client-modules/client'
@@ -12,7 +14,6 @@ import * as Connection from '@deepseek-ai/dsh-client-connection/client'
 import * as Runtime from '@deepseek-ai/dsh-client-runtime/client'
 import * as UiTheme from '@deepseek-ai/dsh-client-ui-theme/client'
 import * as Locale from '@deepseek-ai/dsh-client-locale/client'
-import * as UiLayout from '@deepseek-ai/dsh-client-ui-layout/client'
 import * as UiSidebar from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import * as UiSettings from '@deepseek-ai/dsh-client-ui-settings/client'
 import * as UiSettingsGeneral from '@deepseek-ai/dsh-client-ui-settings-general/client'
@@ -30,9 +31,15 @@ import * as UiPlan from '@deepseek-ai/dsh-client-ui-plan/client'
 import * as UiQuestion from '@deepseek-ai/dsh-client-ui-question/client'
 import * as UiTrajectory from '@deepseek-ai/dsh-client-ui-trajectory/client'
 import * as VscodeTheme from './theme.ts'
+import * as VscodeRoutes from './route-bridge.ts'
+import * as VscodeShell from './shell/index.ts'
 
 /** The VS Code theme adapter's boot-graph id (a webview-own module, not an npm package). */
 export const VSCODE_THEME_ID = 'dsh-vscode-theme'
+/** The host route bridge's boot-graph id (a webview-own module, not an npm package). */
+export const VSCODE_ROUTES_ID = 'dsh-vscode-routes'
+/** The sidebar shell's boot-graph id: it occupies 'root' in place of ui-layout. */
+export const VSCODE_SHELL_ID = 'dsh-vscode-shell'
 
 /** Boot-graph id → statically bundled export surface. */
 export const staticPlugins: Record<string, unknown> = {
@@ -40,7 +47,6 @@ export const staticPlugins: Record<string, unknown> = {
   '@deepseek-ai/dsh-client-runtime': Runtime,
   '@deepseek-ai/dsh-client-ui-theme': UiTheme,
   '@deepseek-ai/dsh-client-locale': Locale,
-  '@deepseek-ai/dsh-client-ui-layout': UiLayout,
   '@deepseek-ai/dsh-client-ui-sidebar': UiSidebar,
   '@deepseek-ai/dsh-client-ui-settings': UiSettings,
   '@deepseek-ai/dsh-client-ui-settings-general': UiSettingsGeneral,
@@ -58,6 +64,8 @@ export const staticPlugins: Record<string, unknown> = {
   '@deepseek-ai/dsh-client-ui-question': UiQuestion,
   '@deepseek-ai/dsh-client-ui-trajectory': UiTrajectory,
   [VSCODE_THEME_ID]: VscodeTheme,
+  [VSCODE_ROUTES_ID]: VscodeRoutes,
+  [VSCODE_SHELL_ID]: VscodeShell,
 }
 
 /**

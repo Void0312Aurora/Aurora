@@ -221,26 +221,44 @@ export interface HttpOkOptions {
   timeoutMs?: number
   pollIntervalMs?: number
   fetchImpl?: typeof fetch
+  /**
+   * External cancellation (a caller disposing mid-start). When it aborts, the
+   * poll stops immediately and rejects, instead of running out its remaining
+   * deadline against a server the caller is already tearing down.
+   */
+  signal?: AbortSignal
 }
 
 /**
  * Poll the server URL until it answers HTTP 200. Each attempt carries a short
- * abort deadline so a wedged server cannot stall the poll past the overall timeout.
+ * abort deadline so a wedged server cannot stall the poll past the overall
+ * timeout; an external `signal` cancels the whole poll at once.
  * @param url - the readiness-line URL.
- * @param options - timeout, poll cadence, and an injectable fetch for tests.
+ * @param options - timeout, poll cadence, an injectable fetch, and an external abort.
  */
 export async function waitForHttpOk(url: URL, options: HttpOkOptions = {}): Promise<void> {
   const fetchImpl = options.fetchImpl ?? fetch
   const timeoutMs = options.timeoutMs ?? 30_000
   const pollIntervalMs = options.pollIntervalMs ?? 250
+  const external = options.signal
+  // A function read, not an inline `external?.aborted` comparison: the flag is
+  // mutated externally between the top-of-loop check and the catch arm, which
+  // static control-flow narrowing would otherwise treat as always-false.
+  const aborted = (): boolean => external !== undefined && external.aborted
   const deadline = Date.now() + timeoutMs
   let lastError: unknown = new Error('no attempt made')
   while (Date.now() < deadline) {
+    if (aborted()) throw new Error(`dsh-web-launcher: readiness poll for ${url.href} was aborted`)
     try {
-      const response = await fetchImpl(url, { signal: AbortSignal.timeout(2_000) })
+      // Each attempt aborts on its own 2s deadline or the external signal, whichever first.
+      const attemptSignal = external === undefined
+        ? AbortSignal.timeout(2_000)
+        : AbortSignal.any([AbortSignal.timeout(2_000), external])
+      const response = await fetchImpl(url, { signal: attemptSignal })
       if (response.ok) return
       lastError = new Error(`HTTP ${response.status}`)
     } catch (error) {
+      if (aborted()) throw new Error(`dsh-web-launcher: readiness poll for ${url.href} was aborted`)
       lastError = error
     }
     await new Promise(resolve => setTimeout(resolve, pollIntervalMs))

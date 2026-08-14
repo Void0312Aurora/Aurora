@@ -18,6 +18,13 @@ export interface ActiveSessionOptions {
   log: (line: string) => void
   /** Backoff before reopening a dropped stream; test seam. Defaults to 1000ms. */
   reconnectMs?: number
+  /**
+   * Fired after the active session id changes (including to undefined), with
+   * the previous id. Lets a consumer re-target work that follows the active
+   * session — the context feed re-injects the current editor context at the
+   * new session.
+   */
+  onActiveChanged?: (previous: string | undefined) => void
 }
 
 /**
@@ -61,20 +68,27 @@ export class ActiveSessionTracker {
     switch (frame.type) {
       case 'host/session-status':
         // A session going running is the strongest "user is here" signal.
-        if (frame.running) this.activeId = frame.sessionId
+        if (frame.running) this.setActive(frame.sessionId)
         break
       case 'host/session-added':
         // Adopt the first session seen so a fresh single-session window has a
         // target before any turn runs; a later running flip refines it.
-        this.activeId ??= frame.sessionId
+        if (this.activeId === undefined) this.setActive(frame.sessionId)
         break
       case 'host/session-removed':
-        if (this.activeId === frame.sessionId) this.activeId = undefined
+        if (this.activeId === frame.sessionId) this.setActive(undefined)
         break
       default:
         // Workspace, settings, model, and error frames do not move the cursor.
         break
     }
+  }
+
+  private setActive(sessionId: string | undefined): void {
+    if (this.activeId === sessionId) return
+    const previous = this.activeId
+    this.activeId = sessionId
+    this.options.onActiveChanged?.(previous)
   }
 
   /** Stop the loop. */
