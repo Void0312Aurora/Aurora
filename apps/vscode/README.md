@@ -2,7 +2,26 @@
 
 English | [中文](README.zh.md)
 
-VS Code extension hosting the full DeepSeek Harness Web GUI in an editor panel. It spawns one managed `dsh web` per window, hosts the complete dsh client stack in a webview, and bridges the webview's `/api` traffic to the server through the extension host. Unlike the lightweight chat-participant integration, this panel keeps the rich GUI intact: Plan Mode, the trajectory view, slot-based tool cards, and the settings pages.
+VS Code extension hosting the DeepSeek Harness GUI in the **Secondary Side Bar**. It spawns one managed `dsh web` per window, hosts the complete dsh client stack in a webview view, and bridges the webview's `/api` traffic to the server through the extension host. Unlike the lightweight chat-participant integration, it keeps the rich GUI intact: Plan Mode, the trajectory view, slot-based tool cards, and the settings pages.
+
+## The sidebar shell
+
+The GUI's wide shell lays its three slots out as resizable columns and refuses to go below a 640px center with a 280px sidebar that never concedes — geometry a 300-400px editor sidebar cannot satisfy. So this webview loads its own shell (`webview/shell/`) in place of [`ui-layout`](../../packages/client/ui-layout/README.md).
+
+The substitution costs no plugin any change. `root` takes a single occupant, so exactly one shell may load, and this one declares **the same three child slots** (`sidebar`, `conversation`, `details`) with identical kinds and scopes; `ui-sidebar`, `ui-conversation` and every registrant beneath them compose unchanged. What differs is the arrangement: the panes are stacked routes rather than columns, and one is in front at a time. All three stay mounted regardless of route — unmounting would discard scroll position, the composer draft, and a streaming turn's live subscriptions — with CSS selecting the front one.
+
+`ctx.layout` is implemented verbatim from the wide shell's `ILayout`, so cross-plugin panel gestures keep working with only their meaning changed: toggling the sidebar routes between the sessions pane and the conversation, and opening details brings that pane forward.
+
+Navigation lives in **native view title actions**, not webview pixels — the scarcest resource in a narrow column. The commands post a route message that `webview/route-bridge.ts` turns into a `ctx.layout` call.
+
+The shell lives in this app rather than `packages/client` because the VS Code sidebar is its only consumer, the same way the theme adapter next to it does; a second narrow-container host is what would justify promoting it to a package.
+
+### Fitting the occupants
+
+The occupants were drawn for a 736-800px column, so the frame also carries a compact scale. Two mechanisms, chosen by what the component measures itself against:
+
+- **Host variables** for anything sized by its container — the composer's side clearance, card cap, dock inset, toolbar gaps and model-name cap, the hero's clearance and its wider-than-the-card glow. Each is a `-host` default on the component that reads it (`var(--dsh-…-host, desktop)`), overridden once on the frame, so the wide shell keeps its rhythm. The composer toolbar additionally gets permission to wrap: its controls are fixed-size, so past a point only a second line fits them.
+- **Media queries** for anything anchored to the viewport — the settings modal (its 188px nav rail becomes a horizontal strip above the content, and the appearance cubes go from three stacked rows to one), and the settings rows' 48px text inset. A webview is its own iframe, so `100vw` and media queries see the sidebar's width; in the browser shell the same rules only fire if the window itself is that narrow, which is correct.
 
 ## How it fits together
 
@@ -12,7 +31,7 @@ webview (browser)            extension host (Node)             dsh web
   full dsh client stack  ◀──  postMessage  ◀──  SSE/JSON  ◀──────  /api
 ```
 
-The webview's page origin is `vscode-webview://…`, which the server's `/api` browser-trust fence refuses. So the webview never fetches the server directly: its transport (`PostMessageApiClient` from [`@deepseek-ai/dsh-client-connection`](../../packages/client/connection/README.md)) posts every request to the extension host, which replays it against the server's loopback origin — a loopback Host passes the fence like any non-browser client. The GUI itself is the ordinary dsh client stack, bundled statically by `webview/vite.config.ts` (the webview's CSP forbids fetching plugin bundles, so every plugin ships inside one bundle) and booted through the shared `AppWebEntry` kernel with the roster registered as static plugins.
+The webview's page origin is `vscode-webview://…`, which the server's `/api` browser-trust fence refuses. So the webview never fetches the server directly: its transport (`PostMessageApiClient` from [`@deepseek-ai/dsh-client-connection`](../../packages/client/connection/README.md)) posts every request to the extension host, which replays it against the server's loopback origin — a loopback Host passes the fence like any non-browser client. The bridge confines every relayed request to that origin under `/api/`: an absolute URL, a protocol-relative or backslash authority, or a non-API path is refused before any fetch, so injected webview script cannot borrow the host's loopback network reach for other targets. The GUI itself is the ordinary dsh client stack, bundled statically by `webview/vite.config.ts` (the webview's CSP forbids fetching plugin bundles, so every plugin ships inside one bundle) and booted through the shared `AppWebEntry` kernel with the roster registered as static plugins.
 
 The extension launches, on demand:
 
@@ -32,8 +51,9 @@ The extension feeds the model your editor context so a prompt can refer to "this
 
 ## Commands
 
-- **DeepSeek Harness: Open Panel** — start the server (if needed) and reveal the GUI panel beside the editor.
-- **DeepSeek Harness: Restart Server** — tree-kill and relaunch the managed server while retaining the panel; its bridge and native clients resolve the replacement origin dynamically.
+- **DeepSeek Harness: Focus Sidebar** — reveal the view (VS Code resolves it on first reveal, which starts the server).
+- **DeepSeek Harness: Show Conversation** / **Show Sessions** — route the front pane; both are title actions on the view.
+- **DeepSeek Harness: Restart Server** — tree-kill and relaunch the managed server. The view stays: the bridge resolves the server origin through a live getter, so the webview reconnects to the new port by itself.
 
 ## Windows
 
@@ -47,7 +67,7 @@ pnpm --filter dsh-vscode run build:host  # extension host only
 pnpm --filter dsh-vscode run build:webview
 ```
 
-The host build emits one self-contained `dist/extension.js` (workspace runtime imports inlined; only the VS Code API and Node built-ins stay external). The webview build emits `dist/webview/webview.js` + `webview.css`, served through `asWebviewUri`.
+The host build emits one self-contained `dist/extension.js` (workspace runtime imports inlined; only the VS Code API stays external). The webview build emits `dist/webview/webview.js` + `webview.css`, served through `asWebviewUri`.
 
 ## Package (self-contained vsix)
 
@@ -55,18 +75,22 @@ The host build emits one self-contained `dist/extension.js` (workspace runtime i
 pnpm --filter dsh-vscode run package    # packs a vsix for the host platform
 ```
 
-`package` runs the full repo build, materializes `deploy/` (the `dsh-vscode-closure` dependency-only deploy root — the same self-contained `dsh web` bundle the desktop shell ships), builds the extension, and runs `vsce package --no-dependencies` for the host platform through [scripts/package-vsix.mjs](scripts/package-vsix.mjs). `DSH_VSIX_TARGET` is an optional assertion for release jobs: it must equal the detected host target, because changing only the vsce label cannot replace the native addons already selected for `deploy/`. The vsix carries the runtime under `dist/`, `deploy/`, and `media/`, plus the extension manifest, readmes, and license retained by [.vscodeignore](.vscodeignore); no source or development `node_modules` tree ships. The top-level runtime-closure gate requires the desktop and VS Code dependency maps to remain identical.
+`package` runs the full repo build, materializes `deploy/` (the `dsh-vscode-closure` dependency-only deploy root — the same self-contained `dsh web` bundle the desktop shell ships), builds the extension, and runs `vsce package --no-dependencies` for one platform target through [scripts/package-vsix.mjs](scripts/package-vsix.mjs). The target defaults to the host platform; set `DSH_VSIX_TARGET` (e.g. `linux-x64`, `darwin-arm64`) in the environment to override — a Node script reads it, so this works identically on every OS without POSIX shell syntax. The vsix carries the runtime under `dist/`, `deploy/`, and `media/`, plus the extension manifest, readmes, and license retained by [.vscodeignore](.vscodeignore); no source or development `node_modules` tree ships.
 
 The packaged extension needs no Node, no `dsh`, and no checkout: the launcher's embedded-closure branch runs the bundled CLI under **VS Code's own Electron as Node** (`ELECTRON_RUN_AS_NODE=1` with `--expose-internals`, exactly the desktop shell's mechanism, with `process.execPath` being the extension host's Electron). The closure's native addons (node-pty, koffi) are N-API and need no rebuild.
 
-Because the closure carries platform-native addons, the vsix is **per-platform** (`vsce package --target <target>`); the release pipeline must run packaging on matching `win32-x64`, `linux-x64`, `darwin-x64`, `darwin-arm64`, and other supported runners. A dev checkout without `deploy/` falls through to the checkout's built CLI or `dsh` on PATH, so `pnpm --filter dsh-vscode run build` + an Extension Development Host works without packaging.
+Because the closure carries platform-native addons, the vsix is **per-platform** (`vsce package --target <target>`); a CI matrix packs one per `win32-x64`, `linux-x64`, `darwin-x64`, `darwin-arm64`, etc. A dev checkout without `deploy/` falls through to the checkout's built CLI or `dsh` on PATH, so `pnpm --filter dsh-vscode run build` + an Extension Development Host works without packaging.
 
 ## Tests
 
-`tests/` covers the extension-host logic keyless: process transactions (`runtime.spec.ts`), restart/origin rebinding (`lifecycle.spec.ts`), the postMessage↔fetch relay (`bridge.spec.ts`), cancellable native controls (`native-ui.spec.ts`), context targeting, panel HTML/CSP, and static-roster parity. `pnpm run test:vscode:electron` launches the built `dist/extension.js` in an isolated Extension Development Host, starts the real built `dsh web` composition with only the LLM replaced by a recorded replay, drives the built webview through a real prompt, and asserts the raw aria snapshot contains the prompt, restored composer, and replayed reply. The resulting production JSONL must prove `ide` context precedes the user prompt and its first `request/header`; the lane then restarts the managed server.
+`tests/` covers the pure extension-host logic keyless over injected clients, UI, spawn, and schedulers: process transactions and restart/origin ownership, the postMessage↔fetch relay and its SSRF confinement, cancellable native controls, active-session and context targeting, panel HTML/CSP, and static-roster parity. The browser lane (`pnpm run test:web`, config `vitest.web.config.ts`) serves the built `dist/webview` through the real `panelHtml()` document with the shipped CSP; `sidebar.snapshot.ts` boots the keyless fixture at 259px and records the sessions route, interaction composers, representative tool rows, and horizontal containment. `pnpm run test:vscode:electron` also launches the built extension in an isolated Extension Development Host, starts the production `dsh web` composition with only the LLM replaced by a recorded replay, drives the built webview through a prompt, requires the production JSONL to place IDE context before the prompt and first request header, and restarts the managed server. Neither lane claims a live-provider transcript.
 
 ## Known Limitations and Deferred Work
 
+- **Native diff-editor and jump-to-location have foundations but no trigger yet** — [`src/locations.ts`](src/locations.ts) resolves a tool view's model-facing paths into absolute editor targets and extracts consistent two-pane diff materials from the wire (an edit compares the hunk fragments both sides carried; a create compares an empty left against the whole new file — it does **not** mix a disk whole-file left pane with a hunk right pane). Opening a native `vscode.diff` or revealing a location needs a client-side "open in editor" signal from a tool card, which is a client-plugin change deferred to a dedicated UI phase; a true whole-file view (applying the hunk to disk) lands with that trigger.
 - **Context injection targets a heuristic session** — the active session is tracked host-side (last running, else first seen); when several sessions are attached, injection may target a different one than the panel is showing until a webview→host active-session signal exists.
 - **Native approval prompts coexist with the in-panel ones** — both surfaces show every approval/question; v1 does not suppress either. A per-window toggle is deferred to when the extension grows a settings surface.
-- **One panel per window** — the extension hosts a single GUI panel; multiple simultaneous panels are not supported.
+- **Self-contained packaging assumes VS Code's Node is in the harness engine range** — the embedded closure runs under VS Code's Electron-as-Node, which must satisfy the harness `node ^22.19 || >=24` range. A VS Code build shipping an out-of-range Node needs a PATH-based vsix (no `deploy/`, relying on an installed `dsh`) instead; confirming the range for the targeted VS Code versions is a release gate.
+- **The vsix is signed/published separately** — `package` produces an unsigned vsix per platform; marketplace signing and publish (`vsce publish`) are a release step, and `keytar`/`vsce-sign` native builds are denied for local packaging.
+- **One view per window** — the extension hosts a single sidebar view; multiple simultaneous GUI surfaces are not supported.
+- **A live-provider editor transcript remains manual** — the assembled browser snapshot proves the built webview renders fixture assistant content, interaction composers, and tool rows at 259px without root-level horizontal scrolling or uncontained overflow. A Markdown table retains one intentional content-level horizontal scroller. A real provider turn inside an Extension Development Host remains manual until an editor-host lane exists.

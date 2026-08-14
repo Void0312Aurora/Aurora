@@ -4,6 +4,10 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  cordis: workspace:*
+  cosmokit: workspace:*
+
 patchedDependencies:
   '@earendil-works/pi-tui@0.80.7': 6c30c5386c0159131e1361023cddf31377f5728962524841964373312c1ed946
   node-pty@1.1.0: 7a0c04f1f49d798a9ffe2f7f414c01064a44ca2489772d0c3e1235ab336755e6
@@ -493,7 +497,7 @@ importers:
         specifier: ^15.0.0
         version: 15.0.0
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../vendor/cordis
       js-yaml:
         specifier: ^4.2.0
@@ -864,7 +868,7 @@ importers:
         specifier: workspace:^
         version: link:../../../packages/context/workspace-context
       cordis:
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../../vendor/cordis
       schemastery:
         specifier: workspace:^
@@ -951,6 +955,9 @@ importers:
       '@deepseek-ai/dsh-host-directory-picker-browse':
         specifier: workspace:^
         version: link:../../packages/host/directory-picker-browse
+      '@testing-library/react':
+        specifier: ^16.3.2
+        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@types/node':
         specifier: ^22.0.0
         version: 22.20.0
@@ -973,7 +980,7 @@ importers:
         specifier: ^11.8.0
         version: 11.8.0
       playwright:
-        specifier: ^1.49.0
+        specifier: ^1.61.1
         version: 1.61.1
       react:
         specifier: ^18.2.0
@@ -1321,7 +1328,7 @@ importers:
         specifier: workspace:^
         version: link:../../../packages/context/workspace-context
       cordis:
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../../vendor/cordis
       schemastery:
         specifier: workspace:^
@@ -1698,7 +1705,7 @@ importers:
         specifier: workspace:^
         version: link:../../ui/user-approval
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/bash/bash:
@@ -1713,7 +1720,7 @@ importers:
         specifier: workspace:^
         version: link:../../subprocess/subprocess
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/bash/bash-local:
@@ -1738,7 +1745,7 @@ importers:
         specifier: workspace:^
         version: link:../../util/timeout
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/bash/bash-sandbox:
@@ -1765,7 +1772,7 @@ importers:
         specifier: workspace:^
         version: link:../../subprocess/subprocess-local
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
       node-addon-landlock-run:
         specifier: 0.0.0-test.0
@@ -1838,7 +1845,7 @@ importers:
         specifier: workspace:^
         version: link:../../ui/user-approval
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/client/connection:
@@ -1869,7 +1876,7 @@ importers:
         specifier: workspace:^
         version: link:../../support/invariants
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/client/hmr:
@@ -1891,7 +1898,7 @@ importers:
         specifier: workspace:^
         version: link:../../support/invariants
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/client/locale:
@@ -1912,7 +1919,7 @@ importers:
         specifier: ~18.3.1
         version: 18.3.31
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
       react:
         specifier: ^18.2.0
@@ -1930,7 +1937,7 @@ importers:
         specifier: workspace:^
         version: link:../../support/invariants
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/client/runtime:
@@ -1985,7 +1992,7 @@ importers:
         specifier: ~18.3.1
         version: 18.3.31
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/client/schema-form:
@@ -1998,7 +2005,7 @@ importers:
         specifier: workspace:^
         version: link:../../support/invariants
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/client/test-runtime:
@@ -2035,7 +2042,7 @@ importers:
         specifier: ~18.3.0
         version: 18.3.7(@types/react@18.3.31)
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
       react:
         specifier: ^18.2.0
@@ -2081,7 +2088,7 @@ importers:
         specifier: ~18.3.1
         version: 18.3.31
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
       react:
         specifier: ^18.2.0
@@ -2139,7 +2146,7 @@ importers:
         specifier: ~18.3.1
         version: 18.3.31
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
       react:
         specifier: ^18.2.0
@@ -2181,7 +2188,7 @@ importers:
         specifier: ~18.3.1
         version: 18.3.31
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
       react:
         specifier: ^18.2.0
@@ -2192,18 +2199,12 @@ importers:
 
   packages/client/ui-layout:
     devDependencies:
-      '@deepseek-ai/dsh-client-locale':
-        specifier: workspace:^
-        version: link:../locale
       '@deepseek-ai/dsh-client-runtime':
         specifier: workspace:^
         version: link:../runtime
       '@deepseek-ai/dsh-client-ui-slots':
         specifier: workspace:^
         version: link:../ui-slots
-      '@deepseek-ai/dsh-client-ui-theme':
-        specifier: workspace:^
-        version: link:../ui-theme
       '@deepseek-ai/dsh-invariants':
         specifier: workspace:^
         version: link:../../support/invariants
@@ -2211,7 +2212,7 @@ importers:
         specifier: ~18.3.1
         version: 18.3.31
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
       react:
         specifier: ^18.2.0
@@ -2253,7 +2254,7 @@ importers:
         specifier: ^2.1.1
         version: 2.1.1
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
       react:
         specifier: ^18.2.0
@@ -2295,7 +2296,7 @@ importers:
         specifier: ~18.3.1
         version: 18.3.31
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
       react:
         specifier: ^18.2.0
@@ -2340,7 +2341,7 @@ importers:
         specifier: ~18.3.1
         version: 18.3.31
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
       react:
         specifier: ^18.2.0
@@ -2382,7 +2383,7 @@ importers:
         specifier: ~18.3.1
         version: 18.3.31
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
       react:
         specifier: ^18.2.0
@@ -2443,7 +2444,7 @@ importers:
         specifier: ~18.3.0
         version: 18.3.7(@types/react@18.3.31)
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/client/ui-question:
@@ -2495,7 +2496,7 @@ importers:
         specifier: ~18.3.1
         version: 18.3.31
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/client/ui-settings:
@@ -2529,7 +2530,7 @@ importers:
         specifier: ~18.3.0
         version: 18.3.7(@types/react@18.3.31)
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
       react:
         specifier: ^18.2.0
@@ -2578,7 +2579,7 @@ importers:
         specifier: ~18.3.1
         version: 18.3.31
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
       react:
         specifier: ^18.2.0
@@ -2615,7 +2616,7 @@ importers:
         specifier: ~18.3.1
         version: 18.3.31
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
       react:
         specifier: ^18.2.0
@@ -2639,7 +2640,7 @@ importers:
         specifier: workspace:^
         version: link:../../support/invariants
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/client/ui-slash:
@@ -2670,7 +2671,7 @@ importers:
         specifier: ~18.3.1
         version: 18.3.31
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
       react:
         specifier: ^18.2.0
@@ -2685,7 +2686,7 @@ importers:
         specifier: ~18.3.1
         version: 18.3.31
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/client/ui-subagent:
@@ -2728,7 +2729,7 @@ importers:
         specifier: ~18.3.1
         version: 18.3.31
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/client/ui-theme:
@@ -2759,7 +2760,7 @@ importers:
         specifier: ~18.3.1
         version: 18.3.31
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
       react:
         specifier: ^18.2.0
@@ -2790,7 +2791,7 @@ importers:
         specifier: ~18.3.1
         version: 18.3.31
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
       react:
         specifier: ^18.2.0
@@ -2830,7 +2831,7 @@ importers:
         specifier: ~18.3.1
         version: 18.3.31
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
       react:
         specifier: ^18.2.0
@@ -2882,7 +2883,7 @@ importers:
         specifier: ~18.3.0
         version: 18.3.7(@types/react@18.3.31)
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
       typescript:
         specifier: ^6.0.3
@@ -2907,7 +2908,7 @@ importers:
         specifier: ~18.3.1
         version: 18.3.31
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/code-runtime/code-runtime:
@@ -2916,7 +2917,7 @@ importers:
         specifier: workspace:^
         version: link:../../support/invariants
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/code-runtime/code-runtime-worker:
@@ -2938,7 +2939,7 @@ importers:
         specifier: workspace:^
         version: link:../../util/timeout
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/compact/command-compact:
@@ -2968,7 +2969,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/session
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/compact/compact:
@@ -2983,7 +2984,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/session
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/compact/compact-basic:
@@ -3032,7 +3033,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/tools
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/compact/compact-tool-result-prune:
@@ -3057,7 +3058,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/session
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/context/session-reference:
@@ -3088,7 +3089,7 @@ importers:
         specifier: workspace:^
         version: link:../../session-query/session-query
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/context/time-context:
@@ -3125,7 +3126,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/tools
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/context/tmux-context:
@@ -3153,7 +3154,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/system-prompt
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/context/workspace-context:
@@ -3202,7 +3203,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/tools
       cordis:
-        specifier: ^4.0.0-rc.6
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/cordis/repository-plugin:
@@ -3236,7 +3237,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/tools
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/cordis/tool-cordis:
@@ -3279,7 +3280,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/tools
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/core/agent:
@@ -3303,7 +3304,7 @@ importers:
         specifier: workspace:^
         version: link:../system-prompt
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/core/agent-loop:
@@ -3340,7 +3341,7 @@ importers:
         specifier: workspace:^
         version: link:../tools
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/core/scope:
@@ -3349,7 +3350,7 @@ importers:
         specifier: workspace:^
         version: link:../../support/invariants
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/core/session:
@@ -3367,7 +3368,7 @@ importers:
         specifier: workspace:^
         version: link:../scope
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/core/system-prompt:
@@ -3386,7 +3387,7 @@ importers:
         specifier: workspace:^
         version: link:../scope
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/core/tools:
@@ -3420,7 +3421,7 @@ importers:
         specifier: workspace:^
         version: link:../../ui/user-approval
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/credentials/credentials:
@@ -3432,7 +3433,7 @@ importers:
         specifier: workspace:^
         version: link:../../support/invariants
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/credentials/credentials-local:
@@ -3460,7 +3461,7 @@ importers:
         specifier: workspace:^
         version: link:../../util/paths
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/examples/acp-demo:
@@ -3508,7 +3509,7 @@ importers:
         specifier: workspace:^
         version: link:../../context/workspace-context
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
       schemastery:
         specifier: ^3.17.0
@@ -3617,7 +3618,7 @@ importers:
         specifier: workspace:^
         version: link:../../context/workspace-context
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
       node-addon-landlock-run:
         specifier: 0.0.0-test.0
@@ -3665,7 +3666,7 @@ importers:
         specifier: workspace:^
         version: link:../../context/workspace-context
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
       schemastery:
         specifier: ^3.17.0
@@ -3681,7 +3682,7 @@ importers:
         specifier: workspace:^
         version: link:../../support/invariants
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/fs/fs:
@@ -3699,7 +3700,7 @@ importers:
         specifier: workspace:^
         version: link:../../sandbox/sandbox
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/fs/fs-local:
@@ -3721,7 +3722,7 @@ importers:
         specifier: workspace:^
         version: link:../../llm/llm
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/fs/fs-policy:
@@ -3736,7 +3737,7 @@ importers:
         specifier: workspace:^
         version: link:../../llm/llm
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/fs/fs-sandbox:
@@ -3757,7 +3758,7 @@ importers:
         specifier: workspace:^
         version: link:../../sandbox/sandbox-policy
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/fs/tool-fs:
@@ -3815,7 +3816,7 @@ importers:
         specifier: workspace:^
         version: link:../../ui/user-approval
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/fs/tool-fs-search:
@@ -3858,7 +3859,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/tools
       cordis:
-        specifier: ^4.0.0-rc.6
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/fs/tool-str-replace-editor:
@@ -3904,7 +3905,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/tools
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/goal/command-goal:
@@ -3931,7 +3932,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/session
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/goal/goal:
@@ -3968,7 +3969,7 @@ importers:
         specifier: workspace:^
         version: link:../../session-projection/session-projection
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/goal/goal-session:
@@ -4001,7 +4002,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/tools
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/goal/tool-goal:
@@ -4035,7 +4036,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/tools
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/guard/repeat-tool-guard:
@@ -4066,7 +4067,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/tools
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/hooks/hook-protocol:
@@ -4081,7 +4082,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/session
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/hooks/hooks-claude:
@@ -4133,7 +4134,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/tools
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/hooks/hooks-codex:
@@ -4182,7 +4183,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/tools
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/host/apiproxy:
@@ -4267,7 +4268,7 @@ importers:
         specifier: workspace:^
         version: link:../../storage/storage-domain
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/host/directory-picker:
@@ -4276,7 +4277,7 @@ importers:
         specifier: workspace:^
         version: link:../../support/invariants
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/host/directory-picker-auto:
@@ -4303,7 +4304,7 @@ importers:
         specifier: workspace:^
         version: link:../../support/invariants
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/host/directory-picker-browse:
@@ -4343,7 +4344,7 @@ importers:
         specifier: ~18.3.1
         version: 18.3.31
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
       react:
         specifier: ^18.2.0
@@ -4374,7 +4375,7 @@ importers:
         specifier: ~18.3.1
         version: 18.3.31
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
       react:
         specifier: ^18.2.0
@@ -4390,7 +4391,7 @@ importers:
         specifier: workspace:^
         version: link:../../support/invariants
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/llm/llm:
@@ -4409,7 +4410,7 @@ importers:
         specifier: workspace:^
         version: link:../../util/timeout
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/llm/llm-deepseek:
@@ -4437,7 +4438,7 @@ importers:
         specifier: workspace:^
         version: link:../../util/timeout
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/llm/llm-pi-ai:
@@ -4468,7 +4469,7 @@ importers:
         specifier: workspace:^
         version: link:../../util/timeout
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/llm/llm-retry:
@@ -4523,7 +4524,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/tools
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/llm/token-meter:
@@ -4548,7 +4549,7 @@ importers:
         specifier: workspace:^
         version: link:../../session-projection/session-projection
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/lsp/lsp:
@@ -4563,7 +4564,7 @@ importers:
         specifier: workspace:^
         version: link:../../llm/llm
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/lsp/lsp-local:
@@ -4594,7 +4595,7 @@ importers:
         specifier: workspace:^
         version: link:../../util/timeout
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
       typescript:
         specifier: ^6.0.3
@@ -4640,7 +4641,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/tools
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/mcp/mcp-client:
@@ -4674,7 +4675,7 @@ importers:
         specifier: ^2026.7.4
         version: 2026.7.10(zod@4.4.3)
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/plan/plan-mode:
@@ -4717,7 +4718,7 @@ importers:
         specifier: workspace:^
         version: link:../../ui/user-interaction
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/pty/pty:
@@ -4735,7 +4736,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/session
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/pty/pty-local:
@@ -4769,7 +4770,7 @@ importers:
         specifier: workspace:^
         version: link:../../subprocess/subprocess
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/pty/tool-bash-persistent:
@@ -4818,7 +4819,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/tools
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/pty/tool-pty:
@@ -4876,7 +4877,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/tools
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/sandbox/sandbox:
@@ -4888,7 +4889,7 @@ importers:
         specifier: workspace:^
         version: link:../../llm/llm
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/sandbox/sandbox-local:
@@ -4910,7 +4911,7 @@ importers:
         specifier: workspace:^
         version: link:../sandbox
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/sandbox/sandbox-policy:
@@ -4935,7 +4936,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/system-prompt
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/sdk/create-sdk:
@@ -4951,7 +4952,7 @@ importers:
         specifier: workspace:^
         version: link:../../support/invariants
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/sdk/helper:
@@ -5000,7 +5001,7 @@ importers:
         specifier: workspace:^
         version: link:../../web/tool-web
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/sdk/scripts:
@@ -5025,7 +5026,7 @@ importers:
         specifier: workspace:^
         version: link:../../support/invariants
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
       tsdown:
         specifier: ^0.22.2
@@ -5049,7 +5050,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/session
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/sdk/sdk-protocol:
@@ -5067,7 +5068,7 @@ importers:
         specifier: workspace:^
         version: link:../../subagent/subagent
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/sdk/telemetry:
@@ -5086,7 +5087,7 @@ importers:
         specifier: workspace:^
         version: link:../../util/paths
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/session-persistence/session-checkpoint-policy:
@@ -5125,7 +5126,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/tools
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/session-persistence/session-persistence:
@@ -5143,7 +5144,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/session
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/session-persistence/session-persistence-jsonl:
@@ -5165,7 +5166,7 @@ importers:
         specifier: workspace:^
         version: link:../session-persistence
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/session-persistence/session-persistence-sqlite:
@@ -5184,7 +5185,7 @@ importers:
         specifier: workspace:^
         version: link:../session-persistence
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/session-projection/session-projection:
@@ -5200,7 +5201,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/session
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/session-projection/session-projection-cache:
@@ -5231,7 +5232,7 @@ importers:
         specifier: workspace:^
         version: link:../../storage/storage-domain
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/session-query/session-query:
@@ -5255,7 +5256,7 @@ importers:
         specifier: workspace:^
         version: link:../../session-title/session-title
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/session-query/session-query-sqlite:
@@ -5283,7 +5284,7 @@ importers:
         specifier: workspace:^
         version: link:../session-query
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/session-query/tool-session-query:
@@ -5332,7 +5333,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/tools
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/session-title/session-title:
@@ -5366,7 +5367,7 @@ importers:
         specifier: workspace:^
         version: link:../../session-projection/session-projection
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/session-title/session-title-all-messages-llm:
@@ -5391,7 +5392,7 @@ importers:
         specifier: workspace:^
         version: link:../session-title-llm
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/session-title/session-title-first-message-llm:
@@ -5425,7 +5426,7 @@ importers:
         specifier: workspace:^
         version: link:../session-title-llm
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/session-title/session-title-llm:
@@ -5450,7 +5451,7 @@ importers:
         specifier: workspace:^
         version: link:../../util/timeout
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/settings/settings:
@@ -5462,7 +5463,7 @@ importers:
         specifier: workspace:^
         version: link:../../support/invariants
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
       schemastery:
         specifier: ^3.18.0
@@ -5493,7 +5494,7 @@ importers:
         specifier: workspace:^
         version: link:../settings
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/skill/skill:
@@ -5506,7 +5507,7 @@ importers:
         specifier: workspace:^
         version: link:../../support/invariants
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/skill/skill-local:
@@ -5534,7 +5535,7 @@ importers:
         specifier: workspace:^
         version: link:../skill
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/skill/tool-skill:
@@ -5568,7 +5569,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/tools
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/spill/spill:
@@ -5586,7 +5587,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/session
       cordis:
-        specifier: ^4.0.0-rc.6
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/spill/spill-local:
@@ -5611,7 +5612,7 @@ importers:
         specifier: workspace:^
         version: link:../spill
       cordis:
-        specifier: ^4.0.0-rc.6
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/spill/spill-policy:
@@ -5645,7 +5646,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/tools
       cordis:
-        specifier: ^4.0.0-rc.6
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/storage/storage:
@@ -5654,7 +5655,7 @@ importers:
         specifier: workspace:^
         version: link:../../support/invariants
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/storage/storage-domain:
@@ -5673,7 +5674,7 @@ importers:
         specifier: workspace:^
         version: link:../storage
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/storage/storage-json:
@@ -5689,7 +5690,7 @@ importers:
         specifier: workspace:^
         version: link:../storage
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/storage/storage-sqlite:
@@ -5705,7 +5706,7 @@ importers:
         specifier: workspace:^
         version: link:../storage
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/subagent/subagent:
@@ -5748,7 +5749,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/tools
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/subagent/subagent-acp:
@@ -5788,7 +5789,7 @@ importers:
         specifier: workspace:^
         version: link:../../subprocess/subprocess-local
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/subagent/subagent-dsh-sdk:
@@ -5828,7 +5829,7 @@ importers:
         specifier: workspace:^
         version: link:../../subprocess/subprocess
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/subagent/subagent-fork:
@@ -5868,7 +5869,7 @@ importers:
         specifier: workspace:^
         version: link:../subagent-spawn
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/subagent/subagent-inprocess:
@@ -5913,7 +5914,7 @@ importers:
         specifier: workspace:^
         version: link:../../ui/user-approval
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/subagent/subagent-spawn:
@@ -5965,7 +5966,7 @@ importers:
         specifier: workspace:^
         version: link:../tool-subagent
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/subagent/tool-subagent:
@@ -6017,7 +6018,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/tools
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/subagent/tool-subagent-control:
@@ -6059,7 +6060,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/tools
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/subagent/tool-subagent-report:
@@ -6105,7 +6106,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/tools
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/subprocess/subprocess:
@@ -6114,7 +6115,7 @@ importers:
         specifier: workspace:^
         version: link:../../support/invariants
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/subprocess/subprocess-local:
@@ -6130,7 +6131,7 @@ importers:
         specifier: workspace:^
         version: link:../subprocess
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/support/acp-snapshot:
@@ -6149,7 +6150,7 @@ importers:
         specifier: workspace:^
         version: link:../invariants
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/support/agent-loop-testkit:
@@ -6176,7 +6177,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/tools
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/support/invariants:
@@ -6186,7 +6187,7 @@ importers:
         version: link:../../../vendor/schemastery
     devDependencies:
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/support/llm-mock-server:
@@ -6195,7 +6196,7 @@ importers:
         specifier: workspace:^
         version: link:../invariants
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/support/llm-replay:
@@ -6210,7 +6211,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/session
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/support/loader-smoke:
@@ -6226,7 +6227,7 @@ importers:
         specifier: workspace:^
         version: link:../invariants
       cordis:
-        specifier: ^4.0.0-rc.6
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/tasks/tasks:
@@ -6244,7 +6245,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/session
       cordis:
-        specifier: ^4.0.0-rc.6
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/tasks/tasks-local:
@@ -6268,7 +6269,7 @@ importers:
         specifier: workspace:^
         version: link:../../util/timeout
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/tasks/tool-tasks:
@@ -6305,7 +6306,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/tools
       cordis:
-        specifier: ^4.0.0-rc.6
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/telemetry/session-telemetry:
@@ -6320,7 +6321,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/session
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/telemetry/session-telemetry-otel:
@@ -6369,7 +6370,7 @@ importers:
         specifier: workspace:^
         version: link:../session-telemetry
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/timeout/timeout-policy:
@@ -6387,7 +6388,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/tools
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/todo/tool-todo:
@@ -6430,7 +6431,7 @@ importers:
         specifier: workspace:^
         version: link:../../ui/user-interaction
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/typert/generator:
@@ -6449,7 +6450,7 @@ importers:
         specifier: workspace:^
         version: link:../registry
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
       zod:
         specifier: ^4.4.3
@@ -6471,7 +6472,7 @@ importers:
         specifier: workspace:^
         version: link:../registry
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
       zod:
         specifier: ^4.4.3
@@ -6487,7 +6488,7 @@ importers:
         specifier: workspace:^
         version: link:../../support/invariants
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/ui/app-boot:
@@ -6521,7 +6522,7 @@ importers:
         specifier: ^4.0.9
         version: 4.0.9
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/ui/commands:
@@ -6542,7 +6543,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/session
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/ui/jsonrpc:
@@ -6585,7 +6586,7 @@ importers:
         specifier: workspace:^
         version: link:../../subagent/subagent
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/ui/permission:
@@ -6625,7 +6626,7 @@ importers:
         specifier: workspace:^
         version: link:../user-approval
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/ui/tool-ask-user:
@@ -6649,7 +6650,7 @@ importers:
         specifier: workspace:^
         version: link:../user-interaction
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/ui/tui:
@@ -6740,7 +6741,7 @@ importers:
         specifier: 5.5.0
         version: 5.5.0
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/ui/user-approval:
@@ -6771,7 +6772,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/system-prompt
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/ui/user-interaction:
@@ -6786,7 +6787,7 @@ importers:
         specifier: workspace:^
         version: link:../../llm/llm
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/util/atomic-write:
@@ -6795,7 +6796,7 @@ importers:
         specifier: workspace:^
         version: link:../../support/invariants
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/util/brand:
@@ -6804,7 +6805,7 @@ importers:
         specifier: workspace:^
         version: link:../../support/invariants
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/util/native-command:
@@ -6813,7 +6814,7 @@ importers:
         specifier: workspace:^
         version: link:../../support/invariants
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/util/paths:
@@ -6822,7 +6823,7 @@ importers:
         specifier: workspace:^
         version: link:../../support/invariants
       cordis:
-        specifier: ^4.0.0-rc.6
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/util/process-tree:
@@ -6831,7 +6832,7 @@ importers:
         specifier: workspace:^
         version: link:../../support/invariants
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/util/retention:
@@ -6840,7 +6841,7 @@ importers:
         specifier: workspace:^
         version: link:../../support/invariants
       cordis:
-        specifier: ^4.0.0-rc.6
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/util/timeout:
@@ -6849,7 +6850,7 @@ importers:
         specifier: workspace:^
         version: link:../../support/invariants
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/util/web-launcher:
@@ -6858,7 +6859,7 @@ importers:
         specifier: workspace:^
         version: link:../../support/invariants
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/web/tool-web:
@@ -6913,7 +6914,7 @@ importers:
         specifier: ^5.0.6
         version: 5.0.6
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/web/web:
@@ -6929,7 +6930,7 @@ importers:
         specifier: workspace:^
         version: link:../../llm/llm
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/web/web-fetch-local:
@@ -6948,7 +6949,7 @@ importers:
         specifier: workspace:^
         version: link:../web
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/web/web-search-deepseek:
@@ -6976,7 +6977,7 @@ importers:
         specifier: workspace:^
         version: link:../web
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/web/web-search-exa:
@@ -6992,7 +6993,7 @@ importers:
         specifier: workspace:^
         version: link:../web
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/web/web-search-perplexity:
@@ -7008,7 +7009,7 @@ importers:
         specifier: workspace:^
         version: link:../web
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/workflow/tool-ralph:
@@ -7060,7 +7061,7 @@ importers:
         specifier: workspace:^
         version: link:../workflow-workerthread
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/workflow/tool-workflow:
@@ -7097,7 +7098,7 @@ importers:
         specifier: workspace:^
         version: link:../workflow-workerthread
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/workflow/workflow:
@@ -7118,7 +7119,7 @@ importers:
         specifier: workspace:^
         version: link:../../core/session
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   packages/workflow/workflow-workerthread:
@@ -7164,7 +7165,7 @@ importers:
         specifier: workspace:^
         version: link:../workflow
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
       tsx:
         specifier: ^4.19.2
@@ -7195,7 +7196,7 @@ importers:
         specifier: workspace:^
         version: link:../../storage/storage-domain
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../../../vendor/cordis
 
   python/sdk-runtime:
@@ -7492,7 +7493,7 @@ importers:
         specifier: workspace:^
         version: link:../../packages/context/workspace-context
       cordis:
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../../vendor/cordis
       schemastery:
         specifier: workspace:^
@@ -7510,7 +7511,7 @@ importers:
         specifier: ^1.1.0
         version: 1.1.0
       cosmokit:
-        specifier: ^1.8.1
+        specifier: workspace:*
         version: link:../cosmokit
 
   vendor/cosmokit: {}
@@ -7521,7 +7522,7 @@ importers:
         specifier: ^1.0.0-rc.5
         version: link:../loader
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../cordis
 
   vendor/hmr:
@@ -7536,10 +7537,10 @@ importers:
         specifier: ^4.0.3
         version: 4.0.3
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../cordis
       cosmokit:
-        specifier: ^1.8.1
+        specifier: workspace:*
         version: link:../cosmokit
       picomatch:
         specifier: ^4.0.3
@@ -7564,10 +7565,10 @@ importers:
         specifier: ^1.0.0-rc.5
         version: link:../loader
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../cordis
       cosmokit:
-        specifier: ^1.8.1
+        specifier: workspace:*
         version: link:../cosmokit
       js-yaml:
         specifier: ^4.1.0
@@ -7576,10 +7577,10 @@ importers:
   vendor/loader:
     dependencies:
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../cordis
       cosmokit:
-        specifier: ^1.8.1
+        specifier: workspace:*
         version: link:../cosmokit
       node-addon-require-builtin:
         specifier: ^0.1.3
@@ -7591,10 +7592,10 @@ importers:
   vendor/logger-console:
     dependencies:
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../cordis
       cosmokit:
-        specifier: ^1.8.1
+        specifier: workspace:*
         version: link:../cosmokit
       schemastery:
         specifier: ^3.18.0
@@ -7609,16 +7610,16 @@ importers:
         specifier: ^1.1.0
         version: 1.1.0
       cosmokit:
-        specifier: ^1.8.1
+        specifier: workspace:*
         version: link:../cosmokit
 
   vendor/timer:
     dependencies:
       cordis:
-        specifier: ^4.0.0-rc.7
+        specifier: workspace:*
         version: link:../cordis
       cosmokit:
-        specifier: ^1.8.1
+        specifier: workspace:*
         version: link:../cosmokit
 
   website:

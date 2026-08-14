@@ -1,9 +1,30 @@
 import { fileURLToPath } from 'node:url'
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tsconfigPaths from 'vite-tsconfig-paths'
 
 const src = (rel: string): string => fileURLToPath(new URL(rel, import.meta.url))
+
+/**
+ * Swap the vendored loader's config utils for the CSP-safe stub. The module is
+ * reached through relative imports inside `vendor/loader`, so a specifier
+ * alias cannot match it; this resolves first and rewrites by resolved path.
+ * @returns the resolver plugin.
+ */
+function stubLoaderConfigUtils(): Plugin {
+  const target = 'vendor/loader/src/config/utils.ts'
+  const replacement = src('./loader-config-utils-stub.ts')
+  return {
+    name: 'dsh-stub-loader-config-utils',
+    enforce: 'pre',
+    async resolveId(source, importer, options) {
+      if (importer === undefined) return null
+      const resolved = await this.resolve(source, importer, { ...options, skipSelf: true })
+      if (resolved === null) return null
+      return resolved.id.replaceAll('\\', '/').endsWith(target) ? replacement : null
+    },
+  }
+}
 
 /**
  * The client plugin packages bundled statically into the webview (the
@@ -22,16 +43,7 @@ const CLIENT_SUBPATH_PACKAGES = [
 
 export default defineConfig({
   plugins: [
-    {
-      name: 'dsh-vscode-csp-loader-utils',
-      enforce: 'pre',
-      resolveId(source, importer) {
-        const owner = importer?.replaceAll('\\', '/') ?? ''
-        if (!owner.includes('/vendor/loader/src/')) return undefined
-        if (source !== './config/utils.ts' && source !== './utils.ts') return undefined
-        return src('./loader-utils-stub.ts')
-      },
-    },
+    stubLoaderConfigUtils(),
     {
       name: 'dsh-vscode-csp-schemastery',
       enforce: 'pre',
@@ -79,6 +91,13 @@ export default defineConfig({
     'process.env.NODE_ENV': '"production"',
     // vendored loader index.ts: envData falls to its default branch.
     'process.env.CORDIS_SHARED': 'undefined',
+    // React's CJS entry branches on this at module top level. An application
+    // build (apps/web) gets the substitution from Vite automatically; a LIBRARY
+    // build does not, because a library is assumed to be bundled again by its
+    // consumer. Nothing bundles this further — the webview loads it directly —
+    // so leaving it unset throws `process is not defined` before React mounts
+    // and the panel renders blank.
+    'process.env.NODE_ENV': '"production"',
   },
   build: {
     outDir: src('../dist/webview'),

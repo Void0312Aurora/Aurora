@@ -652,15 +652,21 @@
       "entry": [
         "webview/main.ts",
         "webview/theme.ts",
+        "webview/route-bridge.ts",
+        "webview/shell/index.ts",
         "webview/node-module-stub.ts",
+        "webview/loader-config-utils-stub.ts",
         "tests/**/*.spec.ts",
+        "tests/**/*.spec.tsx",
+        "tests/**/*.e2e.ts",
+        "tests/**/*.snapshot.ts",
         "tests/vscode/suite/index.mjs"
       ],
       "project": [
         "src/**/*.ts",
-        "webview/**/*.ts",
-        "tests/**/*.ts",
-        "tests/vscode/**/*.mjs"
+        "webview/**/*.{ts,tsx}",
+        "tests/**/*.{ts,tsx}",
+        "scripts/**/*.mjs"
       ]
     },
     "packages/client/modules": {

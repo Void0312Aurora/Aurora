@@ -29,11 +29,13 @@ export function panelHtml(assets: PanelAssets): string {
   // fully static (every plugin ships inside it), so no inline script and no
   // remote script ever executes. style-src additionally allows inline styles
   // (React inline style attributes and vite-injected fallbacks).
+  // font-src allows data: because the bundled stylesheet inlines its webfonts
+  // as base64 (cssCodeSplit is off, so vite emits one stylesheet with the font
+  // payloads in it); without it every glyph falls back to a system face.
   const csp = [
     "default-src 'none'",
     `script-src ${assets.cspSource}`,
     `style-src ${assets.cspSource} 'unsafe-inline'`,
-    // The statically bundled KaTeX faces are data URLs in webview.css.
     `font-src ${assets.cspSource} data:`,
     `img-src ${assets.cspSource} data:`,
   ].join('; ')

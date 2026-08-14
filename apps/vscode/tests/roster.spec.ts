@@ -1,15 +1,15 @@
 /**
  * Static roster/boot-graph shape: every roster id gets a boot entry, the two
  * kernel-owned ids (modules, app-shell) stay out, and the graph matches the
- * `dshClient` rows of the composed web config minus dev-only hmr. This is the
- * guard that keeps the webview's static bundle in sync with the shipped web
- * surface as plugins are added.
+ * `dshClient` rows of the composed web config minus dev-only hmr and the
+ * deliberate shell substitution. This is the guard that keeps the webview's
+ * static bundle in sync with the shipped web surface as plugins are added.
  */
 
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { staticBootGraph, staticPlugins, VSCODE_THEME_ID } from '../webview/roster.ts'
+import { staticBootGraph, staticPlugins, VSCODE_ROUTES_ID, VSCODE_SHELL_ID, VSCODE_THEME_ID } from '../webview/roster.ts'
 
 const WEB_CONFIG = fileURLToPath(new URL('../../cli/config/web.cordis.yml', import.meta.url))
 
@@ -51,10 +51,32 @@ describe('webview static roster', () => {
     expect(staticPlugins).not.toHaveProperty('@deepseek-ai/dsh-host-directory-picker-native')
   })
 
-  it('bundles every browser plugin the shipped web config composes (minus dev-only hmr)', () => {
+  it('carries the host route bridge as a webview-own module', () => {
+    expect(staticPlugins).toHaveProperty(VSCODE_ROUTES_ID)
+    const routes = staticPlugins[VSCODE_ROUTES_ID] as { apply?: unknown; inject?: unknown }
+    expect(routes.apply).toBeTypeOf('function')
+    expect(routes.inject).toEqual(['layout'])
+  })
+
+  it('swaps the three-column shell for the sidebar one, and only that shell', () => {
+    // 'root' takes a single occupant, so loading both shells fails loud at
+    // registration; the sidebar host must carry exactly its own.
+    expect(staticPlugins).toHaveProperty(VSCODE_SHELL_ID)
+    expect(staticPlugins).not.toHaveProperty('@deepseek-ai/dsh-client-ui-layout')
+    const shell = staticPlugins[VSCODE_SHELL_ID] as { apply?: unknown; inject?: unknown }
+    expect(shell.apply).toBeTypeOf('function')
+    expect(shell.inject).toEqual(['slots'])
+  })
+
+  it('bundles every browser plugin the shipped web config composes (minus dev-only hmr and the shell swap)', () => {
     // hmr is dev-only (disabled in web.cordis.yml) and modules is kernel-owned;
-    // neither is a roster plugin. Every other composed client name must bundle.
-    const excluded = new Set(['@deepseek-ai/dsh-client-hmr', '@deepseek-ai/dsh-client-modules'])
+    // ui-layout is the wide shell this host deliberately replaces. Every other
+    // composed client name must bundle.
+    const excluded = new Set([
+      '@deepseek-ai/dsh-client-hmr',
+      '@deepseek-ai/dsh-client-modules',
+      '@deepseek-ai/dsh-client-ui-layout',
+    ])
     const web = webClientPluginNames().filter(name => !excluded.has(name))
     expect(web.length).toBeGreaterThan(0)
     for (const id of web) {

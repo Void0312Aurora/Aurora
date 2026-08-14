@@ -39,7 +39,8 @@ const windowsCoverageExclusions = process.platform === 'win32'
 
 const testIncludes = [
   'packages/*/*/tests/**/*.spec.{ts,tsx}',
-  'apps/*/tests/**/*.spec.ts',
+  // .tsx: apps carry component specs too (the VS Code sidebar shell).
+  'apps/*/tests/**/*.spec.{ts,tsx}',
   'examples/*/tests/**/*.spec.ts',
   'scripts/**/*.spec.ts',
 ]
