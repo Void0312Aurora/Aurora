@@ -8,17 +8,16 @@
  * background and never gate the panel on it.
  */
 
-import { spawn as nodeSpawn, type ChildProcess, type SpawnOptions } from 'node:child_process'
+import type { ChildProcess } from 'node:child_process'
 import { killProcessTree } from '@deepseek-ai/dsh-process-tree'
 import {
   childExited,
   resolveWebLaunch,
+  spawnWebLaunch,
+  type SpawnFn,
   waitForHttpOk,
   waitForReadyLine,
 } from '@deepseek-ai/dsh-web-launcher'
-
-/** The single spawn signature this runtime uses (a test seam; the node overload set collapses to this call shape). */
-type SpawnFn = (command: string, args: readonly string[], options: SpawnOptions) => ChildProcess
 
 /** Facts the runtime needs from the extension host. */
 export interface ServerRuntimeOptions {
@@ -32,7 +31,7 @@ export interface ServerRuntimeOptions {
   log: (line: string) => void
   /** Called once when a started server exits (never during {@link ServerRuntime.dispose}). */
   onExit?: (code: number | null, signal: NodeJS.Signals | null) => void
-  /** Process spawn; runtime-only test seam. Production uses `node:child_process` spawn. */
+  /** Process spawn; runtime-only test seam. Production uses the shared compatibility launcher. */
   spawn?: SpawnFn
   /** HTTP readiness probe; runtime-only test seam. Production uses global fetch. */
   fetchImpl?: typeof fetch
@@ -97,25 +96,13 @@ export class ServerRuntime {
       options.log(`Windows has no harness confinement backend; using ${launch.env.DSH_PERMISSION_MODE} permission mode (approval prompts are disabled). Set DSH_PERMISSION_MODE to override.`)
     }
     options.log(`launching dsh web (${launch.source}): ${launch.command} ${launch.args.join(' ')}`)
-    const spawn: SpawnFn = options.spawn ?? nodeSpawn
-    const child = spawn(launch.command, launch.args, {
-      // The tsx checkout branch needs the repo root; every other branch runs
-      // in the window's workspace folder so the harness adopts it as the
-      // default project root.
-      cwd: launch.cwd ?? options.cwd,
-      env: { ...options.env, ...launch.env },
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
-      // POSIX: a detached child leads its own process group so the tree kill
-      // reaches every descendant; Windows tree-kills via taskkill /T instead.
-      detached: process.platform !== 'win32',
-    })
+    const child = spawnWebLaunch(launch, {
+      // The tsx checkout branch owns its repo-root cwd; every other branch
+      // uses the window's workspace folder as the default project root.
+      ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+      env: options.env,
+    }, options.spawn)
     this.child = child
-    // stdio ['ignore','pipe','pipe'] gives stdout/stderr pipes, but the generic
-    // spawn signature still types them nullable; guard once before use.
-    if (child.stdout === null || child.stderr === null) {
-      throw new Error('dsh web spawned without its stdout/stderr pipes')
-    }
     const { stdout, stderr } = child
     stderr.setEncoding('utf8')
     stderr.on('data', (chunk: string) => { options.log(`[dsh web:err] ${chunk.trimEnd()}`) })

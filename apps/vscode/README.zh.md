@@ -39,7 +39,7 @@ webview 的页面 origin 是 `vscode-webview://…`，会被服务器的 `/api` 
 dsh web --host 127.0.0.1 --port 0
 ```
 
-经共享的 [`@deepseek-ai/dsh-web-launcher`](../../packages/util/web-launcher/README.md) 原语（桌面外壳用的是同一个），按 `DSH_BIN` → 内嵌闭包 → checkout → PATH 顺序解析 `dsh`。`--port 0` 意味着并行窗口永不冲突。扩展宿主 deactivate 时受管服务器会被（树）终止。
+经共享的 [`@deepseek-ai/dsh-web-launcher`](../../packages/util/web-launcher/README.md) 原语（桌面外壳用的是同一个），按 `DSH_BIN` → 内嵌闭包 → checkout → PATH 顺序解析 `dsh`，再通过共享的兼容 Windows 命令 shim 的边界 spawn。于是 `DSH_BIN` 与 PATH 均可接受 npm 安装的 `.cmd` shim，无需启用通用 shell。`--port 0` 意味着并行窗口永不冲突。扩展宿主 deactivate 时受管服务器会被（树）终止。
 
 ## 原生交互
 
@@ -83,7 +83,7 @@ pnpm --filter dsh-vscode run package    # packs a vsix for the host platform
 
 ## 测试
 
-`tests/` 无密钥地在注入的客户端、UI、spawn 与调度器上覆盖纯扩展宿主逻辑：启动/就绪/关停生命周期含 dispose 取消进行中的轮询（`runtime.spec.ts`）、postMessage↔fetch 中继及其 SSRF 收束（`bridge.spec.ts`）、面板 HTML/CSP（`panel.spec.ts`）、静态 roster 与已交付 web 配置的一致性（`roster.spec.ts`）、原生审批/问答消费者含重连重置与按会话隔离的调用缓存（`interactions.spec.ts`）、活动会话跟踪器（`active-session.spec.ts`）、IDE 上下文采样器与边界（`ide-context.spec.ts`），以及防抖串行化的上下文 feed（`context-feed.spec.ts`）。浏览器通道（`pnpm run test:web`，配置 `vitest.web.config.ts`）通过真实 `panelHtml()` 文档及已交付的 CSP 提供构建出的 `dist/webview`：`webview-boot.e2e.ts` 除非 React 挂载且无未捕获错误否则失败，而 `sidebar.snapshot.ts` 会以 259px 启动无密钥 fixture（测试前置数据），并记录会话路由、问答和审批 composer、代表性工具行以及横向约束。该通道需要先构建 webview bundle（`pnpm --filter dsh-vscode run build:webview`）并具备 Playwright 浏览器；当 Playwright CDN 不可达时，可设置 `DSH_CHROMIUM_PATH` 复用本机已有的 Chromium。在真实编辑器里启动面板仍是手动步骤：仓库当前没有 `@vscode/test-electron` 通道。
+`tests/` 无密钥地在注入的客户端、UI、spawn 与调度器上覆盖纯扩展宿主逻辑：启动/就绪/关停生命周期含 dispose 取消进行中的轮询（`runtime.spec.ts`）、自包含的扩展宿主 import 闭包（`built-entry.spec.ts`）、postMessage↔fetch 中继及其 SSRF 收束（`bridge.spec.ts`）、面板 HTML/CSP（`panel.spec.ts`）、静态 roster 与已交付 web 配置的一致性（`roster.spec.ts`）、原生审批/问答消费者含重连重置与按会话隔离的调用缓存（`interactions.spec.ts`）、活动会话跟踪器（`active-session.spec.ts`）、IDE 上下文采样器与边界（`ide-context.spec.ts`），以及防抖串行化的上下文 feed（`context-feed.spec.ts`）。浏览器通道（`pnpm run test:web`，配置 `vitest.web.config.ts`）通过真实 `panelHtml()` 文档及已交付的 CSP 提供构建出的 `dist/webview`：`webview-boot.e2e.ts` 除非 React 挂载且无未捕获错误否则失败，而 `sidebar.snapshot.ts` 会以 259px 启动无密钥 fixture（测试前置数据），并记录会话路由、问答和审批 composer、代表性工具行以及横向约束。该通道需要先构建 webview bundle（`pnpm --filter dsh-vscode run build:webview`）并具备 Playwright 浏览器；当 Playwright CDN 不可达时，可设置 `DSH_CHROMIUM_PATH` 复用本机已有的 Chromium。在真实编辑器里启动面板仍是手动步骤：仓库当前没有 `@vscode/test-electron` 通道。
 
 ## Known Limitations and Deferred Work
 

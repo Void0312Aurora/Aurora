@@ -16,4 +16,7 @@ export default defineConfig({
   dts: false,
   clean: false,
   external: ['vscode'],
+  // The vsix excludes node_modules; both host primitives, including the
+  // launcher's Windows command-shim closure, must live in extension.js.
+  noExternal: ['@deepseek-ai/dsh-process-tree', '@deepseek-ai/dsh-web-launcher'],
 })
