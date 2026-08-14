@@ -140,10 +140,14 @@
   --dsh-queue-composer-overlap: 5px;
 
   /* InputBar and dock registrants derive their horizontal geometry from the
-     same card width, outer clearance, and dock inset. */
-  --dsh-composer-card-max-width: 800px;
-  --dsh-composer-side-clearance: 32px;
-  --dsh-composer-dock-inset: 12px;
+     same card width, outer clearance, and dock inset. The desktop values are
+     defaults a host too narrow for them overrides on an ancestor (the VS Code
+     sidebar shell does; at 320px a 32px clearance costs a fifth of the
+     column). Defined through -host indirection because a value set here would
+     otherwise shadow anything an ancestor declares. */
+  --dsh-composer-card-max-width: var(--dsh-composer-card-max-width-host, 800px);
+  --dsh-composer-side-clearance: var(--dsh-composer-side-clearance-host, 32px);
+  --dsh-composer-dock-inset: var(--dsh-composer-dock-inset-host, 12px);
 
   display: flex;
   flex-direction: column;
@@ -239,7 +243,7 @@
   gap: 12px;
   /* Foot inside the centered box floats the stack a bit above true center. */
   padding-bottom: 32px;
-  width: min(776px, calc(100% - 48px));
+  width: min(776px, calc(100% - var(--dsh-hero-side-clearance-host, 48px)));
   z-index: 1;
 }
 
@@ -257,6 +261,10 @@
   aspect-ratio: 1051 / 468;
   transform: translate(-50%, 50%);
   pointer-events: none;
+  /* The asset is wider than its card by design, which overflows a container
+     only a little wider than the card itself. A narrow host drops the
+     decoration rather than paying a horizontal scrollbar for it. */
+  display: var(--dsh-hero-glow-display-host, block);
 }
 
 .heroWorkspaceRow {

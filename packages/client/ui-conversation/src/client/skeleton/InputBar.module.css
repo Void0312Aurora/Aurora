@@ -240,9 +240,13 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 0 10px 10px 10px;
+  gap: var(--dsh-composer-row-gap-host, 12px);
+  padding: 0 var(--dsh-composer-row-inset-host, 10px) 10px;
   min-width: 0;
+  /* A host narrower than the desktop column lets the trailing group fall to a
+     second line instead of overflowing: the toolbar's contents are fixed-size
+     controls, so there is nothing left to shrink once the gaps are gone. */
+  flex-wrap: var(--dsh-composer-row-wrap-host, nowrap);
 }
 
 .tools,
@@ -255,7 +259,8 @@
 
 /* figma 75:8208: 16 between + and the mode chips; 4 between Plan / Read-only. */
 .tools {
-  gap: 16px;
+  gap: var(--dsh-composer-tools-gap-host, 16px);
+  flex-wrap: var(--dsh-composer-row-wrap-host, nowrap);
 }
 
 .modes {
@@ -293,7 +298,9 @@
 /* Plan / Read-only / model — native <select>, chip-like closed chrome
    (figma ToggleButton: 13/20 medium secondary, 12px chevron). */
 .select {
-  max-width: 220px;
+  /* The model name is the widest thing in the toolbar; a narrow host caps it
+     harder and lets the native control ellipsize. */
+  max-width: var(--dsh-composer-select-max-width-host, 220px);
   height: 28px;
   padding: 0 20px 0 8px;
   border: none;

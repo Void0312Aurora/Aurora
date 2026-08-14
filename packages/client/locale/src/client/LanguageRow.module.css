@@ -15,7 +15,16 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  /* Breathing room between the copy and the control on a desktop panel; on a
+     narrow one it is the difference between a one-line title and a three-line
+     one, so the gap alone carries the separation there. */
   padding-right: 48px;
+}
+
+@media (max-width: 600px) {
+  .rowText {
+    padding-right: 0;
+  }
 }
 
 .title {

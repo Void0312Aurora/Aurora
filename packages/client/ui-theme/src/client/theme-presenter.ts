@@ -5,8 +5,12 @@
  * theme's alias-token overrides as inline CSS variables on body. Pure DOM
  * writes, no React involvement; the presenter only ever retracts what it wrote
  * itself, so foreign attributes and inline styles survive apply/dispose.
+ *
+ * It lives with the theme feature rather than with a layout shell: the shell
+ * occupying 'root' is replaceable (the VS Code sidebar ships its own), while
+ * the palette must reach the document under every shell.
  */
-import type { ThemeSnapshot } from '@deepseek-ai/dsh-client-ui-theme/client'
+import type { ThemeSnapshot } from './index.ts'
 
 /** Body attribute selecting the dark base palette in the token stylesheets. */
 export const DARK_ATTRIBUTE = 'data-ds-dark-theme'
