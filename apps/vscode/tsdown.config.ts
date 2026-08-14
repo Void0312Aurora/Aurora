@@ -20,4 +20,7 @@ export default defineConfig({
   // only the host-provided vscode module and Node built-ins remain external.
   noExternal: id => id !== 'vscode' && !id.startsWith('node:'),
   external: ['vscode'],
+  // The vsix excludes node_modules; both host primitives, including the
+  // launcher's Windows command-shim closure, must live in extension.js.
+  noExternal: ['@deepseek-ai/dsh-process-tree', '@deepseek-ai/dsh-web-launcher'],
 })

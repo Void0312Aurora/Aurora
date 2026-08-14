@@ -45,11 +45,12 @@ const testIncludes = [
   'scripts/**/*.spec.ts',
 ]
 
-// These specs consume emitted desktop files and belong only to the artifact
-// lane, whose dedicated config runs after the build.
-const desktopArtifactTests = [
+// These specs consume emitted shell files and belong only to artifact lanes,
+// whose dedicated configs run after the build.
+const artifactTests = [
   'apps/desktop/tests/built-entry.spec.ts',
   'apps/desktop/tests/electron-lifecycle.spec.ts',
+  'apps/vscode/tests/built-entry.spec.ts',
 ]
 
 // The instrumented coverage gate sets this env; the exempt heavy suites then
@@ -85,7 +86,7 @@ export default defineConfig({
     include: testIncludes,
     exclude: [
       ...windowsUnsupportedPackages.map(path => `${path}/tests/**/*.spec.ts`),
-      ...desktopArtifactTests,
+      ...artifactTests,
     ],
     // One coverage invocation aggregates both projects. Regular suites fork on
     // POSIX for Node stability and use threads on Windows; process-bound suites
@@ -108,7 +109,7 @@ export default defineConfig({
           exclude: [
             ...windowsUnsupportedPackages.map(path => `${path}/tests/**/*.spec.ts`),
             ...processBoundTests,
-            ...desktopArtifactTests,
+            ...artifactTests,
             ...coverageExemptExcludes,
           ],
         },
