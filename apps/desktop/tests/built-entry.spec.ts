@@ -9,7 +9,8 @@
  *
  * IMPORTANT: the compiled entry lives at `lib/types/` (depth 2); the
  * materialized workspace primitives live at `lib/process-tree/` and
- * `lib/web-launcher/` (depth 1). The post-tsc `fixup-import-paths.mjs`
+ * `lib/web-launcher/` (depth 1); web-launcher is its self-contained bundle,
+ * while process-tree is its tsc runtime. The post-tsc `fixup-import-paths.mjs`
  * adjusts the package-name source specifiers to the emitted relative forms
  * (`../process-tree/index.js`, `../web-launcher/index.js`). This test
  * verifies the fixed output.
@@ -94,8 +95,10 @@ describe('built-entry import graph', () => {
   })
 
   it('web-launcher/index.js: any relative imports resolve', async () => {
-    await verifyRelativeImports(
-      resolve(import.meta.dirname, '..', 'lib', 'web-launcher', 'index.js'),
-    )
+    const entry = resolve(import.meta.dirname, '..', 'lib', 'web-launcher', 'index.js')
+    await verifyRelativeImports(entry)
+    const source = await readFile(entry, 'utf8')
+    expect(source, 'materialized web-launcher must inline its Windows spawn compatibility dependency')
+      .not.toMatch(/from ["']cross-spawn["']/)
   })
 })
