@@ -105,8 +105,14 @@ if (shouldFail) process.exit(77)
 
 function installFakeLefthook(root: string): void {
   const binDirectory = join(root, 'node_modules/.bin')
+  const packageDirectory = join(root, 'node_modules/lefthook')
   mkdirSync(binDirectory, { recursive: true })
   writeFileSync(join(binDirectory, 'fake-lefthook.mjs'), fakeLefthookSource())
+  write(join(packageDirectory, 'package.json'), `${JSON.stringify({ name: 'lefthook', version: '0.0.0-test' })}\n`)
+  write(
+    join(packageDirectory, 'get-exe.js'),
+    'const { join } = require(\'node:path\')\nexports.getExePath = () => join(__dirname, \'../.bin/fake-lefthook.mjs\')\n',
+  )
   if (process.platform === 'win32') {
     writeFileSync(
       join(binDirectory, 'lefthook.cmd'),
@@ -584,7 +590,7 @@ describe('worktree-local Lefthook installer', { timeout: 15_000 }, () => {
 
     expect(result.status).toBe(1)
     expect(result.stderr).toContain('sibling dormant worktree config')
-    expect(result.stderr).toContain(linkedConfig)
+    expect(result.stderr).toContain(JSON.stringify(linkedConfig))
     expect(gitResult(fixture, fixture.main, ['config', '--get', 'extensions.worktreeConfig']).status).toBe(1)
     expect(gitResult(fixture, fixture.linked, ['config', '--get', 'core.hooksPath']).status).toBe(1)
     expect(git(fixture, fixture.main, ['config', '--file', linkedConfig, '--get', 'core.hooksPath'])).toBe(linkedHooks)
