@@ -1,0 +1,50 @@
+/* Single-pane frame for editor sidebars: the panes stack in one grid cell and
+   visibility selects which is in front. Colors come from the --dsw-* token
+   layer (the VS Code adapter maps the editor theme onto it). */
+
+.frame {
+  /* Compact scale for a 300-400px column. These override the occupants'
+     desktop defaults, which assume a 736-800px centre column; every one is a
+     documented -host variable on the component that reads it, so the wide
+     shell keeps its own rhythm untouched. */
+  --dsh-composer-side-clearance-host: 10px;
+  --dsh-composer-card-max-width-host: none;
+  --dsh-composer-dock-inset-host: 8px;
+  --dsh-hero-side-clearance-host: 20px;
+  /* Decoration wider than its own card cannot fit here. */
+  --dsh-hero-glow-display-host: none;
+  /* Composer toolbar: tighter gaps, a capped model name, and permission to
+     wrap — the controls are fixed-size, so past a point only a second line
+     fits them. */
+  --dsh-composer-row-gap-host: 6px;
+  --dsh-composer-row-inset-host: 8px;
+  --dsh-composer-tools-gap-host: 8px;
+  --dsh-composer-select-max-width-host: 120px;
+  --dsh-composer-row-wrap-host: wrap;
+
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--dsw-alias-background-standard);
+  color: var(--dsw-alias-text-standard);
+}
+
+/* Every pane occupies the same cell; only the active one is displayed. Panes
+   stay MOUNTED when hidden — unmounting would discard scroll position, the
+   composer draft, and the live subscriptions of a streaming turn. */
+.pane {
+  grid-area: 1 / 1;
+  display: none;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pane[data-active='true'] {
+  display: flex;
+  flex-direction: column;
+}
