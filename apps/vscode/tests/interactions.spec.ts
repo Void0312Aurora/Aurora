@@ -178,13 +178,14 @@ describe('NativeInteractions', () => {
     native.dispose()
   })
 
-  it('closes this stream generation\'s prompt before a replay opens another', async () => {
+  it('closes an open prompt when its stream generation drops, before the replay reopens it', async () => {
     const fake = fakeClient()
     const signals: AbortSignal[] = []
+    let resolveCount = 0
     const ui: NativeUi = {
       confirmApproval: (_prompt, signal) => new Promise((resolve) => {
         signals.push(signal)
-        signal.addEventListener('abort', () => { resolve('dismissed') }, { once: true })
+        signal.addEventListener('abort', () => { resolveCount++; resolve('dismissed') }, { once: true })
       }),
       askQuestions: async () => undefined,
     }
@@ -193,9 +194,11 @@ describe('NativeInteractions', () => {
     await settle()
     fake.emit(envelope('req-approve-5', { type: 'approval/requested', sessionId: 's1' as never, approvalId: 'ap5' as never, toolName: 'bash' }))
     await settle()
+    expect(signals).toHaveLength(1)
     fake.failStream(new Error('lost'))
     await new Promise(resolve => setTimeout(resolve, 10))
     expect(signals[0]?.aborted).toBe(true)
+    expect(resolveCount).toBe(1)
     fake.emit(envelope('req-approve-5', { type: 'approval/requested', sessionId: 's1' as never, approvalId: 'ap5' as never, toolName: 'bash' }))
     await settle()
     expect(signals).toHaveLength(2)
@@ -227,6 +230,31 @@ describe('NativeInteractions', () => {
     await settle()
     expect(prompts[0]?.call).toMatchObject({ title: 'Write s1.ts' })
     expect(prompts[1]?.call).toBeUndefined()
+    native.dispose()
+  })
+
+  it('purges a session\'s cached calls at turn/end so the cache stays bounded', async () => {
+    const fake = fakeClient()
+    const prompts: Parameters<NativeUi['confirmApproval']>[0][] = []
+    const ui: NativeUi = {
+      confirmApproval: (prompt) => { prompts.push(prompt); return Promise.resolve('rejected') },
+      askQuestions: async () => undefined,
+    }
+    const native = new NativeInteractions({ client: fake.client, ui, log: () => {} })
+    void native.run()
+    await settle()
+    fake.emit(envelope('e-c', {
+      type: 'session/event', sessionId: 's1' as never,
+      event: { type: 'tool/call', seq: 1, time: 0, data: { turn: 0, step: 0, callId: 'c9', name: 'write', arguments: '{}' } } as never,
+      view: { for: 'call', view: { card: 'diff', title: 'Write x.ts', diffs: [{ path: 'x.ts', oldText: null, newText: 'x' }] } },
+    }))
+    fake.emit(envelope('e-end', {
+      type: 'session/event', sessionId: 's1' as never,
+      event: { type: 'turn/end', seq: 2, time: 0, data: { turn: 0, reason: { kind: 'completed' } } } as never,
+    }))
+    fake.emit(envelope('req-late', { type: 'approval/requested', sessionId: 's1' as never, approvalId: 'ap-late' as never, toolName: 'write', callId: 'c9' as never }))
+    await settle()
+    expect(prompts[0]?.call).toBeUndefined()
     native.dispose()
   })
 })

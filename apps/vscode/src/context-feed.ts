@@ -45,12 +45,16 @@ export class IdeContextFeed {
   private readonly lastSignature = new Map<string, string>()
   private readonly primes = new Map<string, Promise<void>>()
   private pending: { cancel: () => void } | undefined
+  private tail: Promise<void> = Promise.resolve()
+  private disposed = false
+  private sendAbort: AbortController | undefined
 
   /** @param options - client, samplers, bounds, and scheduling. */
   constructor(private readonly options: ContextFeedOptions) {}
 
   /** Nudge the feed after an editor change; the actual sample runs after the debounce. */
   nudge(): void {
+    if (this.disposed) return
     this.pending?.cancel()
     const schedule = this.options.schedule ?? defaultSchedule
     this.pending = schedule(() => {
@@ -65,6 +69,7 @@ export class IdeContextFeed {
    * user's first prompt in that session can be assembled.
    */
   async sync(): Promise<void> {
+    if (this.disposed) return
     this.pending?.cancel()
     this.pending = undefined
     const sessionId = this.options.activeSession()
@@ -76,32 +81,54 @@ export class IdeContextFeed {
    * Concurrent active-session and prompt paths share the same attempt.
    */
   beforeFirstPrompt(sessionId: string): Promise<void> {
+    if (this.disposed) return Promise.resolve()
     const current = this.primes.get(sessionId)
     if (current !== undefined) return current
-    const prime = this.flush(sessionId)
+    const prime = this.enqueue(sessionId)
     this.primes.set(sessionId, prime)
     return prime
   }
 
-  private async flush(explicitSessionId?: string): Promise<void> {
+  private async flush(): Promise<void> {
+    await this.enqueue()
+  }
+
+  private enqueue(explicitSessionId?: string): Promise<void> {
+    const run = this.tail.then(async () => {
+      if (this.disposed) return
+      await this.sendOnce(explicitSessionId)
+    })
+    this.tail = run.catch((error: unknown) => {
+      if (!this.disposed) this.options.log(`injectContext scheduling failed: ${error instanceof Error ? error.message : String(error)}`)
+    })
+    return this.tail
+  }
+
+  private async sendOnce(explicitSessionId?: string): Promise<void> {
+    if (this.disposed) return
     const sessionId = explicitSessionId ?? this.options.activeSession()
     if (sessionId === undefined) return
     const snapshot = sampleIdeContext(this.options.readEditorState(), this.options.limits)
     if (snapshot.text === undefined) return
     // Suppress a no-op: same session, same signature as the last injection.
     if (this.lastSignature.get(sessionId) === snapshot.signature) return
+    const controller = new AbortController()
+    this.sendAbort = controller
     try {
       const response = await this.options.client.sessions.injectContext({
         sessionId: sessionId as Parameters<IApiClient['sessions']['injectContext']>[0]['sessionId'],
         content: [{ type: 'text', text: snapshot.text }],
-      })
+      }, controller.signal)
+      if (this.disposed) return
       if (response.result.ok) {
         this.lastSignature.set(sessionId, snapshot.signature)
       } else {
         this.options.log(`injectContext rejected for ${sessionId}: ${response.result.error.code}`)
       }
     } catch (error) {
-      this.options.log(`injectContext failed for ${sessionId}: ${error instanceof Error ? error.message : String(error)}`)
+      if (!this.disposed) this.options.log(`injectContext failed for ${sessionId}: ${error instanceof Error ? error.message : String(error)}`)
+    } finally {
+      if (this.sendAbort === controller) this.sendAbort = undefined
     }
   }
 
@@ -113,7 +140,9 @@ export class IdeContextFeed {
 
   /** Cancel any pending debounced run. */
   dispose(): void {
+    this.disposed = true
     this.pending?.cancel()
     this.pending = undefined
+    this.sendAbort?.abort()
   }
 }

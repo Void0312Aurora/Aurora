@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from 'vitest'
 import type { BridgeResponseMessage } from '@deepseek-ai/dsh-client-connection/client'
-import { ApiBridge } from '../src/bridge.ts'
+import { ApiBridge, resolveApiTarget } from '../src/bridge.ts'
 
 const RUNNING_ORIGIN = new URL('http://127.0.0.1:5173/')
 
@@ -173,6 +173,39 @@ describe('ApiBridge', () => {
     await settle()
     expect(observedSignal?.aborted).toBe(true)
     expect(posted.some(m => m.type === 'dsh-fetch-error' && m.id === 4)).toBe(true)
+  })
+
+  it('refuses a request whose path escapes the server origin or /api (SSRF guard)', async () => {
+    let fetched = false
+    const fetchImpl = (async () => { fetched = true; return streamResponse([]) }) as typeof fetch
+    const escapes = [
+      'http://169.254.169.254/latest/meta-data', // absolute URL to a metadata endpoint
+      'https://evil.example/api/session.list', // absolute URL, different origin
+      '//evil.example/api/session.list', // protocol-relative authority
+      '/\\evil.example/api/session.list', // backslash authority
+      '\\\\evil.example\\api', // UNC-style backslash authority
+      '/etc/passwd', // non-/api path on the same origin
+      '/apixe/session.list', // /api prefix look-alike, not the /api/ segment
+    ]
+    escapes.forEach((path, index) => {
+      const { bridge, posted } = collectingBridge(fetchImpl, RUNNING_ORIGIN)
+      bridge.handle({ type: 'dsh-fetch', id: index, path, method: 'POST', headers: {} })
+      expect(posted, `expected ${path} to be refused`).toEqual([
+        { type: 'dsh-fetch-error', id: index, message: `refused non-/api request target: ${path}` },
+      ])
+    })
+    expect(fetched, 'no escaping path may reach fetch').toBe(false)
+  })
+
+  it('resolveApiTarget confines to the server origin and the /api/ prefix', () => {
+    const origin = new URL('http://127.0.0.1:5173/')
+    expect(resolveApiTarget('/api/session.list', origin)?.href).toBe('http://127.0.0.1:5173/api/session.list')
+    expect(resolveApiTarget('/api/events.mux?since=1', origin)?.href).toBe('http://127.0.0.1:5173/api/events.mux?since=1')
+    expect(resolveApiTarget('http://evil/api/x', origin)).toBeUndefined()
+    expect(resolveApiTarget('//evil/api/x', origin)).toBeUndefined()
+    expect(resolveApiTarget('/\\evil/api/x', origin)).toBeUndefined()
+    expect(resolveApiTarget('/not-api', origin)).toBeUndefined()
+    expect(resolveApiTarget('/api', origin)).toBeUndefined() // the bare segment, not under /api/
   })
 
   it('aborts everything in flight on dispose', async () => {

@@ -79,6 +79,6 @@ This matrix shows which packages dispatch each harness-owned event and which pac
 | `slash/input-insert-reference` | - | `ui-conversation` |
 | `slash/input-insert-text` | - | `ui-conversation` |
 | `slots/changed` | `runtime` (`emit`) | - |
-| `theme/change` | `ui-theme` (`emit`) | `ui-layout`, `ui-theme` |
+| `theme/change` | `ui-theme` (`emit`) | `ui-theme` |
 
 Maintenance mode: generated: Cordis event declarations and producer/listener edges are resolved from the repository TypeScript Program.

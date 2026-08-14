@@ -66,4 +66,27 @@ describe('sampleIdeContext', () => {
     expect(snapshot.text).toContain('… (truncated)')
     expect((snapshot.text?.match(/- error at line/g) ?? []).length).toBe(3)
   })
+
+  it('bounds a single huge diagnostic message', () => {
+    const snapshot = sampleIdeContext(state({
+      path: 'a.ts',
+      diagnostics: [{ severity: 'error', line: 1, message: 'y'.repeat(5000) }],
+    }), { maxTextChars: 100, maxDiagnostics: 5, maxDiagnosticChars: 40 })
+    const line = snapshot.text?.split('\n').find(l => l.startsWith('- error at line 1'))
+    expect(line).toBeDefined()
+    // 'y' run is capped at 40 chars plus the inline ellipsis, not 5000.
+    expect((line?.match(/y/g) ?? []).length).toBe(40)
+    expect(line).toContain('…')
+  })
+
+  it('bounds the complete rendered reading to maxTotalChars', () => {
+    const snapshot = sampleIdeContext(state({
+      path: 'a.ts',
+      selection: 'z'.repeat(5000),
+      diagnostics: Array.from({ length: 5 }, (_v, i) => ({ severity: 'error' as const, line: i + 1, message: 'm'.repeat(200) })),
+    }), { maxTextChars: 5000, maxDiagnostics: 5, maxTotalChars: 500 })
+    // The whole value is capped even though each field is within its own limit.
+    expect(snapshot.text!.length).toBeLessThanOrEqual(500 + '\n… (truncated)'.length)
+    expect(snapshot.text).toContain('… (truncated)')
+  })
 })

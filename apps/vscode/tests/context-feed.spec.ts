@@ -169,6 +169,45 @@ describe('IdeContextFeed', () => {
     expect(injected).toHaveLength(2)
   })
 
+  it('serializes overlapping flushes: no duplicate send, trailing re-sample runs once', async () => {
+    // A slow inject lets a second flush arrive mid-send; it must not start a
+    // second concurrent send, and the trailing run re-samples the latest state.
+    let releaseFirst: (() => void) | undefined
+    let path = 'a.ts'
+    const scheduler = manualScheduler()
+    const injected: string[] = []
+    const client = {
+      sessions: {
+        injectContext: (payload: { content: { text?: string }[] }) => {
+          injected.push(payload.content[0]?.text ?? '')
+          if (injected.length === 1) {
+            return new Promise<InjectResult>((resolve) => {
+              releaseFirst = () => { resolve({ rpcId: 'r' as never, result: { ok: true, value: { accepted: true } } }) }
+            })
+          }
+          return Promise.resolve<InjectResult>({ rpcId: 'r' as never, result: { ok: true, value: { accepted: true } } })
+        },
+      },
+    } as unknown as Pick<IApiClient, 'sessions'>
+    const feed = new IdeContextFeed({
+      client,
+      readEditorState: () => ({ path, diagnostics: [] }),
+      activeSession: () => 's1',
+      limits: LIMITS,
+      log: () => {},
+      schedule: scheduler.schedule,
+    })
+
+    feed.nudge(); scheduler.tick(); await settle() // first send starts, awaiting release
+    expect(injected).toHaveLength(1)
+    path = 'b.ts' // the file changed while the first send is in flight
+    feed.nudge(); scheduler.tick(); await settle() // must NOT start a second concurrent send
+    expect(injected).toHaveLength(1)
+    releaseFirst?.(); await settle() // first completes → trailing run re-samples 'b.ts'
+    expect(injected).toHaveLength(2)
+    expect(injected[1]).toContain('b.ts')
+  })
+
   it('cancels a pending flush on dispose', async () => {
     const { feed, scheduler, injected } = feedWith({
       editor: () => ({ path: 'a.ts', diagnostics: [] }),
