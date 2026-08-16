@@ -49,7 +49,7 @@ export interface WriteFileAtomicOptions {
 export async function writeFileAtomic(filename: string, content: string, options: WriteFileAtomicOptions): Promise<void> {
   await mkdir(dirname(filename), {
     recursive: true,
-    ...options.dirMode !== undefined ? { mode: options.dirMode } : {},
+    ...options.dirMode === undefined ? {} : { mode: options.dirMode },
   })
   // TODO(settings-atomic-durability): Use a replacement that fsyncs the file
   // and parent directory and preserves owner-only permissions on Windows.

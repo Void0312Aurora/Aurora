@@ -3,7 +3,7 @@
  * @module subagent-inheritance-agent
  */
 
-import type { Context } from 'cordis'
+import type { Context } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 
 /** Fixture plugin name. */
@@ -21,5 +21,5 @@ export async function apply(ctx: Context): Promise<void> {
     resumeSessionId: 'subagent-inheritance-parent' as SessionId,
     agentOptions: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
   })
-  ctx.effect(() => () => { return handle.dispose() }, 'subagent-inheritance-agent.handle')
+  ctx.effect(() => () => handle.dispose(), 'subagent-inheritance-agent.handle')
 }

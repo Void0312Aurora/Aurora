@@ -25,7 +25,7 @@ The design can be skimmed as seven choices:
 | Coordinate create/resume | One `AgentCreationTransaction` |
 | Protect durable, queued, model, or wire data | Materialize once at that boundary |
 | Pass typed values inside one process | Readonly borrowed contract |
-| Compose the model-visible prompt and tool surface | One shared tool view plus the authoritative assembly-waterfall result |
+| Compose the model-visible prompt and tool set | One shared tool view plus the authoritative assembly-waterfall result |
 | Coordinate subagent, worker, and process shutdown | One cancellation signal plus the independent terminal/quiescence facts of that boundary |
 
 The rest of this Agent Note expands those choices in dependency order: Cordis mechanics, scope routing, creation and session commit, tools and prompts, subagents and workflows, then executable checks.
@@ -34,11 +34,11 @@ The [July 8 Agent Note](2026-07-08-agent-scope-contexts.md) remains the contribu
 
 ## Cordis model: context, fiber, effect, receiver, and waterfall
 
-Five Cordis ideas are required to understand the implementation. A context selects services and registration ownership; a fiber is one live plugin or child lifecycle; an effect attaches cleanup to a fiber; an event receiver selects listeners; and a waterfall lets listeners transform or veto an operation in sequence.
+Five Cordis ideas are required to understand the implementation. A context selects services and registration ownership; a fiber is one live plugin or child lifecycle; an effect attaches cleanup to a fiber; an event receiver selects listeners; and a waterfall lets listeners transform or short-circuit an operation in sequence.
 
 ### A context is an ownership path through one service graph
 
-All agents share one Cordis service graph. A derived context does not clone `ToolRegistry`, `SystemPrompt`, persistence, or model adapters; it changes how registrations made through that context are tagged and which effects own their cleanup.
+All agents share one Cordis service graph. A derived context does not clone `ToolRuntime`, `SystemPrompt`, persistence, or model adapters; it changes how registrations made through that context are tagged and which effects own their cleanup.
 
 `agent.ctx` is such a derived context. Service calls still reach the shared instances, while a registration can inspect its calling context and store a contribution under the nearest scope key. Ordinary plugin contexts carry no scope key and therefore register globally.
 
@@ -56,7 +56,7 @@ Cordis filters listeners using the dispatch receiver (`this`), while harness lis
 
 Product helpers therefore construct the carrier and pass the domain subject separately. This prevents listener routing from becoming an alternate object model and keeps event signatures understandable without knowledge of carrier internals.
 
-A Cordis waterfall is middleware-style dispatch. Each listener receives `next()`: calling it delegates to the remaining listeners and base operation, while returning without it vetoes or replaces the downstream result. Waterfalls power prompt assembly and tool policy; ordinary emit events notify synchronously, and parallel events await all listeners without a veto result.
+A Cordis waterfall is middleware-style dispatch. Each listener receives `next()`: calling it delegates to the remaining listeners and base operation, while returning without it short-circuits or replaces the downstream result. Waterfalls power prompt assembly and tool policy; ordinary emit events notify synchronously, and parallel events await all listeners without a veto result.
 
 ## Scope routing: one opaque key selects one layer
 
@@ -150,7 +150,7 @@ sequenceDiagram
 Every teardown request joins one memoized path. The order is:
 
 1. Deactivate creation or driving and let synchronous publication finish.
-2. Stop and drain the driver, including idle injection flushes.
+2. Stop and drain the driver, discarding any injection that remains pending.
 3. Detach the agent.
 4. Detach the session.
 5. Dispose the agent scope.
@@ -226,7 +226,7 @@ After post-execute or outer pipeline normalization, the registry losslessly snap
 
 SystemPrompt first resolves the global-plus-agent sections, variables, and tool providers into a deterministic registry contribution. The scope-filtered `system-prompt/assemble` waterfall may then reorder, replace, add, or remove any section, variable, or schema. Its returned assembly is authoritative; there is no later restoration pass and no finality metadata on ordinary prompt sections, tool definitions, or provider results.
 
-This is a trusted same-process extension seam, not an authority boundary. A listener that changes Code Mode's `run_code` schema or `tools:sdk` instructions, or a structured child's capture schema or instruction, owns preserving a coherent protocol in the assembly it returns. ToolRegistry still reserves `run_code` against ordinary tool registration and restriction because those are registry invariants, but assembly middleware remains free to transform the final model-visible surface.
+This is a trusted same-process extension point, not an authority boundary. A listener that changes Code Mode's `run_code` schema or `tools:sdk` instructions, or a structured child's capture schema or instruction, owns preserving a coherent protocol in the assembly it returns. ToolRuntime still reserves `run_code` against ordinary tool registration and restriction because those are registry invariants, but assembly middleware remains free to transform the final model-visible surface.
 
 Scope solves the real isolation problem directly. Structured-output contributions register in the child's exact scope, while Code Mode derives its transport and SDK from the same resolved tool view. A second named-protection system would need another ownership and collision rule across arbitrary schema providers—including providers that intentionally contribute duplicate names—without creating a new trust boundary.
 
@@ -238,7 +238,7 @@ For a native call, the observer deletes the stage and commits its value only whe
 
 For a Code Mode SDK call, the inner successful result records `{ parentToken, value }` rather than committing. The observer waits for the `run_code` execution whose token matches `parentToken` and commits only if that outer final result also succeeds. Program failure, runtime abort, or outer post-policy denial discards the pending value.
 
-Once a value is pending or committed, a scoped monotonic guard denies later tool calls. After commit, the ordinary serial `agent/turn-stop` listener returns a stop decision after continuation and steering have already folded. A schema-validation failure remains an ordinary `INVALID_ARGS` tool error and leaves the child able to retry within the same turn.
+Once a value is pending or committed, a scoped monotonic guard denies later tool calls. The successful structured-output execution calls `exec.concludeTurn()`, so its own immutable result carries `concludesTurn: true` and the loop ends the tool loop at that step. A schema-validation failure remains an ordinary `INVALID_ARGS` tool error and leaves the child able to retry within the same turn.
 
 Pure Code Mode's registry contribution omits `structured_output` from native wire schemas and exposes it through the generated SDK. The assembly waterfall may deliberately change that presentation; execution still validates against the child-scoped definition, and the listener owns the consistency of any alternate model-visible route it creates.
 
@@ -250,9 +250,9 @@ Prompt assembly is intentionally cooperative, but three execution facts need one
 |---|---|---|
 | Tool pre-policy | Deny monotonically | A later listener must not re-allow an already denied call |
 | Tool result | Observe the immutable committed outcome | Structured output must commit only the result that actually escaped the pipeline |
-| Turn continuation | Stop after ordinary continuation folding | A committed terminal output must end the turn |
+| Turn continuation | Conclude through the committed tool result | A committed terminal output must end the turn |
 
-`ToolGuard` is the monotonic policy registry. Committed tool observation is the contained `tools/result` point described above. Terminal structured output listens on the ordinary serial `agent/turn-stop` fold after normal continuation and steering decisions; no public `strictSerial()` dispatcher is needed for the typed listener contract.
+`ToolGuard` is the monotonic policy registry. Committed tool observation is the contained `tools/result` point described above. Terminal structured output marks its own execution with `concludesTurn`, so terminality is data on the authoritative result rather than a separate hook decision.
 
 ### Skill and approval services trust typed callers
 
@@ -266,7 +266,7 @@ Subagent startup has one ownership transfer. The provider owns unpublished resou
 
 ### The service contract has one cancellation channel
 
-`SubagentProvider.start()` and `SubagentService.start()` return `Promise<SubagentRun>`. The promise fulfills after the backend crosses its publication boundary, so callers and `subagent/start` observers never need a second `run.started` promise. Provider work that fails before publication rejects `start()`; prompt, turn, cancellation, and infrastructure outcomes after publication settle through `SubagentRun.result` without hiding the child id, as required by the [durable catalog decision](../feature/2026-07-22-durable-subagent-catalog-and-list-agents.md).
+`SubagentProvider.start()` and `SubagentRuntime.start()` return `Promise<SubagentRun>`. The promise fulfills after the backend crosses its publication boundary, so callers and `subagent/start` observers never need a second `run.started` promise. Provider work that fails before publication rejects `start()`; prompt, turn, cancellation, and infrastructure outcomes after publication settle through `SubagentRun.result` without hiding the child id, as required by the [durable catalog decision](../feature/2026-07-22-durable-subagent-catalog-and-list-agents.md).
 
 `SubagentStartRequest.signal` is required. Aborting it requests cancellation during startup and across the published run's remaining readiness or turn work. `SubagentRun.dispose()` also requests cancellation and awaits quiescence. There is no separate public `run.cancel()` channel.
 
@@ -294,7 +294,7 @@ Worker and child-process bridges need more state than same-process registries be
 
 ### Workflow children are pending starts or published records
 
-The workflow host keeps pending provider-start promises and published child records. A child moves from pending to published only when async `SubagentService.start()` fulfills; rejected starts clean their partial provider work and produce no child lifecycle pair.
+The workflow host keeps pending provider-start promises and published child records. A child moves from pending to published only when async `SubagentRuntime.start()` fulfills; rejected starts clean their partial provider work and produce no child lifecycle pair.
 
 One host-owned AbortController supplies the required signal to pending and live children. Closing workflow admission aborts that signal, so there is no duplicate `ChildCancel` worker RPC or explicit host-side `run.cancel()` fanout. Quiescence waits for both pending starts and published child disposal.
 
@@ -360,7 +360,7 @@ This splits provider acceptance from publication and forces every consumer to re
 
 ### Restore selected prompt or tool contributions after assembly
 
-A post-waterfall restoration pass would create a second composition rule after the documented cooperative seam. Correctly assigning canonical presence or absence would also require provider ownership and collision rules for arbitrary tool-schema providers, whose ordinary output may contain duplicate names. Scoped registration already supplies the required per-agent isolation, and trusted assembly listeners own the protocol consistency of what they return, so named restoration adds machinery without establishing an independent boundary.
+A post-waterfall restoration pass would create a second composition rule after the documented cooperative waterfall. Correctly assigning canonical presence or absence would also require provider ownership and collision rules for arbitrary tool-schema providers, whose ordinary output may contain duplicate names. Scoped registration already supplies the required per-agent isolation, and trusted assembly listeners own the protocol consistency of what they return, so named restoration adds machinery without establishing an independent boundary.
 
 ### Remove worker/process lifecycle guards with same-process hardening
 
@@ -376,7 +376,7 @@ The implementation is smaller and its proof follows the same shape as its owners
 - Create and resume expose no partially configured handle; final-entry losers and publication failures clean every prepared resource.
 - Disposal retains scoped listeners and persistence through driver drain and final session work, then revokes the scope.
 - Durable, queued, model, worker, process, and wire values are owned at their real boundary; typed same-process values follow readonly contracts.
-- ToolRegistry's presentation, lookup, and execution resolve the same live view before expert assembly transforms, and committed results have one immutable observation point.
+- ToolRuntime's presentation, lookup, and execution resolve the same live view before expert assembly transforms, and committed results have one immutable observation point.
 - Registry contributions are deterministic inputs, while the trusted assembly waterfall owns the final model-visible composition.
 - Subagent start returns only a published run, required signals cancel pending or live work, and disposal reaches the backend's quiescence contract.
 - Worker/process result precedence and cleanup remain correct under death, late messages, and bounded teardown.

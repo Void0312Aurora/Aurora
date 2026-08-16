@@ -60,7 +60,7 @@ export async function isPathUnder(
   root: string,
   caseSensitive = process.platform !== 'win32',
 ): Promise<boolean> {
-  if (isLexicallyUnder(path, root, caseSensitive)) { return true }
+  if (isLexicallyUnder(path, root, caseSensitive)) return true
 
   const rootInfo = await statIfPresent(root)
   if (!rootInfo) return false

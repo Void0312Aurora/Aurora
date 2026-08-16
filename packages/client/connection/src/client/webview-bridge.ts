@@ -31,6 +31,96 @@ export type BridgeResponseMessage =
   | { type: 'dsh-fetch-end'; id: number }
   | { type: 'dsh-fetch-error'; id: number; message: string }
 
+/** Runtime parse result for one untrusted postMessage value. */
+export type BridgeMessageParseResult<T> =
+  | { ok: true; message: T }
+  | { ok: false; id?: number; reason: string }
+
+function recordOf(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined
+}
+
+function bridgeIdOf(record: Record<string, unknown>): number | undefined {
+  const id = record.id
+  return typeof id === 'number' && Number.isSafeInteger(id) && id >= 0 ? id : undefined
+}
+
+function stringRecordOf(value: unknown): Record<string, string> | undefined {
+  const record = recordOf(value)
+  if (record === undefined) return undefined
+  for (const entry of Object.values(record)) {
+    if (typeof entry !== 'string') return undefined
+  }
+  return record as Record<string, string>
+}
+
+/**
+ * Parse a Webview-to-host bridge message at the postMessage boundary.
+ * @param value - untrusted value received from the Webview.
+ * @returns the request message, or a correlatable rejection when its id is valid.
+ */
+export function parseBridgeRequestMessage(value: unknown): BridgeMessageParseResult<BridgeRequestMessage> {
+  const record = recordOf(value)
+  if (record === undefined) return { ok: false, reason: 'message must be an object' }
+  const id = bridgeIdOf(record)
+  if (id === undefined) return { ok: false, reason: 'id must be a non-negative safe integer' }
+  if (record.type === 'dsh-fetch-abort') return { ok: true, message: { type: 'dsh-fetch-abort', id } }
+  if (record.type !== 'dsh-fetch') return { ok: false, id, reason: 'unknown request message type' }
+  const headers = stringRecordOf(record.headers)
+  if (typeof record.path !== 'string' || typeof record.method !== 'string' || headers === undefined) {
+    return { ok: false, id, reason: 'fetch path, method, and string-valued headers are required' }
+  }
+  if (record.body !== undefined && typeof record.body !== 'string') {
+    return { ok: false, id, reason: 'fetch body must be a string when present' }
+  }
+  return {
+    ok: true,
+    message: {
+      type: 'dsh-fetch',
+      id,
+      path: record.path,
+      method: record.method,
+      headers,
+      ...record.body === undefined ? {} : { body: record.body },
+    },
+  }
+}
+
+/**
+ * Parse a host-to-Webview bridge message at the postMessage boundary.
+ * @param value - untrusted value received from the extension host.
+ * @returns the response message, or a correlatable rejection when its id is valid.
+ */
+export function parseBridgeResponseMessage(value: unknown): BridgeMessageParseResult<BridgeResponseMessage> {
+  const record = recordOf(value)
+  if (record === undefined) return { ok: false, reason: 'message must be an object' }
+  const id = bridgeIdOf(record)
+  if (id === undefined) return { ok: false, reason: 'id must be a non-negative safe integer' }
+  switch (record.type) {
+    case 'dsh-fetch-head':
+      return typeof record.status === 'number'
+        && Number.isInteger(record.status)
+        && record.status >= 200
+        && record.status <= 599
+        ? { ok: true, message: { type: 'dsh-fetch-head', id, status: record.status } }
+        : { ok: false, id, reason: 'response status must be an integer from 200 through 599' }
+    case 'dsh-fetch-chunk':
+      return typeof record.chunk === 'string'
+        ? { ok: true, message: { type: 'dsh-fetch-chunk', id, chunk: record.chunk } }
+        : { ok: false, id, reason: 'response chunk must be a string' }
+    case 'dsh-fetch-end':
+      return { ok: true, message: { type: 'dsh-fetch-end', id } }
+    case 'dsh-fetch-error':
+      return typeof record.message === 'string'
+        ? { ok: true, message: { type: 'dsh-fetch-error', id, message: record.message } }
+        : { ok: false, id, reason: 'response error message must be a string' }
+    default:
+      return { ok: false, id, reason: 'unknown response message type' }
+  }
+}
+
 /**
  * The embedder messaging face this transport needs. The webview bootstrap
  * owns the embedder API (VS Code's one-shot `acquireVsCodeApi()`) and adapts
@@ -45,10 +135,10 @@ export interface WebviewBridgePort {
   /**
    * Subscribe to response-side messages from the extension host. Messages for
    * unknown ids must be ignored by the listener (the port is shared).
-   * @param listener - receives every bridge response message.
+   * @param listener - receives each untrusted response candidate.
    * @returns the unsubscribe disposer.
    */
-  onMessage(listener: (message: BridgeResponseMessage) => void): () => void
+  onMessage(listener: (message: unknown) => void): () => void
 }
 
 declare global {
@@ -82,61 +172,87 @@ export class PostMessageApiClient extends AbstractApiClient {
     return new Promise<Response>((resolve, reject) => {
       const encoder = new TextEncoder()
       let bodyController: ReadableStreamDefaultController<Uint8Array> | undefined
-      let settled = false
-      // One cleanup for every exit (head-then-end, error, abort, stream
-      // cancel): drop the port subscription and the abort listener so neither
-      // leaks past the request's life.
+      let headReceived = false
+      let requestPosted = false
+      let terminal = false
+      let unsubscribe = (): void => {}
       const cleanup = (): void => {
+        if (terminal) return
+        terminal = true
         unsubscribe()
         signal?.removeEventListener('abort', onAbort)
       }
-      // Callers guard on `settled` before invoking: after the head, failures
-      // route to the body stream, never back to the fetch promise.
-      const failBeforeHead = (error: Error): void => {
-        settled = true
-        cleanup()
-        reject(error)
+      const abortUpstream = (): void => {
+        if (!requestPosted) return
+        try {
+          this.port.postMessage({ type: 'dsh-fetch-abort', id })
+        } catch {
+          // The caller is already failing or cancelling; the port has no
+          // additional recovery channel once postMessage itself is gone.
+        }
       }
-      const unsubscribe = this.port.onMessage((message) => {
-        if (message.id !== id) return
+      const fail = (error: Error): void => {
+        if (terminal) return
+        if (headReceived) bodyController?.error(error)
+        else reject(error)
+        cleanup()
+      }
+      const failProtocol = (message: string): void => {
+        abortUpstream()
+        fail(new Error(`invalid bridge response: ${message}`))
+      }
+      const onAbort = (): void => {
+        abortUpstream()
+        fail(new DOMException('The operation was aborted.', 'AbortError'))
+      }
+      unsubscribe = this.port.onMessage((value) => {
+        const parsed = parseBridgeResponseMessage(value)
+        if (!parsed.ok) {
+          if (parsed.id === id) failProtocol(parsed.reason)
+          return
+        }
+        const message = parsed.message
+        if (message.id !== id || terminal) return
         switch (message.type) {
           case 'dsh-fetch-head': {
-            settled = true
+            if (headReceived) {
+              failProtocol('duplicate response head')
+              return
+            }
+            headReceived = true
             const stream = new ReadableStream<Uint8Array>({
               start: (controller) => { bodyController = controller },
-              // The consumer cancelled the body (stopped reading): tell the
-              // host to abort the upstream fetch, then clean up.
               cancel: () => {
-                this.port.postMessage({ type: 'dsh-fetch-abort', id })
+                abortUpstream()
                 cleanup()
               },
             })
             resolve(new Response(stream, { status: message.status }))
             break
           }
-          case 'dsh-fetch-chunk':
+          case 'dsh-fetch-chunk': {
+            if (!headReceived) {
+              failProtocol('body chunk preceded response head')
+              return
+            }
             bodyController?.enqueue(encoder.encode(message.chunk))
             break
-          case 'dsh-fetch-end':
+          }
+          case 'dsh-fetch-end': {
+            if (!headReceived) {
+              failProtocol('response end preceded response head')
+              return
+            }
             bodyController?.close()
             cleanup()
             break
+          }
           case 'dsh-fetch-error': {
-            const error = new Error(message.message)
-            if (settled) bodyController?.error(error)
-            else failBeforeHead(error)
-            cleanup()
+            fail(new Error(message.message))
             break
           }
         }
       })
-      const onAbort = (): void => {
-        this.port.postMessage({ type: 'dsh-fetch-abort', id })
-        const error = new DOMException('The operation was aborted.', 'AbortError')
-        if (settled) bodyController?.error(error)
-        else failBeforeHead(error)
-        cleanup()
-      }
       if (signal !== undefined) {
         if (signal.aborted) {
           onAbort()
@@ -144,14 +260,20 @@ export class PostMessageApiClient extends AbstractApiClient {
         }
         signal.addEventListener('abort', onAbort, { once: true })
       }
-      this.port.postMessage({
-        type: 'dsh-fetch',
-        id,
-        path: input.pathname + input.search,
-        method: init?.method ?? 'GET',
-        headers: headersRecord(init?.headers),
-        ...typeof init?.body === 'string' ? { body: init.body } : {},
-      })
+      requestPosted = true
+      try {
+        this.port.postMessage({
+          type: 'dsh-fetch',
+          id,
+          path: input.pathname + input.search,
+          method: init?.method ?? 'GET',
+          headers: headersRecord(init?.headers),
+          ...typeof init?.body === 'string' ? { body: init.body } : {},
+        })
+      } catch (error) {
+        requestPosted = false
+        fail(error instanceof Error ? error : new Error(String(error)))
+      }
     })
   }
 }

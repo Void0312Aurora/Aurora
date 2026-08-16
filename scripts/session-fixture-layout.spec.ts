@@ -46,7 +46,7 @@ describe('canonicalSessionFixture', () => {
   })
 
   it('fails loud on malformed records after a session header', () => {
-    expect(() => { return canonicalSessionFixture(`${HEADER}\n{not-json}\n`, 'broken.jsonl') })
+    expect(() => canonicalSessionFixture(`${HEADER}\n{not-json}\n`, 'broken.jsonl'))
       .toThrow(/broken\.jsonl:2: invalid JSON/)
   })
 

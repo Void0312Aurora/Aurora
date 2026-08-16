@@ -12,6 +12,7 @@ import type {
   BridgeRequestMessage,
   BridgeResponseMessage,
 } from '@deepseek-ai/dsh-client-connection/client'
+import { parseBridgeResponseMessage } from '@deepseek-ai/dsh-client-connection/client'
 import { staticBootGraph, staticPlugins } from './roster.ts'
 
 /** The VS Code webview messaging face (acquireVsCodeApi is call-once). */
@@ -26,9 +27,21 @@ declare function acquireVsCodeApi(): VsCodeWebviewApi
 // Production panel documents carry no query and always take the host bridge.
 if (!new URLSearchParams(location.search).has('fixture')) {
   const vscodeApi = acquireVsCodeApi()
-  const listeners = new Set<(message: BridgeResponseMessage) => void>()
-  window.addEventListener('message', (event: MessageEvent<BridgeResponseMessage>) => {
-    for (const listener of [...listeners]) listener(event.data)
+  const listeners = new Set<(message: unknown) => void>()
+  window.addEventListener('message', (event: MessageEvent<unknown>) => {
+    const parsed = parseBridgeResponseMessage(event.data)
+    if (parsed.ok) {
+      for (const listener of [...listeners]) listener(parsed.message)
+    } else if (parsed.id !== undefined) {
+      // Preserve correlation for a malformed frame so the owning fetch fails
+      // and cleans up instead of waiting forever on an untrusted message.
+      const error: BridgeResponseMessage = {
+        type: 'dsh-fetch-error',
+        id: parsed.id,
+        message: `invalid bridge response: ${parsed.reason}`,
+      }
+      for (const listener of [...listeners]) listener(error)
+    }
   })
 
   // The bridge port must be seated before the client tree boots: the

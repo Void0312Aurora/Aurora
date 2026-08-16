@@ -89,7 +89,7 @@ function consumeLine(acc: WindowAccumulator, rawLine: string, request: ReadWindo
 }
 
 function stripCarriageReturn(line: string): string {
-  return !line.endsWith('\r') ? line : line.slice(0, -1)
+  return line.endsWith('\r') ? line.slice(0, -1) : line
 }
 
 function finish(acc: WindowAccumulator, request: ReadWindow, displayPath: string): WindowResult {

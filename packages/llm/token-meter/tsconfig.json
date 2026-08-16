@@ -24,10 +24,13 @@
       "path": "../../core/session"
     },
     {
-      "path": "../../session-projection/session-projection"
+      "path": "../../compaction/compaction"
     },
     {
-      "path": "../../support/invariants"
+      "path": "../../session/session-projection"
+    },
+    {
+      "path": "../../runtime-diagnostics/invariants"
     }
   ]
 }

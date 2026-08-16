@@ -11,7 +11,7 @@
 import type { IApiClient } from '@deepseek-ai/dsh-host-apiproxy/client'
 import type { MuxFrame, RpcId, RpcRequest } from '@deepseek-ai/dsh-host-apiproxy/api'
 import type { ToolCallView } from '@deepseek-ai/dsh-tools/presentation'
-import type { AskUserQuestionAnswer, AskUserQuestionItem } from '@deepseek-ai/dsh-user-interaction/types'
+import type { AskUserQuestionAnswer, AskUserQuestionItem } from '@deepseek-ai/dsh-user-questions/types'
 
 /** What a pending approval asks the user, enriched from the cached tool call. */
 export interface ApprovalPrompt {

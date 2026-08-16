@@ -4,7 +4,7 @@
  * @module @deepseek-ai/dsh-tool-session-query/service-boundary
  */
 
-import type { Context } from 'cordis'
+import type { Context } from '@deepseek-ai/cordis'
 import { HarnessError } from '@deepseek-ai/dsh-llm'
 import {
   SessionQueryError,
@@ -22,6 +22,10 @@ const SAFE_SESSION_QUERY_FAILURES = {
   SESSION_QUERY_ABORTED: {
     code: 'SESSION_QUERY_ABORTED',
     message: 'session query was cancelled',
+  },
+  SESSION_QUERY_CORRUPT_SESSION: {
+    code: 'SESSION_QUERY_CORRUPT_SESSION',
+    message: 'session event history is corrupt',
   },
   SESSION_QUERY_EVENT_NOT_FOUND: {
     code: 'SESSION_QUERY_EVENT_NOT_FOUND',
@@ -66,6 +70,10 @@ const SAFE_SESSION_QUERY_FAILURES = {
   SESSION_QUERY_PERSISTENCE_FAILED: {
     code: 'SESSION_QUERY_PERSISTENCE_FAILED',
     message: 'session history storage is unavailable',
+  },
+  SESSION_QUERY_SEARCH_DISABLED: {
+    code: 'SESSION_QUERY_SEARCH_DISABLED',
+    message: 'session search is disabled in this deployment',
   },
   SESSION_QUERY_SESSION_NOT_FOUND: {
     code: 'SESSION_QUERY_SESSION_NOT_FOUND',
@@ -119,7 +127,9 @@ function sanitizeError(
       const failure = typeof code === 'string' && Object.hasOwn(SAFE_SESSION_QUERY_FAILURES, code)
         ? SAFE_SESSION_QUERY_FAILURES[code as SessionQueryErrorCode]
         : undefined
-      if (failure !== undefined && failure.code !== 'SESSION_QUERY_TOOL_FAILED') return new SessionQueryError(failure.message, failure.code)
+      if (failure !== undefined && failure.code !== 'SESSION_QUERY_TOOL_FAILED') {
+        return new SessionQueryError(failure.message, failure.code)
+      }
     }
     if (error instanceof HarnessError && error.code === 'SESSION_QUERY_TOOL_UNAUTHORIZED') {
       return unauthorizedTarget()
@@ -147,7 +157,7 @@ function fullError(error: unknown): string {
 
 function renderFullError(error: unknown): string {
   if (!(error instanceof Error)) return String(error)
-  const diagnostics: Array<string> = []
+  const diagnostics: string[] = []
   const seen = new Set<Error>()
   let current: unknown = error
   while (current instanceof Error && !seen.has(current)) {

@@ -14,7 +14,7 @@ interface ProjectGraph {
 /** TypeScript config host shared by repository scripts. */
 export const repositoryConfigHost: ts.ParseConfigFileHost = {
   useCaseSensitiveFileNames: ts.sys.useCaseSensitiveFileNames,
-  readDirectory: (...args) => { return ts.sys.readDirectory(...args) },
+  readDirectory: (...args) => ts.sys.readDirectory(...args),
   fileExists: fileName => ts.sys.fileExists(fileName),
   readFile: fileName => ts.sys.readFile(fileName),
   getCurrentDirectory: () => ts.sys.getCurrentDirectory(),

@@ -45,7 +45,7 @@ const present = (value: string | undefined): boolean => value !== undefined && v
  * @returns the backend kind to mount.
  */
 export function resolveDirectoryPickerBackend(facts: DirectoryPickerHostFacts): DirectoryPickerBackendKind {
-  if (facts.bindHost !== '127.0.0.1') { return 'browse' }
+  if (facts.bindHost !== '127.0.0.1') return 'browse'
   if (present(facts.env.SSH_CONNECTION) || present(facts.env.SSH_TTY)) return 'browse'
   if (facts.platform === 'darwin' || facts.platform === 'win32') return 'native'
   if (facts.platform !== 'linux' || !facts.linuxChooser) return 'browse'

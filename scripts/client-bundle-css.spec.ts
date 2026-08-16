@@ -15,8 +15,13 @@ interface CssPlugin {
 }
 
 function cssPlugin(): CssPlugin {
-  const configs = clientBundle('@deepseek-ai/dsh-client-test', ['lib/types/index.js', 'lib/types/invariant.js'])
-  const plugins = (configs[1] as { plugins: CssPlugin[] }).plugins
+  const configs = clientBundle(
+    '@deepseek-ai/dsh-client-test',
+    ['lib/types/index.js', 'lib/types/invariant.js'],
+  )({ env: { DSH_BUILD_FACE: 'client' } })
+  const client = configs.find(config => config.platform === 'browser')
+  if (client === undefined) throw new Error('client config missing')
+  const plugins = (client as { plugins: CssPlugin[] }).plugins
   const plugin = plugins.find(candidate => candidate.name === 'dsh-css-modules-inline')
   if (plugin === undefined) throw new Error('CSS Modules plugin missing from client config')
   return plugin
@@ -34,7 +39,7 @@ describe('client bundle CSS Modules', () => {
       if (typeof virtualId !== 'string' || plugin.load === undefined) {
         throw new Error('CSS Modules plugin hooks are incomplete')
       }
-      const watched: Array<string> = []
+      const watched: string[] = []
 
       const output = await plugin.load.call({ addWatchFile: id => watched.push(id) }, virtualId)
 

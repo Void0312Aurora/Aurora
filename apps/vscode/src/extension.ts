@@ -8,8 +8,7 @@
  */
 
 import * as vscode from 'vscode'
-import type { BridgeRequestMessage } from '@deepseek-ai/dsh-client-connection/client'
-import type { AskUserQuestionAnswer, AskUserQuestionItem } from '@deepseek-ai/dsh-user-interaction/types'
+import type { AskUserQuestionAnswer, AskUserQuestionItem } from '@deepseek-ai/dsh-user-questions/types'
 // One contract, both ends: the webview half turns this message into a route.
 import type { RouteMessage } from '../webview/route-bridge.ts'
 import { ActiveSessionTracker } from './active-session.ts'
@@ -32,16 +31,26 @@ let nativeStarted = false
 // a protocol probe still in flight from a torn-down generation can tell it is
 // stale and must not (re)start the layer.
 let nativeEpoch = 0
+/** Origin is exposed to the Webview bridge only after the protocol probe passes. */
+let compatibleOrigin: URL | undefined
 
 function nativeLayerLive(): boolean {
   return nativeStarted
 }
 
-// The clients and the bridge resolve the server origin through this getter,
-// never a captured ServerRuntime instance, so a restart that swaps `runtime`
-// is followed automatically without rebuilding the panel or its bridge.
+// The native client resolves the server origin through this getter, never a
+// captured ServerRuntime instance. The Webview bridge adds the protocol gate
+// in bridgeOrigin(), so a restart or incompatible host cannot receive API
+// traffic before its fresh handshake completes.
 function currentOrigin(): URL | undefined {
   return runtime?.url
+}
+
+function bridgeOrigin(): URL | undefined {
+  const origin = currentOrigin()
+  return compatibleOrigin !== undefined && origin?.origin === compatibleOrigin.origin
+    ? origin
+    : undefined
 }
 
 /** Lines of file text sampled around the cursor when there is no selection. */
@@ -166,14 +175,13 @@ async function askQuestionsNatively(items: AskUserQuestionItem[], signal: AbortS
 }
 
 /**
- * Start the host-side native layer (approval/question prompts + IDE-context
- * feed) once, after gating on the host's protocol version. An independently
+ * Probe each managed-host generation, expose its origin to the Webview only
+ * after the protocol check, and start the native layer once. An independently
  * released extension may reach a `DSH_BIN`/PATH `dsh` of a different version;
  * on a mismatch the native layer stays off and the user is warned, while the
  * webview GUI (bundled same-version) still loads.
  */
 async function ensureNativeLayer(output: vscode.OutputChannel): Promise<void> {
-  if (nativeStarted) return
   const epoch = nativeEpoch
   const client = new LoopbackApiClient(currentOrigin)
   const check = await verifyHostProtocol(client)
@@ -183,14 +191,18 @@ async function ensureNativeLayer(output: vscode.OutputChannel): Promise<void> {
   // would be left to dispose it. (nativeLayerLive is a function read because
   // a concurrent probe mutates the flag across the await, which static flow
   // analysis would otherwise narrow to always-false.)
-  if (epoch !== nativeEpoch || nativeLayerLive()) return
+  if (epoch !== nativeEpoch) return
   if (!check.ok) {
+    compatibleOrigin = undefined
     output.appendLine(`[native] protocol gate failed, native layer disabled: ${check.reason}`)
     void vscode.window.showWarningMessage(
-      `DeepSeek Harness: editor-native approvals and context are disabled — ${check.reason}. The panel still works.`,
+      `DeepSeek Harness: the host protocol is incompatible — ${check.reason}. The panel is disabled until the host is updated.`,
     )
     return
   }
+  compatibleOrigin = currentOrigin()
+  if (compatibleOrigin === undefined) return
+  if (nativeLayerLive()) return
   nativeStarted = true
   ensureInteractions(output)
   ensureContextFeed(output)
@@ -297,6 +309,7 @@ function disposeContextFeed(): void {
 /** Tear down the whole host-side native layer (both halves live and die together). */
 function disposeNativeLayer(): void {
   nativeEpoch++
+  compatibleOrigin = undefined
   interactions?.dispose()
   interactions = undefined
   disposeContextFeed()
@@ -311,6 +324,7 @@ function ensureRuntime(context: vscode.ExtensionContext, output: vscode.OutputCh
     env: process.env,
     log: (line) => { output.appendLine(line) },
     onExit: () => {
+      compatibleOrigin = undefined
       void vscode.window.showWarningMessage('dsh web exited; the panel will reconnect when it is started again.')
     },
   })
@@ -359,11 +373,11 @@ function createViewProvider(
         localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'dist')],
       }
       const bridge = new ApiBridge({
-        origin: currentOrigin,
-        post: (message) => { void resolved.webview.postMessage(message) },
+        origin: bridgeOrigin,
+        post: message => resolved.webview.postMessage(message),
       })
       resolved.webview.html = panelHtml(panelAssets(resolved.webview, context.extensionUri))
-      const receiving = resolved.webview.onDidReceiveMessage((message: BridgeRequestMessage) => {
+      const receiving = resolved.webview.onDidReceiveMessage((message: unknown) => {
         bridge.handle(message)
       })
       resolved.onDidDispose(() => {
@@ -401,9 +415,9 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand('dsh.restartServer', async () => {
       // Tear the native layer and the server down, then bring both back. The
-      // view stays: its bridge resolves the origin through `currentOrigin`, so
-      // it follows the new server once startRuntime swaps `runtime`, and the
-      // webview's own connection loop reconnects.
+      // view stays: its bridge remains closed until the replacement host
+      // passes the protocol probe, and the webview's connection loop then
+      // reconnects against the new generation.
       disposeNativeLayer()
       await runtime?.dispose()
       runtime = undefined

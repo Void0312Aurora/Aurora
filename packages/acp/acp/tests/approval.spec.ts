@@ -15,12 +15,12 @@ describe('ACP machine permission policy', () => {
   })
 
   async function ownedRequest(overrides: Partial<ApprovalRequest> = {}): Promise<ApprovalRequest> {
-    if (harness === undefined) { throw new Error('missing harness') }
+    if (harness === undefined) throw new Error('missing harness')
     await harness.ctx.plugin(ApprovalService)
     await harness.client.initialize({ protocolVersion: PROTOCOL_VERSION, clientCapabilities: {} })
     const { sessionId } = await harness.client.newSession({ cwd: process.cwd(), mcpServers: [] })
     const agent = harness.ctx.agents.get(SessionId(sessionId))!
-    agent.session.append('turn/start', { turn: 1, trigger: { kind: 'message', source: { kind: 'user' } } })
+    agent.session.append('turn/start', { turn: 1 })
     return { agent, toolName: 'bash', callId: CallId('call-9'), ...overrides }
   }
 

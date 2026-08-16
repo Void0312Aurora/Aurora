@@ -1,8 +1,8 @@
 /** Live/persisted logical-corpus resolution for session-query. */
 
-import type { Context, Fiber } from 'cordis'
+import type { Context, Fiber } from '@deepseek-ai/cordis'
 import type { Session, SessionEvent, SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
-import type SessionPersistence from '@deepseek-ai/dsh-session-persistence'
+import SessionPersistence, { SessionPersistenceCorruptionError } from '@deepseek-ai/dsh-session-persistence'
 import type { SessionRecord } from './types.ts'
 import { SessionQueryError } from './config.ts'
 import { assertSessionHeadersCompatible } from './sources.ts'
@@ -58,7 +58,7 @@ export class SessionCorpus {
   async listSessions(signal?: AbortSignal): Promise<SessionRecord[]> {
     signal?.throwIfAborted()
     const persistence = this._persistence
-    const persisted = persistence !== undefined ? await listPersisted(persistence, signal) : []
+    const persisted = persistence === undefined ? [] : await listPersisted(persistence, signal)
     signal?.throwIfAborted()
     const records = new Map<SessionId, SessionRecord>()
     for (const header of persisted) {
@@ -274,6 +274,13 @@ async function inspectPersisted(
     return await persistence.inspect(sessionId, signal)
   } catch (error: unknown) {
     if (signal?.aborted) signal.throwIfAborted()
+    if (error instanceof SessionPersistenceCorruptionError) {
+      throw new SessionQueryError(
+        `stored session "${sessionId}" is corrupt: ${errorMessage(error)}`,
+        'SESSION_QUERY_CORRUPT_SESSION',
+        { cause: error },
+      )
+    }
     throw new SessionQueryError(
       `failed to inspect session "${sessionId}": ${errorMessage(error)}`,
       'SESSION_QUERY_PERSISTENCE_FAILED',

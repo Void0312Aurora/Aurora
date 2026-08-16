@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { Context } from 'cordis'
+import { Context } from '@deepseek-ai/cordis'
 import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -207,7 +207,7 @@ describe('sqlite backend specifics', () => {
   })
 
   it('propagates filesystem errors other than an existing database file', async () => {
-    if (process.platform === 'win32') { return }
+    if (process.platform === 'win32') return
     const dir = await mkdtemp(join(tmpdir(), 'dsh-storage-sqlite-'))
     dirs.push(dir)
     await chmod(dir, 0o500)
@@ -217,8 +217,15 @@ describe('sqlite backend specifics', () => {
     await chmod(dir, 0o700)
   })
 
+  it('propagates an invalid database filename before opening SQLite', async () => {
+    const path = await freshDbPath()
+    const backend = backendAt(`${path}\0invalid`)
+    await expect(backend.kv.open(DESCRIPTOR)).rejects.toThrow(/null bytes/i)
+    await backend.close()
+  })
+
   it('preserves the mode of an existing database file', async () => {
-    if (process.platform === 'win32') { return }
+    if (process.platform === 'win32') return
     const path = await freshDbPath()
     await writeFile(path, '', { mode: 0o644 })
     await chmod(path, 0o644)

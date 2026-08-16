@@ -65,15 +65,17 @@ describe('assembled VS Code sidebar snapshot', () => {
   })
 
   it('renders sessions, native interaction counterparts, and tool cards at sidebar width', async () => {
-    const page = await harness!.browser.newPage({ viewport: { width: 259, height: 900 } })
+    const page = await harness!.browser.newPage({
+      viewport: { width: 259, height: 900 },
+      locale: 'en-US',
+    })
     const pageErrors: string[] = []
     page.on('pageerror', (error) => { pageErrors.push(error.message) })
-    await page.addInitScript(() => { localStorage.setItem('dsh.locale', 'en') })
     await page.goto(`${harness!.origin}/?fixture`, { waitUntil: 'load' })
     await page.locator('[data-route]').waitFor()
-    const welcome = page.locator('[class*="onboardingOverlay"]')
+    const welcome = page.getByRole('dialog', { name: 'Internal Testing Notice' })
     if (await welcome.count() > 0) {
-      await welcome.getByRole('button').click()
+      await welcome.getByRole('button', { name: 'Continue' }).click()
       await welcome.waitFor({ state: 'detached' })
     }
 
@@ -81,7 +83,7 @@ describe('assembled VS Code sidebar snapshot', () => {
     const frame = page.locator('[data-route]')
     const sessions = await stableAria(frame)
     const tree = page.getByRole('tree', { name: 'Sessions' })
-    await tree.getByText('Fixture 历史会话', { exact: true }).click()
+    await tree.getByRole('treeitem', { name: /Fixture 历史会话/u }).click()
     await route(page, 'chat')
 
     const question = page.locator('[data-question-key]')

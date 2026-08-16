@@ -1,27 +1,26 @@
 /**
  * The model-facing `grep` tool: search file contents with a ripgrep regular
- * expression. Execution goes through the bash seam (`ctx.bash`) with a fixed
- * line-oriented `rg --json` command so file path, line number, and line text
- * parse without colon-splitting ambiguity — this module owns the model-facing
- * schema, argument validation, shell-safe command construction, `--json`
- * record parsing, per-line preview retention, match retention, grouping, and
- * formatting; process concerns stay behind `ctx.bash`.
+ * expression. Execution spawns the packaged ripgrep binary
+ * (`@vscode/ripgrep`) directly through the subprocess seam with a plain argv
+ * vector using a fixed line-oriented `rg --json` command so file path, line
+ * number, and line text parse without colon-splitting ambiguity — this module
+ * owns the model-facing schema, argument validation, argv construction,
+ * `--json` record parsing, per-line preview retention, match retention,
+ * grouping, and formatting; process concerns stay behind `ctx.subprocess`.
  *
  * @module @deepseek-ai/dsh-tool-fs-search/grep
  */
 
-import type { Context } from 'cordis'
+import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { GenericCallView, SearchResultView, ToolResult } from '@deepseek-ai/dsh-tools'
-import type { RetainedItems } from '@deepseek-ai/dsh-retention'
+import type { RetainedItems } from '@deepseek-ai/dsh-output-retention'
 import type { SpillRef } from '@deepseek-ai/dsh-spill'
-import type {} from '@deepseek-ai/dsh-bash'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import type { GrepMatch } from './search-core.ts'
 import { SearchError, previewLine, retainGrepMatches, runRipgrep, toWorkdirRelative, trySaveFormattedResult } from './search-core.ts'
 import { grepSearchMeta, searchViewFromMeta } from './presentation.ts'
-import { singleQuote } from './shell-quote.ts'
-import { acceptedSurfaceValue } from './surface.ts'
+import { acceptedDirectCallValue } from './direct-call.ts'
 
 /**
  * Default cap on flat matches retained inline by one `grep` call (the
@@ -46,6 +45,10 @@ export interface GrepToolCaps {
   maxMetaBytes: number
   /** Cap on the complete raw `rg` stdout the tool will parse. */
   rawOutputMaxBytes: number
+  /** Terminate-escalation grace period (ms) for the search process. */
+  graceMs: number
+  /** Cap on the retained stderr diagnostic tail. */
+  stderrMaxBytes: number
   /** Cooperative tool-call budget (ms) attached as `ToolDefinition.timeoutMs`. */
   timeoutMs: number
 }
@@ -96,25 +99,26 @@ export function parseGrepArgs(args: { pattern: string; path?: string; include?: 
 }
 
 /**
- * Build the fixed line-oriented `rg --json` command for one `grep` call. Every
+ * Build the fixed line-oriented `rg --json` argv for one `grep` call. Every
  * model-controlled value ({@link GrepInput.pattern}, {@link GrepInput.path},
- * {@link GrepInput.include}) passes through {@link singleQuote}; the pattern
- * and include ride in `--flag=value` form and the target behind `--`, so a
- * leading-dash value can never be parsed as a flag.
+ * {@link GrepInput.include}) is a plain argv element — no shell layer exists,
+ * so no quoting applies; the pattern and include ride in `--flag=value` form
+ * and the target behind `--`, so a leading-dash value can never be parsed as
+ * a flag.
  *
  * @param input - the validated arguments.
- * @returns the complete, shell-safe command string.
+ * @returns the complete ripgrep argument vector (excluding the binary itself).
  */
-export function buildGrepCommand(input: GrepInput): string {
-  const parts = ['rg --json', `--regexp=${singleQuote(input.pattern)}`]
-  if (input.include !== undefined) parts.push(`--glob=${singleQuote(input.include)}`)
-  if (input.path !== undefined) parts.push('--', singleQuote(input.path))
-  return parts.join(' ')
+export function buildGrepCommand(input: GrepInput): string[] {
+  const parts = ['--json', `--regexp=${input.pattern}`]
+  if (input.include !== undefined) parts.push(`--glob=${input.include}`)
+  if (input.path !== undefined) parts.push('--', input.path)
+  return parts
 }
 
 /**
  * The uniform malformed-output failure: raw `rg --json` is an internal
- * transport, so a shape surprise is a search failure, not a partial result.
+ * transport, so missing or invalid response fields cause a search failure, not a partial result.
  */
 function malformedRecord(detail: string, cause?: unknown): SearchError {
   return new SearchError(`grep received malformed ripgrep --json output (${detail})`, 'SEARCH_FAILED', cause !== undefined ? { cause } : undefined)
@@ -144,7 +148,7 @@ function parseRecord(line: string): GrepMatch | undefined {
   const data = record.data as { path?: unknown; line_number?: unknown; lines?: unknown }
   const pathText = typeof data.path === 'object' && data.path !== null ? (data.path as { text?: unknown }).text : undefined
   if (typeof pathText !== 'string') throw malformedRecord('a match record has no path text')
-  if (typeof data.line_number !== 'number') { throw malformedRecord('a match record has no line number') }
+  if (typeof data.line_number !== 'number') throw malformedRecord('a match record has no line number')
   if (typeof data.lines !== 'object' || data.lines === null) throw malformedRecord('a match record has no line content')
   const lines = data.lines as { text?: unknown; bytes?: unknown }
   if (typeof lines.text === 'string') {
@@ -236,7 +240,7 @@ function formatRetainedGrep(retained: RetainedItems<GrepMatch>, spillRef?: Spill
  */
 export function presentGrepCall(args: { pattern: string; path?: string; include?: string }): GenericCallView {
   const where = args.path !== undefined ? ` in ${args.path}` : ''
-  const filter = args.include === undefined ? '' : ` (${args.include})`
+  const filter = args.include !== undefined ? ` (${args.include})` : ''
   return { card: 'generic', title: `Grep ${args.pattern}${where}${filter}`, kind: 'search', rawInput: args.pattern }
 }
 
@@ -265,7 +269,7 @@ export function presentGrepResult(
  * Register the `grep` tool and its system-prompt guidance.
  *
  * @param ctx - the plugin context; registrations are effects scoped to it, and
- *   execution uses its `bash` service.
+ *   execution uses its `subprocess` service.
  * @param caps - the deployment's resolved grep caps (plugin config after defaulting).
  */
 export function applyGrepTool(ctx: Context, caps: GrepToolCaps): void {
@@ -315,7 +319,7 @@ export function applyGrepTool(ctx: Context, caps: GrepToolCaps): void {
     },
     async execute(args, exec) {
       const input = parseGrepArgs(args)
-      const run = await runRipgrep(ctx, exec, 'grep', buildGrepCommand(input), caps.rawOutputMaxBytes)
+      const run = await runRipgrep(ctx, exec, 'grep', buildGrepCommand(input), caps.rawOutputMaxBytes, caps.graceMs, caps.stderrMaxBytes)
       if (run.noMatches) return { matches: [] }
 
       const all: GrepMatch[] = []
@@ -336,7 +340,7 @@ export function applyGrepTool(ctx: Context, caps: GrepToolCaps): void {
 
   ctx.on('tools/post-execute', async (exec, result, next) => {
     const decision = await next()
-    const value = acceptedSurfaceValue(ctx, tool, exec, result, decision) as { matches: GrepMatch[] } | undefined
+    const value = acceptedDirectCallValue(ctx, tool, exec, result, decision) as { matches: GrepMatch[] } | undefined
     if (value === undefined) return decision
     const matches = value.matches
     if (matches.length <= caps.maxMatches) return decision

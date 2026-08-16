@@ -11,7 +11,7 @@
  * interpolation keeps the upstream behavior for ordinary values.
  */
 
-import { valueMap } from 'cosmokit'
+import { valueMap } from '@deepseek-ai/cosmokit'
 
 /**
  * Refuse expression evaluation. Reaching this means a `!!js` node arrived in

@@ -159,7 +159,7 @@ function makeAgent(conn: AgentSideConnection): Agent {
         sessionId: params.sessionId,
         update: {
           sessionUpdate: 'agent_message_chunk',
-          content: { type: 'text', text: !ECHO_CWD ? TEXT : `${process.cwd()}\n${sessionCwd ?? ''}` },
+          content: { type: 'text', text: ECHO_CWD ? `${process.cwd()}\n${sessionCwd ?? ''}` : TEXT },
         },
       })
       // Signal "prompt is in flight" by touching the readiness file, so a test

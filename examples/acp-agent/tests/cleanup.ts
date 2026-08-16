@@ -17,7 +17,7 @@ export async function cleanupAcpExampleTest(
   if (workdir !== undefined) results.push(...await Promise.allSettled([rm(workdir, { recursive: true, force: true })]))
 
   const failures = results
-    .filter((result): result is PromiseRejectedResult => { return result.status === 'rejected' })
+    .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
     .map(result => result.reason as unknown)
   if (failures.length > 0) throw new AggregateError(failures, 'ACP example cleanup failed')
 }

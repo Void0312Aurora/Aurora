@@ -14,7 +14,7 @@ A `Session` is an append-only log of typed `SessionEvent`s — the single source
 
 Appends are synchronous (the hot path never blocks on I/O); `session/event` is a sync notification; persistence plugins buffer write-behind and drain at the awaited `session/flush` checkpoint fired at every turn end.
 
-Ordering contract: the loop appends to the session *before* emitting the corresponding Cordis event, and the `agent/step-result` waterfall runs before the `assistant/message` append so the log records the message tool dispatch actually used. Regression tests pin that ordering.
+Ordering contract: the loop claims inbox messages before `agent/pre-step`, opens `step/start` only after an enter decision, then appends the returned `user/message` batch before request derivation. Provider output is assembled and appended as `assistant/message` before tool dispatch, so the durable log records the exact message the tools follow. Regression tests pin that ordering.
 
 ## Alternatives considered
 
@@ -25,4 +25,4 @@ Ordering contract: the loop appends to the session *before* emitting the corresp
 - Replay, trace, and telemetry are structurally guaranteed, not bolted on.
 - Persistence stays a plugin concern; the in-memory store ships in dsh-session.
 - The event vocabulary is merge-extensible (plugins add e.g. compaction events); [session persistence](2026-06-14-session-persistence.md) froze its shape once the log became durable.
-- Derivation cost grows with log length — compaction (future plugin) is the intended mitigation, not log mutation.
+- Derivation cost grows with log length — compaction (dsh-compaction) is the intended mitigation, not log mutation.

@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-desktop",
   "description": "Electron desktop shell for the DeepSeek Harness Web GUI: spawns dsh web and hosts it in a standalone window with tray residency",
-  "version": "0.0.1",
+  "version": "0.1.0-rc.5",
   "private": true,
   "type": "module",
   "main": "lib/types/main.js",
@@ -15,7 +15,7 @@
     "dist": "pnpm -w run build:lib && pnpm -w run build:web && pnpm run deploy:closure && pnpm run build && electron-builder --config electron-builder.yml",
     "dist:dir": "pnpm -w run build:lib && pnpm -w run build:web && pnpm run deploy:closure && pnpm run build && electron-builder --config electron-builder.yml --dir"
   },
-  "license": "BSD-3-Clause",
+  "license": "MIT",
   "dependencies": {
     "@deepseek-ai/dsh-process-tree": "workspace:^",
     "@deepseek-ai/dsh-web-launcher": "workspace:^"

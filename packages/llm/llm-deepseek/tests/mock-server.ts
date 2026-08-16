@@ -34,7 +34,7 @@ export const textEvents = [
 
 /** Local chat-completions stand-in: replays scripted behaviors per request. */
 export async function mockServer(script: Behavior[]): Promise<MockServer> {
-  const requests: Array<unknown> = []
+  const requests: unknown[] = []
   const headers: IncomingMessage['headers'][] = []
   const server = createServer((request: IncomingMessage, response: ServerResponse) => {
     let body = ''

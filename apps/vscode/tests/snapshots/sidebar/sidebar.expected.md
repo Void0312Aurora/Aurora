@@ -13,17 +13,17 @@ horizontal-scrollers: 1
   - img
   - text: New Session
 - text: Workspaces
-- button "Group by":
-  - img
 - button "Search sessions":
   - img
-- textbox "Search name, keywords..."
+- textbox "Search sessions..."
+- button "View options":
+  - img
 - tree "Sessions":
-  - treeitem "fixture 4 sessions" [expanded]:
+  - treeitem "fixture" [expanded]:
     - img
-    - text: fixture 4 sessions
+    - text: fixture
   - treeitem "New Session" [selected]
-  - treeitem "Waiting for approval Fixture 历史会话 now"
+  - treeitem "Waiting for answer Fixture 历史会话 now"
   - treeitem "fixture 1min"
   - treeitem "fixture 2min"
 - button "Settings":

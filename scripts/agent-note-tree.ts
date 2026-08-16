@@ -50,7 +50,7 @@ export function walkAgentNoteTree(): { notes: AgentNote[]; errors: string[] } {
     }
     if (entry.isDirectory()
       && entry.name !== AGENT_NOTE_ARCHIVE
-      && !(AGENT_NOTE_LIFECYCLES as ReadonlyArray<string>).includes(entry.name)) {
+      && !(AGENT_NOTE_LIFECYCLES as readonly string[]).includes(entry.name)) {
       errors.push(`structure: ${entry.name}/ — unknown lifecycle folder (allowed: ${AGENT_NOTE_LIFECYCLES.join(', ')}, plus ${AGENT_NOTE_ARCHIVE}/)`)
     }
   }

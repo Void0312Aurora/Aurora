@@ -1,8 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-process-tree",
   "description": "Zero-dependency process-tree termination: taskkill /T on Windows, SIGTERM-to-SIGKILL process-group escalation on POSIX (killProcessTree)",
-  "version": "0.0.1",
-  "private": true,
+  "version": "0.1.0-rc.5",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
@@ -21,17 +20,23 @@
   "files": [
     "lib/index.js",
     "lib/invariant.js",
-    "lib/types/**/*.d.ts",
-    "lib/types/**/*.d.ts.map",
-    "src"
+    "lib/types/**/*.d.ts"
   ],
-  "license": "BSD-3-Clause",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "directory": "packages/util/process-tree"
+  },
   "peerDependencies": {
-    "@deepseek-ai/dsh-invariants": "^0.0.1",
-    "cordis": "^4.0.0-rc.7"
+    "@deepseek-ai/dsh-invariants": "workspace:^",
+    "@deepseek-ai/cordis": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/dsh-invariants": "workspace:^",
-    "cordis": "^4.0.0-rc.7"
+    "@deepseek-ai/cordis": "workspace:^"
   }
 }

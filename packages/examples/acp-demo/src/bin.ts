@@ -20,7 +20,7 @@ const NAME = 'dsh-acp-demo'
    built-bin smoke */
 installFailLoud(NAME)
 const snapshotMode = process.env['DSH_SNAPSHOT']
-if (snapshotMode !== 'replay') { loadEnv(NAME) }
+if (snapshotMode !== 'replay') loadEnv(NAME)
 const { values } = parseArgs({
   args: process.argv.slice(2),
   options: { config: { type: 'string', short: 'c' } },

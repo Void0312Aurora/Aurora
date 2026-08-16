@@ -7,12 +7,12 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { Context } from 'cordis'
+import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import SessionStore from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import UserInteractionService from '@deepseek-ai/dsh-user-interaction'
+import UserQuestionService from '@deepseek-ai/dsh-user-questions'
 import ApprovalService from '@deepseek-ai/dsh-user-approval'
 import type { ApprovalRequestId } from '@deepseek-ai/dsh-user-approval'
 import type { ApiProxy, MuxFrame, RpcRequest } from '@deepseek-ai/dsh-host-apiproxy/api'
@@ -24,17 +24,17 @@ async function harness(): Promise<{ ctx: Context; api: ApiProxy }> {
   const ctx = new Context()
   await ctx.plugin(SessionStore)
   await ctx.plugin(SystemPrompt, { persona: '' })
-  await ctx.plugin(UserInteractionService)
+  await ctx.plugin(UserQuestionService)
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(ApprovalService)
-  const api = createApiProxy(ctx, { provider: 'p', model: 'm', cwd: '/tmp', workspaceRoot: '/tmp' })
+  const api = createApiProxy(ctx, { defaultModelSelection: () => ({ provider: 'p', model: 'm' }), cwd: '/tmp' })
   return { ctx, api }
 }
 
 /** A minimal agent stand-in inside an open turn (the service only reaches `.session`). */
 function agentOf(ctx: Context): Agent {
   const session = ctx.sessions.create()
-  session.append('turn/start', { turn: 1, trigger: { kind: 'message', source: { kind: 'user' } } })
+  session.append('turn/start', { turn: 1 })
   return { session } as unknown as Agent
 }
 
@@ -48,7 +48,7 @@ function openMux(api: ApiProxy, abort: AbortController): { frames: MuxFrame[]; e
       frames.push(envelope.payload)
       envelopes.push(envelope)
       for (let i = waiters.length - 1; i >= 0; i -= 1) {
-        const waiter: (typeof waiters)[number] = waiters[i] as (typeof waiters)[number]
+        const waiter = waiters[i] as (typeof waiters)[number]
         if (waiter.type === envelope.payload.type) {
           waiters.splice(i, 1)
           waiter.resolve(envelope.payload)
@@ -185,7 +185,7 @@ describe('approval pending registry', () => {
     const abort = new AbortController()
     const mux = openMux(api, abort)
     const session = ctx.sessions.create()
-    session.append('turn/start', { turn: 1, trigger: { kind: 'message', source: { kind: 'user' } } })
+    session.append('turn/start', { turn: 1 })
     session.append('approval/asked', { id: 'pre-aborted' as ApprovalRequestId, toolName: 'bash' })
     const agent = { session } as unknown as Agent
     const cancelled = new AbortController()
@@ -212,13 +212,13 @@ describe('approval pending registry', () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
     await ctx.plugin(SystemPrompt, { persona: '' })
-    await ctx.plugin(UserInteractionService)
+    await ctx.plugin(UserQuestionService)
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(ApprovalService)
     let api!: ApiProxy
     const fiber = ctx.plugin(Object.assign((fiberCtx: Context) => {
-      api = createApiProxy(fiberCtx, { provider: 'p', model: 'm', cwd: '/tmp', workspaceRoot: '/tmp' })
-    }, { inject: ['sessions', 'agents', 'userInteraction', 'approval'] }))
+      api = createApiProxy(fiberCtx, { defaultModelSelection: () => ({ provider: 'p', model: 'm' }), cwd: '/tmp' })
+    }, { inject: ['sessions', 'agents', 'userQuestions', 'approval'] }))
     await fiber.await()
     const abort = new AbortController()
     const mux = openMux(api, abort)
@@ -308,7 +308,7 @@ describe('approval pending registry', () => {
     // Bypass ApprovalService: a log whose sole asked event already has its
     // decided partner must not be re-claimed — the answerer delegates.
     const session = ctx.sessions.create()
-    session.append('turn/start', { turn: 1, trigger: { kind: 'message', source: { kind: 'user' } } })
+    session.append('turn/start', { turn: 1 })
     session.append('approval/asked', { id: 'stale-ask' as ApprovalRequestId, toolName: 'bash' })
     session.append('approval/decided', { id: 'stale-ask' as ApprovalRequestId, outcome: 'rejected' })
     const agent = { session } as unknown as Agent
@@ -322,7 +322,7 @@ describe('approval pending registry', () => {
     // Bypass ApprovalService: dispatch the waterfall directly with a session
     // that has no approval/asked event — the proxy answerer must call next().
     const session = ctx.sessions.create()
-    session.append('turn/start', { turn: 1, trigger: { kind: 'message', source: { kind: 'user' } } })
+    session.append('turn/start', { turn: 1 })
     const agent = { session } as unknown as Agent
     const outcome = await ctx.waterfall('approval/request', { agent, toolName: 'x' }, () => Promise.resolve('unavailable' as const))
     expect(outcome).toBe('unavailable')

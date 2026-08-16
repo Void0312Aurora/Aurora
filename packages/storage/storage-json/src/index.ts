@@ -7,8 +7,8 @@
 
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { Context } from 'cordis'
-import z from 'schemastery'
+import type { Context } from '@deepseek-ai/cordis'
+import z from '@deepseek-ai/schemastery'
 import { StorageError, UNIT_NAME_RE, storageBackendServiceKey } from '@deepseek-ai/dsh-storage'
 import type { KvFacet, KvUnit, KvUnitDescriptor, StorageBackend } from '@deepseek-ai/dsh-storage'
 import { openJsonUnit } from './unit.ts'
@@ -56,7 +56,7 @@ export class JsonStorageBackend implements StorageBackend {
       }
       const opening = this.openUnit(descriptor)
       this.opening.set(descriptor.name, opening)
-      return opening.finally(() => { return this.opening.delete(descriptor.name) })
+      return opening.finally(() => this.opening.delete(descriptor.name))
     },
   }
 

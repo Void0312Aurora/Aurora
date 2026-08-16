@@ -1,8 +1,8 @@
 /** Package-owned filesystem event-data invariants. @module @deepseek-ai/dsh-fs/invariant */
 
-import type { Context } from 'cordis'
+import type { Context } from '@deepseek-ai/cordis'
 import type { InvariantInstaller } from '@deepseek-ai/dsh-invariants'
-import type { FsTarget, FsVersion } from './types.ts'
+import type { FsObservation, FsTarget } from './types.ts'
 
 const PACKAGE_NAME = '@deepseek-ai/dsh-fs'
 
@@ -22,10 +22,19 @@ const install: InvariantInstaller = (ctx, fail) => {
   ctx.on('internal/dispatch', (_mode, eventName, args) => {
     if (eventName !== 'fs/write-intent'
       && eventName !== 'fs/edit-intent'
-      && eventName !== 'fs/observed') { return }
+      && eventName !== 'fs/observed') return
     validateTarget(args[0] as FsTarget, fail)
-    if (eventName === 'fs/observed' && (args[1] as FsVersion).length === 0) {
-      fail('fs/observed version must be non-empty')
+    if (eventName === 'fs/observed') {
+      const observation = args[1] as FsObservation
+      switch (observation.kind) {
+        case 'present':
+          if (observation.version.length === 0) fail('fs/observed present version must be non-empty')
+          break
+        case 'absent':
+          break
+        default:
+          fail('fs/observed kind must be present or absent')
+      }
     }
   }, { global: true })
 }

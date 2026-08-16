@@ -1,14 +1,14 @@
 import { describe, expect, it, vi } from 'vitest'
-import { Context } from 'cordis'
-import z from 'schemastery'
-import { Settings, SettingsConflictError, deepEqualJson, installSettingsSection, settingsNamespace, type SettingsNamespace, type SettingsScope, type SettingsUpdateSource } from '../src/index.ts'
+import { Context } from '@deepseek-ai/cordis'
+import z from '@deepseek-ai/schemastery'
+import { SettingsProvider, SettingsConflictError, deepEqualJson, installSettingsSection, settingsNamespace, type SettingsNamespace, type SettingsScope, type SettingsUpdateSource } from '../src/index.ts'
 import { MemorySettings } from './memory.ts'
 
-/** A provider implementing only the three primitives: the seam owns init. */
-class BareProvider extends Settings {
+/** A provider implementing only the three primitives: the Service Definition owns initialization. */
+class BareProvider extends SettingsProvider {
   doc: Record<string, unknown>
 
-  constructor(ctx: ConstructorParameters<typeof Settings>[0], options?: { doc?: Record<string, unknown> }) {
+  constructor(ctx: ConstructorParameters<typeof SettingsProvider>[0], options?: { doc?: Record<string, unknown> }) {
     super(ctx)
     this.doc = structuredClone(options?.doc ?? {})
   }
@@ -58,6 +58,14 @@ async function boot(options?: ConstructorParameters<typeof MemorySettings>[1]) {
   return { ctx, provider, fiber }
 }
 
+describe('provider metadata', () => {
+  it('does not advertise a local document unless the provider overrides it', async () => {
+    const { ctx } = await boot()
+    expect(ctx.settings.documentPath).toBeUndefined()
+    await expect(ctx.settings.prepareDocument()).resolves.toBeUndefined()
+  })
+})
+
 /** Record every settings/updated emission. */
 function recordUpdates(ctx: Context) {
   const events: Array<{ ns: string; next: unknown; prev: unknown; source: SettingsUpdateSource }> = []
@@ -85,6 +93,44 @@ describe('registration', () => {
     })
     // theme: user layer wins; fontSize: base wins over the schema default.
     expect(scope.get()).toEqual({ theme: 'light', fontSize: 16 })
+  })
+
+  it('refuses a write its owner could not act on, and keeps the last good value for a stored one', async () => {
+    const { ctx } = await boot()
+    const ns = settingsNamespace('ui-theme')
+    // A constraint the schema cannot express: this owner cannot serve a size
+    // it considers unreadable, whatever the schema admits.
+    const scope = ctx.settings.register(ns, ThemeSchema, {
+      validate: (value) => {
+        if (value.fontSize < 10) throw new Error(`font size ${String(value.fontSize)} is unreadable`)
+      },
+    })
+    const before = scope.get()
+
+    await expect(ctx.settings.update(ns, { fontSize: 4 })).rejects.toThrow(/unreadable/)
+    expect(scope.get()).toEqual(before)
+
+    // An externally edited document must not strand the owner: the namespace
+    // keeps its last good value, exactly as a schema failure would.
+    ;(ctx.settings as unknown as { publish(doc: Record<string, unknown>): void })
+      .publish({ 'ui-theme': { fontSize: 4 } })
+    expect(scope.get()).toEqual(before)
+
+    await ctx.settings.update(ns, { fontSize: 18 })
+    expect(scope.get()).toMatchObject({ fontSize: 18 })
+  })
+
+  it('fails the registration itself when the already-stored section is unserviceable', async () => {
+    // The other direction of the same contract: `register` resolves inline, so
+    // at cold start there is no last good value to keep. A stored section the
+    // owner cannot serve therefore refuses the registration rather than
+    // mounting an owner over configuration it rejects.
+    const { ctx } = await boot({ doc: { 'ui-theme': { fontSize: 4 } } })
+    expect(() => ctx.settings.register(settingsNamespace('ui-theme'), ThemeSchema, {
+      validate: (value) => {
+        if (value.fontSize < 10) throw new Error(`font size ${String(value.fontSize)} is unreadable`)
+      },
+    })).toThrow(/unreadable/)
   })
 
   it('rejects a duplicate namespace loud', async () => {
@@ -402,7 +448,7 @@ describe('second review regressions', () => {
     await new Promise(resolve => setTimeout(resolve, 5))
     await fiber.dispose()
     // The teardown drained the in-flight write before completing…
-    await pending.catch(() => { return undefined })
+    await pending.catch(() => undefined)
     const persistedAtDispose = provider.persisted.length
     expect(persistedAtDispose).toBe(1)
     // …and afterwards nothing writes and new writes reject.
@@ -433,11 +479,11 @@ describe('second review regressions', () => {
     expect(applied).toEqual([1, 2])
   })
 
-  it('rejects a function value as not JSON-shaped', async () => {
+  it('rejects a function value as not JSON-compatible', async () => {
     const { ctx } = await boot()
     const scope = ctx.settings.register(settingsNamespace('ui-theme'), ThemeSchema)
     await expect(scope.update({ theme: () => 'dark' }))
-      .rejects.toThrow(/JSON-shaped.*function at \$\.theme/)
+      .rejects.toThrow(/JSON-compatible.*function at \$\.theme/)
   })
 
   it('rejects a write still queued when the service disposes', async () => {
@@ -570,7 +616,7 @@ describe('third review regressions', () => {
     const { ctx, provider } = await boot()
     const scope = ctx.settings.register(settingsNamespace('ui-theme'), z.object({ value: z.any() }))
     await expect(scope.update({ value: { at: new Date(0) } }))
-      .rejects.toThrow(/JSON-shaped.*Date at \$\.value\.at/)
+      .rejects.toThrow(/JSON-compatible.*Date at \$\.value\.at/)
     expect(provider.persisted).toEqual([])
   })
 
@@ -593,7 +639,7 @@ describe('third review regressions', () => {
     const cyclic: Record<string, unknown> = {}
     cyclic['self'] = cyclic
     await expect(scope.update({ value: cyclic })).rejects.toThrow(/circular reference at \$\.value\.self/)
-    const loop: Array<unknown> = []
+    const loop: unknown[] = []
     loop.push(loop)
     await expect(scope.update({ value: loop })).rejects.toThrow(/circular reference at \$\.value\[0\]/)
   })
@@ -868,10 +914,10 @@ describe('mutate (path-addressed writes)', () => {
     expect(ctx.settings.describe().find(d => d.ns === KEYED)!.user).toEqual({ apiKey: 'sk-stored' })
   })
 
-  it('rejects a value the JSON-shape boundary refuses', async () => {
+  it('rejects a value that lossless JSON cannot represent', async () => {
     const ctx = await mounted({ keyed: {} })
     await expect(ctx.settings.mutate(KEYED, [{ op: 'set', path: ['baseURL'], value: new Date() }]))
-      .rejects.toThrow(/must be JSON-shaped data/)
+      .rejects.toThrow(/must contain only JSON-compatible data/)
   })
 })
 

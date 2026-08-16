@@ -5,10 +5,10 @@
 // the inject hook, and the frame keeping every pane mounted while CSS selects
 // the front one.
 
-import { Context } from 'cordis'
+import { Context } from '@deepseek-ai/cordis'
 import { render } from '@testing-library/react'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
-import { SlotsService } from '@deepseek-ai/dsh-client-runtime/client'
+import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
 import { apply, inject } from '../webview/shell/index.ts'
 import { NarrowLayoutService } from '../webview/shell/service.ts'
 import { createNarrowStore, type NarrowRoute } from '../webview/shell/stores.ts'
@@ -26,8 +26,8 @@ beforeAll(() => {
 
 async function bench() {
   const ctx = new Context()
-  await ctx.plugin(SlotsService).await()
-  return { ctx, slots: ctx.get('slots') as SlotsService }
+  await ctx.plugin(SlotRegistry).await()
+  return { ctx, slots: ctx.get('slots') as SlotRegistry }
 }
 
 describe('sidebar shell apply', () => {

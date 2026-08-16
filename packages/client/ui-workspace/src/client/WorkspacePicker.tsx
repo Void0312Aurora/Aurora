@@ -96,7 +96,7 @@ export function WorkspacePickFlow({
   // empty hole (Choose again after the occupant unloaded with the error
   // dialog up) — that transition must snap back too, not just occupancy loss.
   useEffect(() => {
-    if (flowOpen && !flowAvailable) { setFlowOpen(false) }
+    if (flowOpen && !flowAvailable) setFlowOpen(false)
   }, [flowOpen, flowAvailable])
   const addEntries: MenuEntry[] = flowAvailable
     ? [{ id: ADD_WORKSPACE, label: t('menu.addWorkspace'), icon: <IconPlusOutline16 size={16} />, disabled: flowBusy }]

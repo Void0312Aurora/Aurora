@@ -144,7 +144,7 @@ function hasRenderedTextOutsideComments(raw: string, ranges: readonly ColumnRang
   if (ranges === undefined) return true
   let cursor = 0
   let visible = ''
-  for (const [start, end] of [...ranges].sort((left, right) => { return left[0] - right[0] })) {
+  for (const [start, end] of [...ranges].sort((left, right) => left[0] - right[0])) {
     visible += raw.slice(cursor, start)
     cursor = Math.max(cursor, end)
   }

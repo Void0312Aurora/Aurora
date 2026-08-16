@@ -9,7 +9,7 @@
  * @module @deepseek-ai/dsh-storage-domain/invariant
  */
 
-import type { Context } from 'cordis'
+import type { Context } from '@deepseek-ai/cordis'
 import type { InvariantFailure, InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 import type { DomainChanged } from './events.ts'
 
@@ -24,7 +24,9 @@ export const inject = ['invariants']
 const install: InvariantInstaller = Object.assign((ctx: Context, fail: InvariantFailure) => {
   ctx.on('domain/changed', (change: DomainChanged) => {
     const domain = ctx.storage.form('domain').get(change.domain)
-    if (domain === undefined) return fail(`domain/changed for '${change.domain}' emitted while that domain is not open`)
+    if (domain === undefined) {
+      return fail(`domain/changed for '${change.domain}' emitted while that domain is not open`)
+    }
     if (change.table === '') {
       // Global write: the event snapshot must be the current global value.
       if (domain.global.get() !== change.value) {

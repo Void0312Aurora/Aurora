@@ -2,8 +2,9 @@
 // The input order is authoritative; lineage only makes each child adjacent to its parent.
 // Orphaned lineage degrades to root level; cycles fail soft and emit as roots.
 
-import type { SessionId, SessionSummary } from '@deepseek-ai/dsh-client-connection/client'
+import type { SessionId, SessionSummary } from '@deepseek-ai/dsh-api-remotes/client'
 import type { SessionProjectionMap } from '@deepseek-ai/dsh-session-projection/types'
+import type { PendingInteractionStatus } from './pending.ts'
 
 /** Host list summary enriched with the latest mux-projected durable title. */
 export interface TitledSessionSummary extends SessionSummary {
@@ -12,7 +13,7 @@ export interface TitledSessionSummary extends SessionSummary {
   projectionValues?: Readonly<Partial<SessionProjectionMap>>
 }
 
-/** One flattened session-list row (summary + lineage indent depth + live pending-approval bit). */
+/** One flattened session-list row with lineage depth and live pending interaction. */
 export interface SessionListEntry {
   sessionId: SessionId
   title?: string
@@ -24,10 +25,14 @@ export interface SessionListEntry {
   /** Coarse durable origin for navigation filtering; not a continuation capability. */
   origin?: 'subagent'
   cwd?: string
+  /** Agent preset the session's agent was composed from (summary passthrough). */
+  agentPreset?: string
   /** Current host-computed projection values for list consumers. */
   projectionValues?: Readonly<Partial<SessionProjectionMap>>
-  /** An approval question is pending on this session (mux-frame derived; the sidebar's amber dot). */
-  waitingApproval: boolean
+  /** User interaction currently blocking this session, derived from live mux frames. */
+  pendingInteraction?: PendingInteractionStatus
+  /** Finished running while not selected and not yet opened — the sidebar's green "done" reminder (clears on select or the next run). */
+  completed: boolean
   /** Lineage indent depth: root = 0; the UI just multiplies by the indent width. */
   depth: number
 }
@@ -37,12 +42,17 @@ export interface SessionListEntry {
  * follows the established input order; this projection never re-sorts a
  * hydrated list from mutable timestamps.
  * @param summaries - the host's session.list items.
- * @param waitingApproval - sessions with a pending approval question (manager-owned live fact; absent = false).
+ * @param pendingInteractions - current manager-owned interaction status by session.
+ * @param completed - sessions with a pending completion reminder (manager-owned live fact; absent = false).
  * @returns display rows in render order.
  */
-export function flattenLineage(summaries: readonly TitledSessionSummary[], waitingApproval?: ReadonlySet<SessionId>): SessionListEntry[] {
+export function flattenLineage(
+  summaries: readonly TitledSessionSummary[],
+  pendingInteractions?: ReadonlyMap<SessionId, PendingInteractionStatus>,
+  completed?: ReadonlySet<SessionId>,
+): SessionListEntry[] {
   const byId = new Map<SessionId, TitledSessionSummary>()
-  for (const s of summaries) { byId.set(s.sessionId, s) }
+  for (const s of summaries) byId.set(s.sessionId, s)
 
   const children = new Map<SessionId, TitledSessionSummary[]>()
   const roots: TitledSessionSummary[] = []
@@ -56,7 +66,7 @@ export function flattenLineage(summaries: readonly TitledSessionSummary[], waiti
     }
   }
 
-  const out: Array<SessionListEntry> = []
+  const out: SessionListEntry[] = []
   const visited = new Set<SessionId>()
   const walk = (s: TitledSessionSummary, depth: number): void => {
     if (visited.has(s.sessionId)) {
@@ -64,7 +74,13 @@ export function flattenLineage(summaries: readonly TitledSessionSummary[], waiti
       return
     }
     visited.add(s.sessionId)
-    out.push({ ...s, waitingApproval: waitingApproval?.has(s.sessionId) ?? false, depth })
+    const pendingInteraction = pendingInteractions?.get(s.sessionId)
+    out.push({
+      ...s,
+      ...(pendingInteraction === undefined ? {} : { pendingInteraction }),
+      completed: completed?.has(s.sessionId) ?? false,
+      depth,
+    })
     const kids = children.get(s.sessionId)
     if (kids === undefined) return
     for (const kid of kids) walk(kid, depth + 1)

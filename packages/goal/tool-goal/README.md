@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-The model-facing control surface for [`ctx.goals`](../goal/README.md): `get_goal`, `create_goal`, and `update_goal`. The [goal-tool Agent Note](../../../.agents/notes/implemented/feature/2026-07-19-model-facing-goal-tools.md) owns the authority split and Codex-shaped UX.
+The model-facing control tools for [`ctx.goals`](../goal/README.md): `get_goal`, `create_goal`, and `update_goal`. The [goal-tool Agent Note](../../../.agents/notes/implemented/feature/2026-07-19-model-facing-goal-tools.md) owns the authority split and Codex-shaped UX.
 
 ## Tools
 
@@ -14,7 +14,7 @@ All calls are exclusive, so a model-ordered batch observes earlier mutations and
 
 All three canonical values match the compact JSON already rendered to Native callers: `{ goal: null }` or `{ goal: { id, revision, objective, phase, roundsStarted, maxGoalRounds, blockedReason? }, activation }`. Programmatic consumers therefore receive the same domain structure without parsing the rendered JSON.
 
-An autonomous goal round that successfully reports `complete` or `blocked` defers one wrap-up context onto that tool result: an injected instruction telling the model to write a final closing message to the user and call no more tools, after which the turn ends through the ordinary no-tool-calls stop. Direct-human mutations receive no instruction: the assistant may acknowledge the change and concurrent human steering remains available to the loop.
+An autonomous goal round that successfully reports `complete` or `blocked` marks that tool execution with `concludeTurn()` so the physical turn stops after the step. Direct-human mutations never contribute this stop: the assistant may acknowledge the change and concurrent human steering remains available to the loop.
 
 ## Authority
 
@@ -61,19 +61,19 @@ Prefix-stable while the plugin scope, configured threshold, and guidance text ar
 
 #### What the model sees
 
-The generated [`get_goal`, `create_goal`, and `update_goal` schemas](../../../docs/tool-catalog.md#deepseek-aidsh-tool-goal). Successful results are compact JSON. Mutation results are followed by the goal domain's raw `<goal_state>` snapshot after the tool batch. `activation` in a result is a live observation and never becomes replay authority. A goal-round `complete` or `blocked` result additionally injects one `<goal_complete>`/`<goal_blocked>` wrap-up instruction that asks for a grounded closing message to the user without further tool calls.
+The generated [`get_goal`, `create_goal`, and `update_goal` schemas](../../../docs/tool-catalog.md#deepseek-aidsh-tool-goal). Successful results are compact JSON. A mutation appends the goal domain's durable `goal/change` event without queuing model context. `activation` in a result is a live observation and never becomes replay authority.
 
 #### Token effect
 
-Fixed schema cost plus one compact result per call. Mutations also retain the domain snapshot until compaction. A goal-round terminal update adds the injected wrap-up instruction and one further model request for the closing message — once per goal lifecycle, not per round.
+Fixed schema cost plus one compact result per call. The durable mutation adds no separate model-visible context.
 
 #### KV Cache effect
 
-Schemas are prefix-stable while their definitions and visibility are unchanged. Calls, results, and resulting goal snapshots append after the reusable request prefix without invalidating earlier entries.
+Schemas are prefix-stable while their definitions and visibility are unchanged. Calls and results append after the reusable request prefix without invalidating earlier entries.
 
 ## Known Limitations and Deferred Work
 
-- **Semantic intent remains model judgment** — execution can prove direct human provenance, not whether a request is substantial enough to merit a goal.
+- **Semantic intent remains model judgment** — execution can prove that the current turn contains a direct human message, not whether the request is substantial enough to merit a goal.
 - **Same-condition blocking remains model judgment** — the runtime enforces distinct admitted-round count, not semantic equivalence of obstacles; an independent evaluator is deferred.
 - **No scheduling or direct human rendering** — these tools mutate state only; the same-session driver and [`dsh-command-goal`](../command-goal/README.md) are independent consumers of the same domain.
 - **Goal-round authority requires a driver** — the autonomous `complete`/`blocked` path is dormant unless a continuation driver admits goal-sourced user turns; mounting this tool package alone does not create them.

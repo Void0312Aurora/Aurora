@@ -12,7 +12,13 @@
       "path": "../../../vendor/cordis"
     },
     {
+      "path": "../locale"
+    },
+    {
       "path": "../ui-slots"
+    },
+    {
+      "path": "../ui-theme"
     },
     {
       "path": "../ui-primitives"
@@ -24,7 +30,7 @@
       "path": "../runtime"
     },
     {
-      "path": "../../support/invariants"
+      "path": "../../runtime-diagnostics/invariants"
     }
   ]
 }

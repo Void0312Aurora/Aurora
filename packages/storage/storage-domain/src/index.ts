@@ -7,8 +7,8 @@
  * @module @deepseek-ai/dsh-storage-domain
  */
 
-import type { Context } from 'cordis'
-import z from 'schemastery'
+import type { Context } from '@deepseek-ai/cordis'
+import z from '@deepseek-ai/schemastery'
 import { storageBackendServiceKey } from '@deepseek-ai/dsh-storage'
 import { DomainError } from './error.ts'
 import { descriptorOf } from './spec.ts'
@@ -32,7 +32,7 @@ declare module '@deepseek-ai/dsh-storage' {
   }
 }
 
-declare module 'cordis' {
+declare module '@deepseek-ai/cordis' {
   interface Context {
     storageDomain: DomainFacility
   }
@@ -118,7 +118,7 @@ export class DomainFacility {
         for (const [table, tableSpec] of Object.entries(spec.tables)) {
           const records = new Map<string, unknown>()
           for (const [key, raw] of Object.entries(snapshot.tables[table] ?? {})) {
-            records.set(key, parseRecord(spec.name, table, key, () => { return tableSpec.valueSchema.parse(raw) }))
+            records.set(key, parseRecord(spec.name, table, key, () => tableSpec.valueSchema.parse(raw)))
           }
           tables.set(table, records)
         }
@@ -182,7 +182,7 @@ function parseRecord<T>(domain: string, table: string, key: string, parse: () =>
   try {
     return parse()
   } catch (error) {
-    const slot = table !== '' ? `record '${key}' in table '${table}'` : 'global'
+    const slot = table === '' ? 'global' : `record '${key}' in table '${table}'`
     throw new DomainError(
       'invalid-record',
       `domain '${domain}': stored ${slot} does not match its schema`,

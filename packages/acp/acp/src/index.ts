@@ -9,11 +9,11 @@
  * @module @deepseek-ai/dsh-acp
  */
 
-import type { Context } from 'cordis'
+import type { Context } from '@deepseek-ai/cordis'
 import { randomUUID } from 'node:crypto'
 import { isAbsolute } from 'node:path'
 import { Readable, Writable } from 'node:stream'
-import Schema from 'schemastery'
+import Schema from '@deepseek-ai/schemastery'
 import { createUserMessage, errorChain } from '@deepseek-ai/dsh-llm'
 import {
   AgentSideConnection,
@@ -66,7 +66,7 @@ function internalError(detail: string): RequestError {
   return RequestError.internalError(undefined, detail)
 }
 
-/** Plugin config: the provider/model target used for each ACP-created agent. */
+/** Plugin config: the provider/model selection used for each ACP-created agent. */
 export interface AcpConfig {
   /** Provider route for created agents. */
   provider?: string
@@ -90,20 +90,17 @@ interface SessionRecord {
   inflight: {
     resolve: (reason: StopReason) => void
     reject: (error: Error) => void
+    messageId: string
     turn: number | undefined
-    /**
-     * A failed turn's terminal reason, held until quiescence: a retry action
-     * closes the failed turn and opens a successor that adopts the prompt, so
-     * rejecting at `turn/end` would race the recovery.
-     */
-    pendingError: Extract<TurnEndReason, { kind: 'error' }> | undefined
+    /** The correlated turn's ending, set at turn/end and settled at whole-agent idle. */
+    endReason: TurnEndReason | undefined
   } | undefined
 }
 
 /**
  * Mount the automation-only ACP server.
  * @param ctx - Cordis context carrying the agent factory and session events.
- * @param config - Initial provider/model target and optional test transport.
+ * @param config - Initial provider/model selection and optional test transport.
  */
 export function apply(ctx: Context, config: AcpConfig): void {
   // ACP handlers execute outside this plugin's injection scope, so capture the
@@ -149,7 +146,7 @@ export function apply(ctx: Context, config: AcpConfig): void {
     inflight: NonNullable<SessionRecord['inflight']>,
     reason: Extract<TurnEndReason, { kind: 'error' }>,
   ): void => {
-    inflight.reject(internalError(`turn failed: ${'failure' in reason ? reason.failure.message : reason.message}`))
+    inflight.reject(internalError(`turn failed: ${reason.error.message}`))
   }
 
   // Emit only committed assistant text. Raw chunks, reasoning, tools, plans,
@@ -169,33 +166,47 @@ export function apply(ctx: Context, config: AcpConfig): void {
                 content: { type: 'text', text: block.text },
               },
             })
+          } else if (block.type === 'image') {
+            notify({
+              sessionId: record.agent.session.id,
+              update: {
+                sessionUpdate: 'agent_message_chunk',
+                content: {
+                  type: 'text',
+                  text: `[image attachment ${block.attachment.attachmentId}]`,
+                },
+              },
+            })
           }
         }
       }
     } finally {
       const inflight = record.inflight
-      if (inflight !== undefined && event.type === 'turn/start') {
-        if (inflight.turn === undefined && event.data.trigger.kind === 'message'
-          && event.data.trigger.source.kind === 'user') {
-          inflight.turn = event.data.turn
-        } else if (inflight.pendingError !== undefined && event.data.trigger.kind === 'retry') {
-          // A recovery policy opened a retry turn on the failed history: the
-          // prompt rides it instead of rejecting on the failed turn's end.
-          inflight.turn = event.data.turn
-          inflight.pendingError = undefined
-        }
-      } else if (inflight !== undefined && event.type === 'turn/end' && inflight.turn === event.data.turn) {
+      if (inflight !== undefined && event.type === 'turn/end' && inflight.turn === event.data.turn) {
         if (event.data.reason.kind === 'error') {
-          // Hold the rejection: request recovery may adopt the prompt with a
-          // successor turn; quiescence without one delivers this error.
-          inflight.turn = undefined
-          inflight.pendingError = event.data.reason
-        } else {
+          // Model failures surface immediately as prompt errors; ordinary
+          // endings wait for whole-agent idle below.
           record.inflight = undefined
-          inflight.resolve(turnEndToStopReason(event.data.reason))
+          rejectFromError(inflight, event.data.reason)
+        } else {
+          inflight.endReason = event.data.reason
         }
       }
     }
+  })
+
+  ctx.on('agent/inbox/claimed', ({ agent, message, turn }) => {
+    const record = ownedRecord(agent)
+    const inflight = record?.inflight
+    if (inflight !== undefined && inflight.messageId === message.id) inflight.turn = turn
+  })
+
+  ctx.on('agent/error', ({ agent, turn, error }) => {
+    const record = ownedRecord(agent)
+    const inflight = record?.inflight
+    if (record === undefined || inflight === undefined || inflight.turn === turn) return
+    record.inflight = undefined
+    inflight.reject(internalError(`turn failed: ${errorChain(error)}`))
   })
 
   // Permission requests are a machine policy channel for ACP clients such as
@@ -213,7 +224,7 @@ export function apply(ctx: Context, config: AcpConfig): void {
       ],
     }).then(({ outcome }) => {
       if (outcome.outcome === 'cancelled') return 'cancelled'
-      return outcome.optionId !== 'allow-once' ? 'rejected' : 'allowed-once'
+      return outcome.optionId === 'allow-once' ? 'allowed-once' : 'rejected'
     })
   })
 
@@ -241,6 +252,10 @@ export function apply(ctx: Context, config: AcpConfig): void {
         assertOpen()
         validateSessionParams(params)
         const sessionId = SessionId(randomUUID())
+        // No preset composition: the ACP bundle keeps the model-facing rows in
+        // the host plane, so this agent reads them from the global layer. A
+        // deployment that configures a roster has to join one here first
+        // (@deepseek-ai/dsh-agent-presets README, "Composing a child agent").
         const handle = await agents.create({
           sessionId,
           meta: { cwd: params.cwd },
@@ -253,7 +268,7 @@ export function apply(ctx: Context, config: AcpConfig): void {
         }
         sessions.set(sessionId, {
           agent: handle.agent,
-          dispose: () => { return handle.dispose() },
+          dispose: () => handle.dispose(),
           inflight: undefined,
         })
         return { sessionId }
@@ -278,17 +293,18 @@ export function apply(ctx: Context, config: AcpConfig): void {
         if (ctx.agents.get(record.agent.id) !== record.agent) {
           throw internalError('prompt was not queued: the agent was disposed outside the bridge')
         }
+        const message = createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } })
         const stopReason = await new Promise<StopReason>((resolve, reject) => {
           // Arm the slot before followup() so a listener-driven synchronous
           // turn cannot slip past correlation; a synchronous followup()
           // failure (invalid input) must free the slot again or the session
           // would reject every later prompt as already in flight.
           const inflight: NonNullable<SessionRecord['inflight']> = {
-            resolve, reject, turn: undefined, pendingError: undefined,
+            resolve, reject, messageId: message.id, turn: undefined, endReason: undefined,
           }
           record.inflight = inflight
           try {
-            record.agent.followup(createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } }))
+            record.agent.followup(message)
             // The machine's send() contains listener failures and accepts
             // any typed input; this guards a future synchronous throw so the
             // slot cannot wedge.
@@ -299,18 +315,21 @@ export function apply(ctx: Context, config: AcpConfig): void {
             throw internalError(`prompt was not queued: ${detail}`)
           }
           /* v8 ignore stop */
-          // Admission is pre-turn and retries outlive their failed turn, so a
-          // turnless slot settles only at quiescence: a held failure rejects
-          // (no retry adopted the prompt); no turn at all means admission
-          // discarded the prompt — report cancelled.
+          // Settlement waits for whole-agent idle: a correlated turn/end arms
+          // `endReason`, while a turnless slot (admission discarded the
+          // prompt) stays cancelled. Other producers may run further turns
+          // before quiescence; the prompt settles only when the agent stops.
           void record.agent.whenIdle().then(() => {
-            if (record.inflight !== inflight || inflight.turn !== undefined) return
+            if (record.inflight !== inflight) return
             record.inflight = undefined
-            if (inflight.pendingError !== undefined) {
-              rejectFromError(inflight, inflight.pendingError)
-              return
+            const end = inflight.endReason
+            if (end === undefined) {
+              inflight.resolve('cancelled')
+            } else {
+              // Token-limit and other non-terminal endings are not prompt-level
+              // stop reasons (see README); only normal quiescence reports end_turn.
+              inflight.resolve(end.kind === 'max-tokens' ? 'end_turn' : turnEndToStopReason(end))
             }
-            inflight.resolve('cancelled')
           })
         })
         return { stopReason }
