@@ -96,6 +96,9 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
       async prompt(request) {
         return { rpcId: request.rpcId, result: { ok: true, value: { accepted: true as const } } }
       },
+      async injectContext(request) {
+        return { rpcId: request.rpcId, result: { ok: true, value: { accepted: true as const } } }
+      },
       async attachment(request) {
         return {
           rpcId: request.rpcId,
@@ -143,7 +146,7 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
           rpcId: request.rpcId,
           result: {
             ok: true,
-            value: { version: 'v', cwd: '/w', attachedSessions: 0, canOpenPath: true },
+            value: { protocolVersion: 1, version: 'v', cwd: '/w', attachedSessions: 0, canOpenPath: true },
           },
         }
       },

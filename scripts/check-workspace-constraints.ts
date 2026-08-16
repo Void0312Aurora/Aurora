@@ -49,6 +49,8 @@ const repositoryUrl = 'git+https://github.com/deepseek-harness/deepseek-harness.
 const publishedRepositoryUrl = 'git+https://github.com/deepseek-ai/deepseek-harness.git'
 /** Directories whose packages this repository publishes: one release member each. */
 const releaseMemberDirectory = /^(?:packages\/[^/]+\/[^/]+|apps\/[^/]+|vendor\/[^/]+)$/
+/** Private product assemblies ship through their own installers, not npm. */
+const privateProductAssemblies = new Set(['@deepseek-ai/dsh-desktop', 'dsh-vscode'])
 
 const localArtifactDirs = new Set(['node_modules'])
 const appPackageFiles: Readonly<Record<string, readonly string[]>> = {
@@ -59,7 +61,7 @@ const appPackageFiles: Readonly<Record<string, readonly string[]>> = {
 }
 
 /** The subset of package.json fields this constraint check cares about. */
-interface PackageManifest {
+export interface PackageManifest {
   name?: string
   version?: string
   private?: boolean
@@ -87,7 +89,7 @@ interface PackageManifest {
 }
 
 /** One workspace manifest and its repo-relative path. */
-interface WorkspaceManifest {
+export interface WorkspaceManifest {
   dir: string
   manifest: PackageManifest
 }
@@ -219,9 +221,11 @@ function usesEmittedTreeDefaults(manifest: PackageManifest): boolean {
     exportDefault(manifest, subpath)?.startsWith('./lib/types/') === true)
 }
 
-function checkWorkspace({ dir, manifest }: WorkspaceManifest): string[] {
+export function checkWorkspace({ dir, manifest }: WorkspaceManifest): string[] {
   const errors: string[] = []
   const label = manifest.name ?? dir
+  const isPrivateProductAssembly = dir.startsWith('apps/')
+    && privateProductAssemblies.has(manifest.name ?? '')
   const isLandlockPackageDir = dir.startsWith('native/landlock-run/packages/')
   const isPublicLandlockPackage = isLandlockPackageDir
     && manifest.name !== undefined
@@ -239,6 +243,10 @@ function checkWorkspace({ dir, manifest }: WorkspaceManifest): string[] {
       || manifest.repository.url !== repositoryUrl
       || manifest.repository.directory !== expectedDirectory) {
       errors.push(`${label}: published Landlock package repository must use ${repositoryUrl} with directory ${expectedDirectory} for trusted publishing`)
+    }
+  } else if (isPrivateProductAssembly) {
+    if (manifest.private !== true) {
+      errors.push(`${label}: private product assembly must set "private": true`)
     }
   } else if (releaseMemberDirectory.test(dir)) {
     // Release members state that they are publishable: npm refuses a private
@@ -279,7 +287,9 @@ function checkWorkspace({ dir, manifest }: WorkspaceManifest): string[] {
     }
   }
 
-  if (dir.startsWith('apps/') && manifest.name?.startsWith('@deepseek-ai/')) {
+  if (dir.startsWith('apps/')
+    && manifest.name?.startsWith('@deepseek-ai/')
+    && !isPrivateProductAssembly) {
     const expectedFiles = appPackageFiles[manifest.name]
     if (expectedFiles === undefined) {
       errors.push(`${label}: app package has no publication files policy`)
@@ -406,15 +416,21 @@ function checkWorkspaceProtocol(manifests: readonly WorkspaceManifest[]): string
   return errors
 }
 
-const manifests = workspaceManifests()
-const errors = [
-  ...checkRepositoryVersion(),
-  ...manifests.flatMap(checkWorkspace),
-  ...checkWorkspaceProtocol(manifests),
-  ...checkHierarchyShape(),
-  ...collectProjectReferenceFaceViolations(root),
-]
-if (errors.length > 0) {
-  console.error(errors.join('\n'))
-  process.exitCode = 1
+export function collectConstraintErrors(): string[] {
+  const manifests = workspaceManifests()
+  return [
+    ...checkRepositoryVersion(),
+    ...manifests.flatMap(checkWorkspace),
+    ...checkWorkspaceProtocol(manifests),
+    ...checkHierarchyShape(),
+    ...collectProjectReferenceFaceViolations(root),
+  ]
+}
+
+if (import.meta.main) {
+  const errors = collectConstraintErrors()
+  if (errors.length > 0) {
+    console.error(errors.join('\n'))
+    process.exitCode = 1
+  }
 }

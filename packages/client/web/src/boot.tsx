@@ -50,6 +50,12 @@ import './base.css'
 /** Module transport hook the shell passes through (jsdom tests replace the <script> path). */
 export type BootSeams = Pick<ClientModuleSystemOptions, 'loadBundle'>
 
+/** Boot options supplied by a hosting shell, including statically bundled plugin rows. */
+export type BootOptions = BootSeams & {
+  /** Graph-row plugin implementations bundled by an embedder webview. */
+  staticPlugins?: Record<string, unknown>
+}
+
 /**
  * The modules package's own graph row id. The kernel adopts that entry
  * itself (its wrapper is statically registered — shell-bundled code, never
@@ -67,7 +73,7 @@ const MODULES_ID = '@deepseek-ai/dsh-client-modules'
  */
 export class AppWebEntry {
   private readonly el: HTMLElement
-  private readonly seams: BootSeams | undefined
+  private readonly options: BootOptions | undefined
   private readonly status = createLoaderStatusStore()
   private readonly settled = createSignal(false)
   private readonly error = createSignal<string | undefined>(undefined)
@@ -80,11 +86,11 @@ export class AppWebEntry {
   /**
    * Hold the mount point; all work happens in {@link run}.
    * @param el - mount point (the app's #root).
-   * @param seams - Optional module transport overrides for test environments.
+   * @param options - Optional module transport overrides and static plugin rows.
    */
-  constructor(el: HTMLElement, seams?: BootSeams) {
+  constructor(el: HTMLElement, options?: BootOptions) {
     this.el = el
-    this.seams = seams
+    this.options = options
   }
 
   /**
@@ -97,8 +103,9 @@ export class AppWebEntry {
   async run(): Promise<void> {
     this.manifest = parseBootManifest((globalThis as DshWindow).__DSH_BOOT__)
 
+    const { staticPlugins, ...seams } = this.options ?? {}
     this.modules = new ClientModuleSystem({
-      modules: this.manifest.modules, staticModules: getStaticModules(), ...this.seams,
+      modules: this.manifest.modules, staticModules: getStaticModules(), ...seams,
     })
     // The app-shell assembly is the only shell-own module: every other graph
     // row is a plugin bundle arriving through fetch.
@@ -109,6 +116,9 @@ export class AppWebEntry {
     // trigger a real fetch), and put the instance on the kernel slot the
     // wrapper's apply reads to provide ctx.modules.
     this.modules.registerStatic(MODULES_ID, ModulesClient)
+    for (const [id, module] of Object.entries(staticPlugins ?? {})) {
+      this.modules.registerStatic(id, module)
+    }
     ;(globalThis as DshWindow).__DSH_MODULES__ = this.modules
 
     this.root = createRoot(this.el)

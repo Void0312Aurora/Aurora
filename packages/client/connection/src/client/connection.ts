@@ -1,3 +1,4 @@
+import { API_PROTOCOL_VERSION } from './api.ts'
 import type { HostDescription, IApiClient, HostFrame, MuxFrame, RpcRequest } from './api.ts'
 
 /** Reconnect/backoff tunables (deployment-varying — no hardcoded tunables; these become the
@@ -110,42 +111,48 @@ export class ConnectionController {
       const ac = new AbortController()
       this.current = ac
 
-      /* v8 ignore next -- initializer placeholder: the Promise executor
-       * below runs synchronously and replaces it before anyone can call it. */
-      let muxOpened = (): void => {}
-      /* v8 ignore next -- same placeholder pattern as muxOpened. */
-      let hostOpened = (): void => {}
-      const streamsOpen = Promise.all([
-        new Promise<void>((resolve) => { muxOpened = resolve }),
-        new Promise<void>((resolve) => { hostOpened = resolve }),
-      ])
-
-      const failed = new Promise<void>((resolve) => {
-        const settle = (): void => {
-          if (gen === this.generation && !ac.signal.aborted) ac.abort()
-          resolve()
-        }
-        void this.pumpStream(this.api.events.mux({}, ac.signal, muxOpened), this.sinks.onMuxEnvelope, settle)
-        void this.pumpStream(this.api.events.host({}, ac.signal, hostOpened), this.sinks.onHostEnvelope, settle)
-      })
+      // No stream is opened until host.describe has proved that the
+      // independently released client and host speak the same API protocol.
+      // This prevents an incompatible host from sending frames that the
+      // client could consume before it notices the version mismatch.
+      let failed = Promise.resolve()
 
       try {
-        // Strict readiness handshake: describe proves unary reachability, onOpen
-        // proves each physical stream is established before any frame —
-        // only then may onConnected fire, so the resync it triggers cannot outrun the
-        // subscribed baseline. The timeout guards against a carrier that never fires onOpen
-        // (see ConnectionConfig.streamOpenTimeoutMs).
-        const timeout = new AbortController()
-        const [description] = await Promise.all([
-          this.api.host.describe({}),
-          Promise.race([streamsOpen, sleep(this.config.streamOpenTimeoutMs, timeout.signal)]),
-        ])
-        timeout.abort()
+        const description = await this.api.host.describe({}, ac.signal)
         const descriptionResult = description.result
         if (!descriptionResult.ok) {
           throw new Error(`host.describe failed: ${descriptionResult.error.code}: ${descriptionResult.error.message}`)
         }
-        if (ac.signal.aborted) throw new Error('generation aborted during readiness handshake')
+        if (descriptionResult.value.protocolVersion !== API_PROTOCOL_VERSION) {
+          throw new Error(`host protocolVersion ${String(descriptionResult.value.protocolVersion)} != client ${String(API_PROTOCOL_VERSION)}`)
+        }
+        if (ac.signal.aborted) throw new Error('generation aborted during protocol handshake')
+
+        /* v8 ignore next -- initializer placeholder: the Promise executor
+         * below runs synchronously and replaces it before anyone can call it. */
+        let muxOpened = (): void => {}
+        /* v8 ignore next -- same placeholder pattern as muxOpened. */
+        let hostOpened = (): void => {}
+        const streamsOpen = Promise.all([
+          new Promise<void>((resolve) => { muxOpened = resolve }),
+          new Promise<void>((resolve) => { hostOpened = resolve }),
+        ])
+        failed = new Promise<void>((resolve) => {
+          const settle = (): void => {
+            if (gen === this.generation && !ac.signal.aborted) ac.abort()
+            resolve()
+          }
+          void this.pumpStream(this.api.events.mux({}, ac.signal, muxOpened), this.sinks.onMuxEnvelope, settle)
+          void this.pumpStream(this.api.events.host({}, ac.signal, hostOpened), this.sinks.onHostEnvelope, settle)
+        })
+
+        // Strict readiness handshake: onOpen proves each physical stream is
+        // established before onConnected; the timeout guards a carrier that
+        // never fires onOpen (see ConnectionConfig.streamOpenTimeoutMs).
+        const timeout = new AbortController()
+        await Promise.race([streamsOpen, sleep(this.config.streamOpenTimeoutMs, timeout.signal)])
+        timeout.abort()
+        if (!this.isGenerationActive(ac)) throw new Error('generation aborted during readiness handshake')
         this.attempt = 0
         this.emitState('connected')
         // A state sink may synchronously stop this controller. Do not publish

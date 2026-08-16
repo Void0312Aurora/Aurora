@@ -10,6 +10,7 @@ import {
   sessionCreateValueSchema, sessionEventSchema, sessionHistoryRequestSchema, sessionHistoryValueSchema,
   sessionIdSchema, sessionListRequestSchema, sessionListValueSchema, sessionModelsRequestSchema,
   sessionModelsValueSchema, sessionPromptRequestSchema, sessionPromptValueSchema,
+  sessionInjectContextRequestSchema, sessionInjectContextValueSchema,
   sessionSearchRequestSchema, sessionSearchValueSchema, sessionSelectModelRequestSchema,
   sessionSelectModelValueSchema, sessionSummarySchema,
   sessionUpdateQueueRequestSchema, sessionUpdateQueueValueSchema,
@@ -272,6 +273,11 @@ describe('sessions domain schemas', () => {
     expect(dispatched.command?.text).toBe('Goal set')
     expect(sessionPromptValueSchema.parse({ accepted: true, command: { kind: 'success' } }).command).toEqual({ kind: 'success' })
     expect(() => sessionPromptValueSchema.parse({ accepted: true, command: { kind: 'failure' } })).toThrow()
+    expect(sessionInjectContextRequestSchema.parse({
+      sessionId: 's1', content: [{ type: 'text', text: 'editor context' }],
+    }).content).toHaveLength(1)
+    expect(() => sessionInjectContextRequestSchema.parse({ sessionId: 's1', content: [] })).toThrow()
+    expect(sessionInjectContextValueSchema.parse({ accepted: true }).accepted).toBe(true)
     expect(sessionCancelRequestSchema.parse({ sessionId: 's1' }).sessionId).toBe('s1')
     expect(sessionUpdateQueueRequestSchema.parse({
       sessionId: 's1',
@@ -312,14 +318,17 @@ describe('host domain schemas', () => {
   it('validates describe request/value', () => {
     expect(hostDescribeRequestSchema.parse({})).toEqual({})
     const value = hostDescribeValueSchema.parse({
-      version: '1', cwd: '/x', provider: 'p', model: 'm', attachedSessions: 2, canOpenPath: true,
+      protocolVersion: 1, version: '1', cwd: '/x', provider: 'p', model: 'm', attachedSessions: 2, canOpenPath: true,
     })
     expect(value).toMatchObject({ provider: 'p', model: 'm', attachedSessions: 2, canOpenPath: true })
     expect(hostDescribeValueSchema.parse({
-      version: '1', cwd: '/x', attachedSessions: 0, canOpenPath: false,
+      protocolVersion: 1, version: '1', cwd: '/x', attachedSessions: 0, canOpenPath: false,
     }).provider).toBeUndefined()
     expect(() => hostDescribeValueSchema.parse({
-      version: '1', cwd: '/x', attachedSessions: 0,
+      protocolVersion: 1, version: '1', cwd: '/x', attachedSessions: 0,
+    })).toThrow()
+    expect(() => hostDescribeValueSchema.parse({
+      protocolVersion: 0, version: '1', cwd: '/x', attachedSessions: 0, canOpenPath: false,
     })).toThrow()
   })
 

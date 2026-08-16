@@ -92,6 +92,7 @@ import type {} from '@deepseek-ai/dsh-user-approval'
 import { approvalResponsePayloadSchema } from './api/approvals.schema.ts'
 import { imageLimitsProjectionSchema, sessionListMetadataProjectionSchema } from './api/sessions.schema.ts'
 import { questionResponsePayloadSchema } from './api/questions.schema.ts'
+import { API_PROTOCOL_VERSION } from './api/host.ts'
 import type { ClientResponse, RpcError, RpcReceipt, RpcRequest, RpcResponse } from './api/rpc.ts'
 import { RpcId } from './api/rpc.ts'
 import type {
@@ -2516,6 +2517,25 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         return hasImage ? serializeImageAdmission(agent, admit) : admit()
       },
 
+      async injectContext(request) {
+        const { sessionId, content } = request.payload
+        const found = await agentFor(sessionId)
+        if ('error' in found) return err(request, found.error)
+        try {
+          found.agent.inject(createUserMessage({
+            content,
+            source: { kind: 'plugin', plugin: 'ide', rpcId: request.rpcId },
+          }))
+        } catch (error: unknown) {
+          return err(request, {
+            code: 'agent-busy',
+            message: 'context injection rejected',
+            details: { reason: String(error) },
+          })
+        }
+        return ok(request, { accepted: true as const })
+      },
+
       async attachment(request) {
         const { sessionId, attachmentId } = request.payload
         let state: SessionReadState
@@ -2925,6 +2945,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         // TODO: version should read apps/cli's package.json; placeholder for now.
         const selection = defaults.defaultModelSelection()
         return Promise.resolve(ok(request, {
+          protocolVersion: API_PROTOCOL_VERSION,
           version: '0.0.1',
           // Same source as session.create's fallback: the UI's default project
           // must match where an unspecified-cwd session actually lands.

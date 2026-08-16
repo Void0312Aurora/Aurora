@@ -1,0 +1,30 @@
+{
+  "name": "@deepseek-ai/dsh-desktop",
+  "description": "Electron desktop shell for the DeepSeek Harness Web GUI: spawns dsh web and hosts it in a standalone window with tray residency",
+  "version": "0.1.0-rc.5",
+  "private": true,
+  "type": "module",
+  "main": "lib/types/main.js",
+  "author": "DeepSeek Harness",
+  "scripts": {
+    "build": "node scripts/materialize-workspace-deps.mjs && tsc -p tsconfig.json && node scripts/fixup-import-paths.mjs",
+    "watch": "tsc -p tsconfig.json --watch",
+    "dev": "pnpm run build && node scripts/run-electron.mjs",
+    "icons": "node scripts/generate-icons.mjs",
+    "deploy:closure": "node -e \"require('node:fs').rmSync('deploy',{recursive:true,force:true})\" && pnpm --filter dsh-desktop-closure deploy --prod --config.node-linker=hoisted --config.inject-workspace-packages=true --config.allow-unused-patches=true --config.strict-dep-builds=false deploy && node -e \"for (const f of ['pnpm-lock.yaml','pnpm-workspace.yaml']) require('node:fs').rmSync('deploy/'+f,{force:true})\"",
+    "dist": "pnpm -w run build:lib && pnpm -w run build:web && pnpm run deploy:closure && pnpm run build && electron-builder --config electron-builder.yml",
+    "dist:dir": "pnpm -w run build:lib && pnpm -w run build:web && pnpm run deploy:closure && pnpm run build && electron-builder --config electron-builder.yml --dir"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@deepseek-ai/dsh-process-tree": "workspace:^",
+    "@deepseek-ai/dsh-web-launcher": "workspace:^"
+  },
+  "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "@types/node": "^22.0.0",
+    "electron": "^43.2.0",
+    "electron-builder": "^26.15.3",
+    "typescript": "^6.0.3"
+  }
+}

@@ -12,6 +12,7 @@ export const hostDescribeRequestSchema = z.object({}) satisfies z.ZodType<Wire<R
 
 /** host.describe response value. */
 export const hostDescribeValueSchema = z.object({
+  protocolVersion: z.number().int().positive(),
   version: z.string(),
   cwd: z.string(),
   provider: z.string().optional(),

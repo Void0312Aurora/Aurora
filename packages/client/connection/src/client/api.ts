@@ -28,6 +28,7 @@ export type {
 // subject); re-exported here so connection consumers keep one contract
 // entry point.
 export {
+  API_PROTOCOL_VERSION,
   RpcId,
   SESSION_SEARCH_RESULT_LIMIT,
   transportError,

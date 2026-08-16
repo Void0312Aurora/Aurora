@@ -8,6 +8,7 @@ import type { HostDescription, IApiClient } from './api.ts'
 import { ConnectionController, type ConnectionConfig, type ConnectionSinks, type ConnectionState } from './connection.ts'
 import { FixtureApiClient } from './fixture.ts'
 import { WebApiClient } from './web-api-client.ts'
+import { PostMessageApiClient } from './webview-bridge.ts'
 import { createWebConnectionRpc } from './rpc.ts'
 import { isLoopbackHostname } from '../loopback-hostname.ts'
 import type { ClientConnectionRpc } from '../rpc.ts'
@@ -35,6 +36,17 @@ export {
   AbstractApiClient,
   transportError,
 } from './api.ts'
+export {
+  parseBridgeRequestMessage,
+  parseBridgeResponseMessage,
+  PostMessageApiClient,
+} from './webview-bridge.ts'
+export type {
+  BridgeMessageParseResult,
+  BridgeRequestMessage,
+  BridgeResponseMessage,
+  WebviewBridgePort,
+} from './webview-bridge.ts'
 
 // Connection loop types are public through ConnectionHandle.start; the
 // controller remains package-internal.
@@ -83,9 +95,12 @@ export interface ConnectionHandle {
  */
 export function apply(ctx: Context): void {
   const pageLocation = typeof location === 'undefined' ? undefined : location
+  const bridgePort = globalThis.__DSH_WEBVIEW_BRIDGE__
   const fixture = pageLocation !== undefined && new URLSearchParams(pageLocation.search).has('fixture')
   const fixtureClient = fixture ? new FixtureApiClient() : undefined
-  const api: IApiClient = fixtureClient ?? new WebApiClient()
+  const api: IApiClient = bridgePort !== undefined
+    ? new PostMessageApiClient(bridgePort)
+    : fixtureClient ?? new WebApiClient()
   const rpc = fixtureClient?.rpc ?? createWebConnectionRpc()
   let started = false
   let description: HostDescription | undefined
@@ -103,7 +118,9 @@ export function apply(ctx: Context): void {
   }
   const handle: ConnectionHandle = {
     api,
-    isLoopback: pageLocation === undefined || isLoopbackHostname(pageLocation.hostname),
+    isLoopback: bridgePort !== undefined
+      || pageLocation === undefined
+      || (!fixture && isLoopbackHostname(pageLocation.hostname)),
     hostDescription: {
       getSnapshot: () => description,
       subscribe: (listener) => {

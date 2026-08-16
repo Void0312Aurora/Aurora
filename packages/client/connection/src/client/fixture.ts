@@ -2470,6 +2470,23 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         )
         return ok(request, { accepted: true as const })
       },
+      injectContext: (request) => {
+        const summary = summaryOf(request.payload.sessionId)
+        if (summary === undefined) {
+          return err(request, {
+            code: 'session-not-found',
+            message: `no session ${request.payload.sessionId}`,
+            details: { sessionId: request.payload.sessionId },
+          })
+        }
+        append(request.payload.sessionId, {
+          type: 'user/message',
+          surfaceOp: 'append',
+          data: userMessage(request.payload.content, { kind: 'plugin', plugin: 'ide' }),
+        })
+        summary.updatedAt = Date.now()
+        return ok(request, { accepted: true as const })
+      },
       attachment: (request) => {
         const stored = attachments.get(String(request.payload.attachmentId))
         if (stored === undefined) {
@@ -2523,7 +2540,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
     },
     host: {
       describe: request => ok(request, {
-        version: '0.0.0-fixture', cwd: '/tmp/fixture', attachedSessions, canOpenPath: true,
+        protocolVersion: 1, version: '0.0.0-fixture', cwd: '/tmp/fixture', attachedSessions, canOpenPath: true,
       }),
       // Deterministic native pick: the keyless lanes drive the full
       // pick-then-adopt path without an OS chooser (design-mock content,
@@ -3086,6 +3103,7 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'session.rename': return this.api.sessions.rename(request)
       case 'session.fork': return this.api.sessions.fork(request)
       case 'session.prompt': return this.api.sessions.prompt(request)
+      case 'session.injectContext': return this.api.sessions.injectContext(request)
       case 'session.attachment': return this.api.sessions.attachment(request)
       case 'session.updateQueue': return this.api.sessions.updateQueue(request)
       case 'session.cancel': return this.api.sessions.cancel(request)

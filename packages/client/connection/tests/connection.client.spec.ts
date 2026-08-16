@@ -80,7 +80,7 @@ describe('connection lifecycle', () => {
     try {
       await vi.waitFor(() => { expect(describeCalls).toBe(2) }) // retried after backoff
       expect(connected).toBe(0) // never announced during the failed generation
-      gate.resolve(ok({ version: '0', cwd: '/f', attachedSessions: 0, canOpenPath: true }))
+      gate.resolve(ok({ protocolVersion: 1, version: '0', cwd: '/f', attachedSessions: 0, canOpenPath: true }))
       await vi.waitFor(() => { expect(connected).toBe(1) })
     } finally {
       controller.stop()
@@ -102,7 +102,7 @@ describe('connection lifecycle', () => {
           },
         })
       }
-      return Promise.resolve(ok({ version: '0', cwd: '/f', attachedSessions: 0, canOpenPath: true }))
+      return Promise.resolve(ok({ protocolVersion: 1, version: '0', cwd: '/f', attachedSessions: 0, canOpenPath: true }))
     }
     let connected = 0
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
@@ -111,6 +111,31 @@ describe('connection lifecycle', () => {
     try {
       await vi.waitFor(() => { expect(describeCalls).toBe(2) })
       await vi.waitFor(() => { expect(connected).toBe(1) })
+    } finally {
+      controller.stop()
+      warnSpy.mockRestore()
+    }
+  })
+
+  it('rejects a mismatched protocol before opening or consuming streams', async () => {
+    const api = new FakeApiClient()
+    api.onDescribe = () => Promise.resolve(ok({
+      protocolVersion: 999, version: 'old-host', cwd: '/f', attachedSessions: 0, canOpenPath: true,
+    }))
+    const frames: string[] = []
+    let connected = 0
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const controller = new ConnectionController(api, {
+      onMuxEnvelope: envelope => frames.push(envelope.payload.type),
+      onConnected: () => { connected++ },
+    }, { ...FAST, backoffBaseMs: 10 })
+    controller.start()
+    try {
+      await vi.waitFor(() => { expect(api.callsOf('host.describe')).toHaveLength(1) })
+      await new Promise(resolve => setTimeout(resolve, 20))
+      expect(api.openMuxCount).toBe(0)
+      expect(connected).toBe(0)
+      expect(frames).toEqual([])
     } finally {
       controller.stop()
       warnSpy.mockRestore()
@@ -182,30 +207,29 @@ describe('connection lifecycle', () => {
 
   it('rejects a generation whose streams end during readiness and retries', async () => {
     const api = new FakeApiClient()
-    const firstDescribe = deferred<Awaited<ReturnType<FakeApiClient['onDescribe']>>>()
     let describeCalls = 0
     api.onDescribe = () => {
       describeCalls++
-      return describeCalls === 1
-        ? firstDescribe.promise
-        : Promise.resolve(ok({ version: '0', cwd: '/f', attachedSessions: 0, canOpenPath: true }))
+      return Promise.resolve(ok({ protocolVersion: 1, version: '0', cwd: '/f', attachedSessions: 0, canOpenPath: true }))
     }
+    api.holdStreamOpen = true
     const states: ConnectionState[] = []
     let connected = 0
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     const controller = new ConnectionController(api, {
       onConnected: () => { connected++ },
       onStateChange: state => states.push(state),
-    }, FAST)
+    }, { ...FAST, streamOpenTimeoutMs: 20 })
     controller.start()
     try {
       await vi.waitFor(() => { expect(api.openMuxCount).toBe(1) })
       api.endStreams()
-      firstDescribe.resolve(ok({ version: '0', cwd: '/f', attachedSessions: 0, canOpenPath: true }))
 
       await vi.waitFor(() => { expect(describeCalls).toBe(2) })
-      await vi.waitFor(() => { expect(connected).toBe(1) })
-      expect(states).toEqual(['reconnecting', 'connected'])
+      api.releaseStreamOpens()
+      await vi.waitFor(() => { expect(connected).toBeGreaterThan(0) })
+      expect(states).toContain('reconnecting')
+      expect(states).toContain('connected')
     } finally {
       controller.stop()
       warnSpy.mockRestore()
@@ -283,7 +307,7 @@ describe('connection lifecycle', () => {
     controller.start()
     try {
       await vi.waitFor(() => { expect(describeCalls).toBe(3) })
-      gate.resolve(ok({ version: '0', cwd: '/f', attachedSessions: 0, canOpenPath: true }))
+      gate.resolve(ok({ protocolVersion: 1, version: '0', cwd: '/f', attachedSessions: 0, canOpenPath: true }))
       await vi.waitFor(() => { expect(connected).toBe(1) })
       expect(states).toEqual(['reconnecting', 'connected']) // two failures, one reconnecting emission
     } finally {

@@ -83,6 +83,36 @@ describe('gate graph validation', () => {
     expect(ids).toContain('public-repository-links')
   })
 
+  it('owns all executable runtime closures in static aggregates', () => {
+    for (const mode of ['ci-primary', 'ci-static', 'check-all'] as const) {
+      const ids = withPnpmEntrypoint(() => gatesForMode(mode).map(item => item.id))
+      expect(ids).toEqual(expect.arrayContaining([
+        'runtime-closure',
+        'desktop-runtime-closure',
+        'vscode-runtime-closure',
+      ]))
+    }
+  })
+
+  it('builds product artifacts before running their built-entry tests', () => {
+    for (const mode of [
+      'ci-primary',
+      'ci-linux-primary',
+      'ci-artifacts',
+      'ci-consumers',
+      'check-all',
+    ] as const) {
+      const subject = withPnpmEntrypoint(() => gatesForMode(mode))
+      const artifact = subject.find(item => item.id === 'product-artifacts')
+
+      expect(artifact, `${mode} must own the product artifact gate`).toMatchObject({
+        displayCommand: 'DSH_SNAPSHOT=replay pnpm run test:artifacts:contracts-ready',
+        env: { DSH_SNAPSHOT: 'replay' },
+        needs: ['build'],
+      })
+    }
+  })
+
   it.each(['ci-primary', 'ci-static', 'check-all'] as const)(
     'keeps the DSH package license policy in %s',
     (mode) => {
@@ -236,12 +266,13 @@ describe('Node 24 lane ownership', () => {
     const subject = withPnpmEntrypoint(() => gatesForMode('ci-consumers'))
 
     expect(defaultConcurrency('ci-consumers', subject.length, 4)).toEqual({
-      workers: 10,
+      workers: 11,
       source: 'ci-consumers gate count',
     })
     expect(subject.map(item => item.id)).toEqual([
       'build',
       'node-compat',
+      'product-artifacts',
       'publint',
       'built-package-invariants',
       'lint-and-duplication',

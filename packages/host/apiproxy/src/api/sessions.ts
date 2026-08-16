@@ -15,6 +15,17 @@ import type { RpcId, RpcRequest, RpcResponse } from './rpc.ts'
 import type { ToolEventView } from './events.ts'
 import type { WorkspaceId } from './workspace.ts'
 
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    /**
+     * Context injected over the wire by `session.injectContext`. The fixed
+     * `ide` plugin tag identifies editor context while the request rpcId keeps
+     * the durable user/message event linked to its originating RPC.
+     */
+    'ide-context': { kind: 'plugin'; plugin: 'ide'; rpcId: RpcId }
+  }
+}
+
 declare module '@deepseek-ai/dsh-session-projection/types' {
   interface SessionProjectionMap {
     /**
@@ -351,6 +362,10 @@ export interface SessionsApi {
     clientTimeZone?: string
   }>):
   Promise<RpcResponse<{ accepted: true; command?: { kind: 'success'; text?: string } }>>
+
+  /** Appends model-facing context without waking the session's Agent. */
+  injectContext(request: RpcRequest<{ sessionId: SessionId; content: ContentBlock[] }>):
+  Promise<RpcResponse<{ accepted: true }>>
 
   /** Reads one durable image after proving that this session's log references its id. */
   attachment(request: RpcRequest<{ sessionId: SessionId; attachmentId: AttachmentIdType }>):

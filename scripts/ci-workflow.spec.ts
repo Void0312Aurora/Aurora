@@ -77,6 +77,13 @@ describe('CI workflow', () => {
     ))
     expect(nativeCommandSteps.map(step => step.run)).toContain('pnpm run check:ci:windows-complete')
 
+    const consumerCommandSteps = (node24Consumers.steps as unknown[]).filter(
+      (step): step is Record<string, unknown> & { run: string } => (
+        isRecord(step) && typeof step.run === 'string'
+      ),
+    )
+    expect(consumerCommandSteps.map(step => step.run)).toContain('pnpm run check:ci:consumers')
+
     // wine-apt-cache: master-only, seeds the Wine apt cache.
     expect(wineAptCache.if).toBe("github.event_name == 'push' && github.ref == 'refs/heads/master'")
     expect(wineAptCache['runs-on']).toBe('ubuntu-latest')

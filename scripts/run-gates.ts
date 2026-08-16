@@ -221,6 +221,8 @@ export function gatesForMode(selected: Mode): Gate[] {
     case 'check-all':
       return [
         pnpmScript('runtime-closure', 'verify-runtime-closure', { label: 'runtime closure' }),
+        pnpmScript('desktop-runtime-closure', 'verify-desktop-runtime-closure', { label: 'desktop runtime closure' }),
+        pnpmScript('vscode-runtime-closure', 'verify-vscode-runtime-closure', { label: 'VS Code runtime closure' }),
         pnpmScript('cordis-config', 'verify-cordis-config', { label: 'Cordis config' }),
         pnpmScript('client-domain-graph', 'verify-client-domain-graph', { label: 'client domain graph' }),
         pnpmScript('test', 'test'),
@@ -228,6 +230,7 @@ export function gatesForMode(selected: Mode): Gate[] {
         pnpmScript('duplication', 'duplication'),
         snapshotGate(),
         pnpmScript('build', 'build'),
+        productArtifactsGate(['build']),
         pnpmScript('build:web', 'build:web'),
         ...hygieneLeafGates({ artifactNeeds: ['build'] }),
         ...docSyncLeafGates({
@@ -245,6 +248,8 @@ export function gatesForMode(selected: Mode): Gate[] {
 function ciSharedStaticGates(): Gate[] {
   return [
     pnpmScript('runtime-closure', 'verify-runtime-closure', { label: 'runtime closure' }),
+    pnpmScript('desktop-runtime-closure', 'verify-desktop-runtime-closure', { label: 'desktop runtime closure' }),
+    pnpmScript('vscode-runtime-closure', 'verify-vscode-runtime-closure', { label: 'VS Code runtime closure' }),
     pnpmScript('constraints', 'constraints'),
     pnpmScript('dsh-package-licenses', 'verify-dsh-package-licenses', { label: 'DSH package licenses' }),
     pnpmScript('package-invariants', 'verify-package-invariants', { label: 'package invariants' }),
@@ -273,6 +278,7 @@ function ciPrimaryGates(): Gate[] {
     // repeats the Host contract pass. Wait for all three consumers so build
     // neither races tsbuildinfo nor replaces declarations while they are read.
     pnpmScript('build', 'build', { needs: ['typecheck', 'lint', 'doc-typecheck'] }),
+    productArtifactsGate(['build']),
     pnpmScript('publint', 'publint', { needs: ['build'] }),
     pnpmScript('node-next-types', 'verify-node-next-types', {
       label: 'node-next types',
@@ -374,6 +380,7 @@ function ciStaticGates(options: { ownsBuild: boolean }): Gate[] {
 function ciArtifactGates(): Gate[] {
   return [
     pnpmScript('build', 'build'),
+    productArtifactsGate(['build']),
     pnpmScript('publint', 'publint', { needs: ['build'] }),
     pnpmScript('node-next-types', 'verify-node-next-types', {
       label: 'node-next types',
@@ -390,6 +397,7 @@ function ciConsumerGates(): Gate[] {
   return [
     pnpmScript('build', 'build'),
     pnpmScript('node-compat', 'check:node-compat', { label: 'Node compatibility' }),
+    productArtifactsGate(builtTree),
     pnpmScript('publint', 'publint', { needs: builtTree }),
     builtPackageInvariantsGate(['publint']),
     pnpmScript('lint-and-duplication', 'check:ci:lint:contracts-ready', {
@@ -408,6 +416,15 @@ function ciConsumerGates(): Gate[] {
     }),
     builtBinSmokeGate(validatedBuild),
   ]
+}
+
+function productArtifactsGate(needs: string[]): Gate {
+  return pnpmScript('product-artifacts', 'test:artifacts:contracts-ready', {
+    label: 'desktop and VS Code artifact tests',
+    displayCommand: 'DSH_SNAPSHOT=replay pnpm run test:artifacts:contracts-ready',
+    env: { DSH_SNAPSHOT: 'replay' },
+    needs,
+  })
 }
 
 function webSnapshotGate(needs: string[]): Gate {

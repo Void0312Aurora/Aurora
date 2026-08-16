@@ -89,6 +89,16 @@ const testIncludes = [
   'scripts/**/*.spec.ts',
 ]
 
+// Product built-entry checks run in the explicit artifact lane after the
+// desktop and VS Code products have emitted their compiled payloads. Keeping
+// them out of the source-plane unit inventory makes a clean checkout fail
+// loudly in the artifact lane instead of reporting missing build output from
+// an unrelated `pnpm test` invocation.
+const artifactOnlyTests = [
+  'apps/desktop/tests/built-entry.spec.ts',
+  'apps/vscode/tests/built-entry.spec.ts',
+]
+
 // The instrumented coverage gate sets this env; the exempt heavy suites then
 // run beside it uninstrumented (membership contract in scripts/coverage-exempt.ts).
 // A set-but-not-'1' value is a misconfiguration, not a silent no-op.
@@ -120,7 +130,7 @@ export default defineConfig({
     setupFiles: ['./scripts/test-invariants.ts'],
     // .tsx: client component specs (jsdom via per-file @vitest-environment pragma).
     include: testIncludes,
-    exclude: windowsUnsupportedTests,
+    exclude: [...windowsUnsupportedTests, ...artifactOnlyTests],
     // One coverage invocation aggregates both projects. Every suite forks for
     // Node stability; process-bound suites stay separate for inventory control.
     projects: [
@@ -137,6 +147,7 @@ export default defineConfig({
           include: testIncludes,
           exclude: [
             ...windowsUnsupportedTests,
+            ...artifactOnlyTests,
             ...processBoundTests,
             ...coverageExemptExcludes,
           ],
@@ -152,6 +163,7 @@ export default defineConfig({
           include: processBoundTests,
           exclude: [
             ...windowsUnsupportedTests,
+            ...artifactOnlyTests,
             ...coverageExemptExcludes,
           ],
         },
