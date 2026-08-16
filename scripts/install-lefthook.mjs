@@ -15,9 +15,9 @@ import {
 import { spawnSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { dirname, extname, isAbsolute, join, resolve } from 'node:path'
-import lefthookPackage from 'lefthook/package.json' with { type: 'json' }
 
 const MINIMUM_GIT = [2, 26, 0]
+const LEFTHOOK_PACKAGE = 'lefthook'
 const HOOKS_DIRECTORY = 'dsh-hooks'
 const OWNERSHIP_MARKER = '.dsh-lefthook-owned'
 const OWNERSHIP_MARKER_VERSION = 1
@@ -543,7 +543,7 @@ function resolveLefthookExecutable(root) {
   const requireFromRoot = createRequire(join(root, 'package.json'))
   let packagePath
   try {
-    packagePath = requireFromRoot.resolve(`${lefthookPackage.name}/package.json`)
+    packagePath = requireFromRoot.resolve(`${LEFTHOOK_PACKAGE}/package.json`)
   } catch (error) {
     if (errorCode(error) === 'MODULE_NOT_FOUND') return undefined
     throw error
