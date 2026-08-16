@@ -22,11 +22,13 @@ Two hard blockers sat in the way. All 217 workspace manifests set `private: true
 
 | Sequence | Members | Version baseline | Tag | Workflow |
 |---|---|---|---|---|
-| dsh | `packages/*/*` + `apps/*` (`@deepseek-ai/dsh` and `@deepseek-ai/dsh-web-frontend`) | one version for the family and the workspace root, `0.0.x` | `dsh-v<version>` | `release.yml` |
+| dsh | version set: `packages/*/*` + `apps/*`; npm set: non-private members, including `@deepseek-ai/dsh` and `@deepseek-ai/dsh-web-frontend` | one version for the family and the workspace root, `0.0.x` | `dsh-v<version>` | `release.yml` |
 | vendored framework | the nine `vendor/*` packages | each package on its own version line | `vendor-<package>-v<version>` (one per package) | `release-vendor.yml` |
 | native | `native/landlock-run/packages/*` | its own `0.0.x` | `landlock-run-v<version>` | `landlock-run-release.yml` |
 
 All three publish to the `@deepseek-ai` scope on npmjs.com, and access is per sequence rather than per scope: the vendored framework and the native packages are `public`, the dsh family is `restricted` ([rationale](2026-08-13-public-vendor-and-native-sequences.md)). No publish path passes `--access`, because one flag cannot serve sequences that disagree and would override the manifest that owns the level.
+
+Private product assemblies such as `@deepseek-ai/dsh-desktop` and `dsh-vscode` remain dsh family members so `release:dsh` updates their shared version, while `publishMembers` excludes them from npm verification, packing, and publication. Their Electron and VS Code installers own their distributable artifacts.
 
 ### Versions land in the repository from a local command; CI only checks and uploads
 
@@ -86,8 +88,9 @@ The entity in this domain is a **release family**: a set of packages sharing one
 
 | Object | Responsibility |
 |---|---|
-| `ReleaseFamily` | a family's identity: member discovery, version baseline, tag prefix, packed-payload rule, installed entry |
-| `ReleaseMember` | one publishable package: directory, name, version, manifest |
+| `ReleaseFamily` | a family's identity: member discovery, publish selection, version baseline, tag prefix, packed-payload rule, installed entry |
+| `ReleaseMember` | one package sharing the family's version baseline: directory, name, version, manifest |
+| `publishMembers` | excludes `private: true` product assemblies from npm artifacts without removing them from shared-version bumps |
 | `publishOrder` | topological order over runtime dependencies, ties broken by package name; a cycle is reported rather than resolved arbitrarily |
 | `pack` | packs a whole family into one directory and records the upload order |
 | `verify` | the family's version baseline, and — when publishing — that the run comes from that family's tag and its members are publishable |
@@ -96,6 +99,8 @@ The entity in this domain is a **release family**: a set of packages sharing one
 | `process` / `tarball` | the one home for spawning commands and for reading a packed tarball, including the entry guard that keeps every script importable |
 
 The dsh family applies the repository's publication payload policy, which rejects sources and declaration maps. The vendored family keeps upstream's payload, because those manifests export `./src/*` and dropping `src` would publish an export map pointing at absent files.
+
+The release process helper uses `cross-spawn` for both captured and inherited-stdio commands, so Windows resolves npm `.cmd` shims without changing argv or enabling a general shell.
 
 ### Workflow shape: pack everything at once, then publish as one set
 
@@ -112,7 +117,7 @@ The verification also packs the Landlock entry, which `dsh-sandbox-local` declar
 | Item | Content |
 |---|---|
 | release-set manifests | `private: true` removed; `publishConfig.access` per sequence and `repository` with each package's `directory` added |
-| release-set boundary | every member of `packages/*/*`, `apps/*`, and `vendor/*` |
+| release-set boundary | every `packages/*/*` and `apps/*` manifest shares the dsh version; only non-private members enter its npm set; every `vendor/*` package publishes |
 | dependency protocol | workspace-internal references are `workspace:^`, with `check-workspace-constraints.ts` and the invariant-companion rule requiring it |
 | root `AGENTS.md` | the convention that vendored packages are `private: true` no longer holds |
 | `vendor/README.md` | records `src` joining `cordis`'s `files` as a local modification |

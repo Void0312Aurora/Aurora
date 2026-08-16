@@ -45,8 +45,9 @@ function main(): void {
   const family = releaseFamily(values.family)
   const root = process.cwd()
   const destination = resolve(root, values.out ?? DEFAULT_OUTPUT)
-  const members = family.publishOrder(family.members(root))
-  family.verifyVersions(members)
+  const familyMembers = family.members(root)
+  family.verifyVersions(familyMembers)
+  const members = family.publishOrder(family.publishMembers(familyMembers))
 
   rmSync(destination, { recursive: true, force: true })
   mkdirSync(destination, { recursive: true })

@@ -19,7 +19,7 @@ const ORDER_SECTIONS = ['dependencies', 'optionalDependencies'] as const
 /** The workspace root manifest, which is never a release member. */
 const WORKSPACE_ROOT_PACKAGE = '@deepseek-ai/dsh-root'
 
-/** One publishable package of a release family. */
+/** One package in a release family, including private products that share its version baseline. */
 export interface ReleaseMember {
   /** Repository-relative package directory, for example `packages/core/session`. */
   readonly directory: string
@@ -93,7 +93,9 @@ export abstract class ReleaseFamily {
       const name = requireString(manifest, 'name', normalized)
       const version = requireString(manifest, 'version', normalized)
       if (name === WORKSPACE_ROOT_PACKAGE) throw new Error(`${normalized} selected the workspace root`)
-      if (!name.startsWith('@deepseek-ai/')) throw new Error(`${normalized} must name an @deepseek-ai package`)
+      if (!name.startsWith('@deepseek-ai/') && manifest.private !== true) {
+        throw new Error(`${normalized} must name an @deepseek-ai package or declare "private": true`)
+      }
       if (seen.has(name)) throw new Error(`${name} appears twice in release family ${this.id}`)
       seen.add(name)
       members.push({
@@ -104,6 +106,18 @@ export abstract class ReleaseFamily {
       })
     }
     return members
+  }
+
+  /**
+   * Select the packages that may enter this family's npm artifact.
+   *
+   * Private product assemblies remain family members so a shared-version bump
+   * updates them, but their installer-owned artifacts never enter npm packing.
+   * @param members - every package sharing the family's version baseline.
+   * @returns Non-private members in their existing deterministic order.
+   */
+  publishMembers(members: readonly ReleaseMember[]): ReleaseMember[] {
+    return members.filter(member => member.manifest.private !== true)
   }
 
   /**

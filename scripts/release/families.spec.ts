@@ -91,6 +91,20 @@ describe('release families', () => {
     expect(releaseFamily('vendor').installedEntry).toBeUndefined()
   })
 
+  it('keeps private products in the dsh version baseline but out of npm artifacts', () => {
+    const dsh = releaseFamily('dsh')
+    const members = dsh.members(process.cwd())
+    const publishNames = dsh.publishMembers(members).map(entry => entry.name)
+
+    expect(members.map(entry => entry.name)).toEqual(expect.arrayContaining([
+      '@deepseek-ai/dsh-desktop',
+      'dsh-vscode',
+    ]))
+    expect(publishNames).not.toContain('@deepseek-ai/dsh-desktop')
+    expect(publishNames).not.toContain('dsh-vscode')
+    expect(publishNames).toContain('@deepseek-ai/dsh')
+  })
+
   it('rejects an unknown family identifier', () => {
     expect(() => { releaseFamily('native') }).toThrow(/unknown release family/)
   })

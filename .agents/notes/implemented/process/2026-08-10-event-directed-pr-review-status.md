@@ -20,9 +20,11 @@ The handler resolves only exact same-repository `Fixes`, `Closes`, or `Resolves`
 
 [Issue lifecycle](../../../../.github/workflows/issue-lifecycle.yml) remains unsubscribed from `pull_request.ready_for_review`; neither event command depends on that action. [Issue policy](../../../../.github/workflows/issue-policy.yml) retains `ready_for_review` because it owns required-check enforcement when a human pull request enters review.
 
+Both workflows run only in `deepseek-harness/deepseek-harness`. The canonical repository owns the ProjectV2 configuration and GitHub App credentials; forks skip these jobs instead of attempting to read the canonical repository or mint its project token.
+
 ## Verification
 
-[Issue-management tests](../../../../.github/issue-management/policy.test.mjs) pin the event-to-command mapping, the repeated-review-request transition after a changes-requested command, the changes-requested regression, terminal protection, and human override preservation. [Workflow tests](../../../../scripts/ci-workflow.spec.ts) pin the subscribed events, the changes-requested job condition, and the separate `ready_for_review` policy trigger.
+[Issue-management tests](../../../../.github/issue-management/policy.test.mjs) pin the event-to-command mapping, the repeated-review-request transition after a changes-requested command, the changes-requested regression, terminal protection, and human override preservation. [Workflow tests](../../../../scripts/ci-workflow.spec.ts) pin the canonical-repository condition, subscribed events, changes-requested job condition, and separate `ready_for_review` policy trigger.
 
 ## Alternatives considered
 

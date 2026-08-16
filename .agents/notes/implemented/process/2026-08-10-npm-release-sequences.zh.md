@@ -22,11 +22,13 @@ Status: implemented
 
 | 序列 | 成员 | 版本基线 | tag | workflow |
 |---|---|---|---|---|
-| dsh | `packages/*/*` + `apps/*`（`@deepseek-ai/dsh` 与 `@deepseek-ai/dsh-web-frontend`） | 全族与 workspace 根共用一个 `0.0.x` | `dsh-v<版本>` | `release.yml` |
+| dsh | 版本集合：`packages/*/*` + `apps/*`；npm 集合：非私有成员，包括 `@deepseek-ai/dsh` 与 `@deepseek-ai/dsh-web-frontend` | 全族与 workspace 根共用一个 `0.0.x` | `dsh-v<版本>` | `release.yml` |
 | vendored framework | `vendor/*` 九个包 | 每包各自一条版本线 | `vendor-<包名>-v<版本>`（每包一个） | `release-vendor.yml` |
 | native | `native/landlock-run/packages/*` | 自己的 `0.0.x` | `landlock-run-v<版本>` | `landlock-run-release.yml` |
 
 三组一律发到 npmjs.com 的 `@deepseek-ai` scope，且 access 按序列而非按 scope 区分：vendored 框架与 native 包是 `public`，dsh 族是 `restricted`（[理由](2026-08-13-public-vendor-and-native-sequences.md)）。没有任何发布路径传 `--access`——一个选项无法服务级别互不相同的序列，且会覆盖真正拥有该级别的 manifest。
+
+`@deepseek-ai/dsh-desktop` 与 `dsh-vscode` 等私有产品程序集仍是 dsh 族成员，因此 `release:dsh` 会更新它们共用的版本；`publishMembers` 则把它们排除在 npm 核验、打包和发布之外。其可分发产物分别由 Electron 与 VS Code 安装包负责。
 
 ### 版本由本地命令写进仓库，CI 只核对与上传
 
@@ -86,8 +88,9 @@ registry 的两个行为决定了「怎么尝试一次发布」。写入之间�
 
 | 对象 | 职责 |
 |---|---|
-| `ReleaseFamily` | 一族的身份：成员发现、版本基线、tag 前缀、打包 payload 规则、已安装入口 |
-| `ReleaseMember` | 一个可发布包：目录、包名、版本、manifest |
+| `ReleaseFamily` | 一族的身份：成员发现、发布选择、版本基线、tag 前缀、打包 payload 规则、已安装入口 |
+| `ReleaseMember` | 一个共用该族版本基线的包：目录、包名、版本、manifest |
+| `publishMembers` | 将 `private: true` 的产品程序集排除在 npm 产物外，同时保留其共享版本 bump |
 | `publishOrder` | 按运行时依赖的拓扑序，同层按包名排；遇到环是报错而不是随意定序 |
 | `pack` | 把整族打进一个目录并记录上传顺序 |
 | `verify` | 族的版本基线；发布时还要求本次运行来自该族的 tag、且成员可发布 |
@@ -96,6 +99,8 @@ registry 的两个行为决定了「怎么尝试一次发布」。写入之间�
 | `process` / `tarball` | 启动命令、读取打包 tarball 的唯一正家，其中的入口守卫让每个脚本都可被 import |
 
 dsh 族套用仓库的发布 payload 策略（拒绝源码与声明映射）。vendored 族保留上游 payload，因为那些 manifest 导出 `./src/*`，去掉 `src` 会发出一个导出映射指向不存在文件的包。
+
+release process helper 的捕获式命令与继承 stdio 命令都使用 `cross-spawn`，因此 Windows 可以解析 npm `.cmd` shim，而不改变 argv 或启用通用 shell。
 
 ### workflow 形状：一次性 pack 全部，再统一 publish
 
@@ -112,7 +117,7 @@ dsh 的验证会一并安装 vendored 族的 pack 产物。harness 的包把 ven
 | 项 | 内容 |
 |---|---|
 | 发布集 manifest | 去掉 `private: true`；按序列补 `publishConfig.access` 与带各自 `directory` 的 `repository` |
-| 发布集边界 | `packages/*/*`、`apps/*`、`vendor/*` 的全部成员 |
+| 发布集边界 | `packages/*/*` 与 `apps/*` 的全部 manifest 共用 dsh 版本，但只有非私有成员进入 npm 集合；`vendor/*` 全部发布 |
 | 依赖协议 | workspace 内部引用为 `workspace:^`，由 `check-workspace-constraints.ts` 与 invariant companion 规则强制 |
 | 根 `AGENTS.md` | 「vendored 包是 `private: true`」这条约定不再成立 |
 | `vendor/README.md` | 记录「`src` 加入 `cordis` 的 `files`」这条本地修改 |

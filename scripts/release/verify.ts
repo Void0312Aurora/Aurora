@@ -55,16 +55,20 @@ function main(): void {
   const family = releaseFamily(values.family)
   const members = family.members(process.cwd())
   family.verifyVersions(members)
+  const publishMembers = family.publishMembers(members)
 
   const publishing = process.env.RELEASE_PUBLISH === 'true'
   if (publishing) {
-    verifyPublishable(members)
-    verifyTag(family, members, process.env.GITHUB_REF ?? '')
+    verifyPublishable(publishMembers)
+    verifyTag(family, publishMembers, process.env.GITHUB_REF ?? '')
   }
 
   const versions = [...new Set(members.map(member => member.version))]
   const summary = versions.length === 1 ? versions[0] : `${String(versions.length)} versions`
-  console.log(`release verify: family ${family.id}, ${String(members.length)} member(s), ${summary}${publishing ? ', publish gates passed' : ''}`)
+  console.log(
+    `release verify: family ${family.id}, ${String(members.length)} member(s),`
+    + ` ${String(publishMembers.length)} publishable, ${summary}${publishing ? ', publish gates passed' : ''}`,
+  )
 }
 
 if (isEntry(import.meta.url)) main()
