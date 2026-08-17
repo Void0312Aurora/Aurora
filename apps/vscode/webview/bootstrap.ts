@@ -47,7 +47,7 @@ export async function bootGatedWebview(options: GatedWebviewBootOptions): Promis
 }
 
 /** Render the terminal state for an external host with an incompatible API. */
-export function renderIncompatibleHost(root: HTMLElement, reason: string): void {
+function renderIncompatibleHost(root: HTMLElement, reason: string): void {
   const region = document.createElement('section')
   region.setAttribute('role', 'alert')
   const heading = document.createElement('h1')
