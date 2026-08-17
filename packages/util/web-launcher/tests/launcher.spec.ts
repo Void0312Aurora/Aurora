@@ -344,6 +344,25 @@ describe('waitForHttpOk', () => {
 
     expect(performance.now() - started).toBeLessThan(500)
   })
+
+  it('does not sleep after an attempt consumes the remaining deadline', async () => {
+    const now = vi.spyOn(Date, 'now')
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(0)
+      .mockReturnValue(101)
+    const fetchImpl = vi.fn(async () => new Response('nope', { status: 503 }))
+
+    try {
+      await expect(waitForHttpOk(new URL('http://127.0.0.1:1/'), {
+        fetchImpl,
+        timeoutMs: 100,
+        pollIntervalMs: 1_000,
+      })).rejects.toThrow(/within 100ms/)
+      expect(fetchImpl).toHaveBeenCalledTimes(1)
+    } finally {
+      now.mockRestore()
+    }
+  })
 })
 
 describe('childExited', () => {
