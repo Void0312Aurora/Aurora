@@ -203,6 +203,13 @@ function runInstaller(
   })
 }
 
+function expectSkippedInstallation(fixture: Fixture, result: CommandResult): void {
+  expect(result.status, result.stderr).toBe(0)
+  expect(gitResult(fixture, fixture.main, ['config', '--get', 'extensions.worktreeConfig']).status).toBe(1)
+  expect(git(fixture, fixture.main, ['config', '--get', 'core.repositoryFormatVersion'])).toBe('0')
+  expect(existsSync(hooksPath(fixture, fixture.main))).toBe(false)
+}
+
 describe('worktree-local Lefthook installer', { timeout: 15_000 }, () => {
   for (const [label, extraEnv] of [
     ['CI', { CI: 'true' }],
@@ -224,10 +231,7 @@ describe('worktree-local Lefthook installer', { timeout: 15_000 }, () => {
 
       const result = await runInstaller(fixture, fixture.main, extraEnv, isolatedInstaller)
 
-      expect(result.status, result.stderr).toBe(0)
-      expect(gitResult(fixture, fixture.main, ['config', '--get', 'extensions.worktreeConfig']).status).toBe(1)
-      expect(git(fixture, fixture.main, ['config', '--get', 'core.repositoryFormatVersion'])).toBe('0')
-      expect(existsSync(hooksPath(fixture, fixture.main))).toBe(false)
+      expectSkippedInstallation(fixture, result)
       expect(existsSync(join(common, 'config.worktree'))).toBe(false)
     })
   }
@@ -240,10 +244,7 @@ describe('worktree-local Lefthook installer', { timeout: 15_000 }, () => {
 
     const result = await runInstaller(fixture, fixture.main, {}, isolatedInstaller)
 
-    expect(result.status, result.stderr).toBe(0)
-    expect(gitResult(fixture, fixture.main, ['config', '--get', 'extensions.worktreeConfig']).status).toBe(1)
-    expect(git(fixture, fixture.main, ['config', '--get', 'core.repositoryFormatVersion'])).toBe('0')
-    expect(existsSync(hooksPath(fixture, fixture.main))).toBe(false)
+    expectSkippedInstallation(fixture, result)
   })
 
   it('isolates main and linked worktrees without changing legacy common hooks', async () => {
