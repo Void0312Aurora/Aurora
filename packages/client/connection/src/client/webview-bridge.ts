@@ -67,6 +67,7 @@ let nextBridgeRequestId = 1
 
 /** Allocate one correlation id across every client in this browser module instance. */
 function allocateBridgeRequestId(): number {
+  /* v8 ignore next -- a finite test process cannot exhaust monotonic safe integers */
   if (!Number.isSafeInteger(nextBridgeRequestId)) {
     throw new Error('webview bridge: request id space exhausted')
   }
@@ -97,12 +98,12 @@ export class PostMessageApiClient extends AbstractApiClient {
         abortPosted: false,
         terminal: false,
       }
-      let unsubscribe = (): void => {}
-      let onAbort = (): void => {}
+      const unsubscribeRef: { current?: () => void } = {}
       const cleanup = (): void => {
+        /* v8 ignore next -- terminal messages and reentrant failures return before a second cleanup */
         if (lifecycle.terminal) return
         lifecycle.terminal = true
-        unsubscribe()
+        unsubscribeRef.current?.()
         signal?.removeEventListener('abort', onAbort)
       }
       const abortUpstream = (): void => {
@@ -125,7 +126,7 @@ export class PostMessageApiClient extends AbstractApiClient {
         else reject(error)
         cleanup()
       }
-      onAbort = (): void => {
+      const onAbort = (): void => {
         requestUpstreamAbort()
         fail(new DOMException('The operation was aborted.', 'AbortError'))
       }
@@ -174,9 +175,9 @@ export class PostMessageApiClient extends AbstractApiClient {
           }
         }
       })
-      unsubscribe = subscribed
+      unsubscribeRef.current = subscribed
       if (lifecycle.terminal) {
-        unsubscribe()
+        subscribed()
         return
       }
       if (signal !== undefined) {
