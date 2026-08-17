@@ -33,7 +33,6 @@ export {
   AbstractApiClient,
   transportError,
 } from './api.ts'
-export { PostMessageApiClient } from './webview-bridge.ts'
 export type { BridgeRequestMessage, BridgeResponseMessage, WebviewBridgePort } from './webview-bridge.ts'
 
 // Connection loop types are public through ConnectionHandle.start; the

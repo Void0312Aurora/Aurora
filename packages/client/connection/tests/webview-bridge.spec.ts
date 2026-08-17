@@ -11,6 +11,13 @@ import { describe, expect, it } from 'vitest'
 import type { BridgeRequestMessage, BridgeResponseMessage } from '../src/client/webview-bridge.ts'
 import { PostMessageApiClient } from '../src/client/webview-bridge.ts'
 
+/** Exposes the protected transport for direct response-body lifecycle checks. */
+class ProbeClient extends PostMessageApiClient {
+  probeFetch(input: URL, init?: RequestInit): Promise<Response> {
+    return this.doFetch(input, init)
+  }
+}
+
 interface FakePort {
   sent: BridgeRequestMessage[]
   emit(message: BridgeResponseMessage): void
@@ -21,7 +28,7 @@ interface FakePort {
   }
 }
 
-function fakePort(): FakePort {
+function fakePort(onPost?: (message: BridgeRequestMessage) => void): FakePort {
   const sent: BridgeRequestMessage[] = []
   const listeners = new Set<(message: BridgeResponseMessage) => void>()
   return {
@@ -29,7 +36,10 @@ function fakePort(): FakePort {
     emit: (message) => { for (const listener of [...listeners]) listener(message) },
     listenerCount: () => listeners.size,
     port: {
-      postMessage: (message) => { sent.push(message) },
+      postMessage: (message) => {
+        sent.push(message)
+        onPost?.(message)
+      },
       onMessage: (listener) => {
         listeners.add(listener)
         return () => { listeners.delete(listener) }
@@ -116,9 +126,15 @@ describe('PostMessageApiClient', () => {
     })()
     await settle()
 
+    const start = fake.sent[0]!
+    if (start.type !== 'dsh-fetch') throw new Error('expected the stream start')
     abort.abort()
     await expect(consumed).rejects.toThrow(/aborted/i)
-    expect(fake.sent.some(message => message.type === 'dsh-fetch-abort')).toBe(true)
+    expect(fake.sent.filter(message => message.type === 'dsh-fetch-abort')).toHaveLength(1)
+    expect(fake.listenerCount()).toBe(0)
+
+    fake.emit({ id: start.id, type: 'dsh-fetch-end' })
+    expect(fake.listenerCount()).toBe(0)
   })
 
   it('fails the stream on a post-head abort', async () => {
@@ -136,6 +152,11 @@ describe('PostMessageApiClient', () => {
     await settle()
     abort.abort()
     await expect(consumed).rejects.toThrow(/aborted/i)
+    expect(fake.sent.filter(message => message.type === 'dsh-fetch-abort' && message.id === start.id)).toHaveLength(1)
+    expect(fake.listenerCount()).toBe(0)
+
+    fake.emit({ id: start.id, type: 'dsh-fetch-end' })
+    expect(fake.listenerCount()).toBe(0)
   })
 
   it('rejects immediately on an already-aborted signal without starting a request', async () => {
@@ -146,7 +167,63 @@ describe('PostMessageApiClient', () => {
     await expect((async () => {
       for await (const _frame of stream) { /* drain until the abort rejection */ }
     })()).rejects.toThrow(/aborted/i)
-    expect(fake.sent.filter(message => message.type === 'dsh-fetch')).toHaveLength(0)
+    expect(fake.sent).toEqual([])
+    expect(fake.listenerCount()).toBe(0)
+  })
+
+  it('aborts upstream and cleans up when the response body is cancelled directly', async () => {
+    const fake = fakePort()
+    const client = new ProbeClient(fake.port)
+    const abort = new AbortController()
+    const responsePromise = client.probeFetch(new URL('http://host/api/events.mux'), { signal: abort.signal })
+    await settle()
+
+    const start = fake.sent[0]!
+    if (start.type !== 'dsh-fetch') throw new Error('expected the stream start')
+    fake.emit({ id: start.id, type: 'dsh-fetch-head', status: 200 })
+    const response = await responsePromise
+    await response.body?.cancel()
+    abort.abort()
+
+    expect(fake.sent.filter(message => message.type === 'dsh-fetch-abort' && message.id === start.id)).toHaveLength(1)
+    expect(fake.listenerCount()).toBe(0)
+  })
+
+  it('does not send an abort when the initial request post throws', async () => {
+    const listeners = new Set<(message: BridgeResponseMessage) => void>()
+    const sent: BridgeRequestMessage[] = []
+    const port = {
+      postMessage(message: BridgeRequestMessage): void {
+        if (message.type === 'dsh-fetch') throw new Error('port closed')
+        sent.push(message)
+      },
+      onMessage(listener: (message: BridgeResponseMessage) => void): () => void {
+        listeners.add(listener)
+        return () => { listeners.delete(listener) }
+      },
+    }
+    const abort = new AbortController()
+    const client = new ProbeClient(port)
+
+    await expect(client.probeFetch(new URL('http://host/api/session.list'), { signal: abort.signal })).rejects.toThrow('port closed')
+    abort.abort()
+
+    expect(sent).toEqual([])
+    expect(listeners.size).toBe(0)
+  })
+
+  it('defers a reentrant abort until the initial request post succeeds', async () => {
+    const abort = new AbortController()
+    const fake = fakePort((message) => {
+      if (message.type === 'dsh-fetch') abort.abort()
+    })
+    const client = new ProbeClient(fake.port)
+
+    await expect(client.probeFetch(new URL('http://host/api/session.list'), { signal: abort.signal }))
+      .rejects.toThrow(/aborted/i)
+
+    expect(fake.sent.map(message => message.type)).toEqual(['dsh-fetch', 'dsh-fetch-abort'])
+    expect(fake.listenerCount()).toBe(0)
   })
 
   it('rejects the owning call on a pre-head transport error and ignores foreign ids', async () => {
@@ -228,5 +305,30 @@ describe('PostMessageApiClient', () => {
 
     expect((await second).result).toEqual({ ok: true, value: describeValue })
     expect((await first).result).toEqual({ ok: true, value: { items: [] } })
+  })
+
+  it('allocates distinct ids across clients sharing one port', async () => {
+    const fake = fakePort()
+    const firstClient = new PostMessageApiClient(fake.port)
+    const secondClient = new PostMessageApiClient(fake.port)
+    const first = firstClient.sessions.list({})
+    const second = secondClient.host.describe({})
+    await settle()
+
+    const [a, b] = fake.sent
+    if (a?.type !== 'dsh-fetch' || b?.type !== 'dsh-fetch') throw new Error('expected two starts')
+    expect(a.id).not.toBe(b.id)
+
+    const describeValue = { protocolVersion: 1, version: 'v', cwd: '/w', attachedSessions: 0 }
+    fake.emit({ id: b.id, type: 'dsh-fetch-head', status: 200 })
+    fake.emit({ id: b.id, type: 'dsh-fetch-chunk', chunk: JSON.stringify({ type: 'server-response', rpcId: requestBodyOf(b).rpcId, result: { ok: true, value: describeValue } }) })
+    fake.emit({ id: b.id, type: 'dsh-fetch-end' })
+    fake.emit({ id: a.id, type: 'dsh-fetch-head', status: 200 })
+    fake.emit({ id: a.id, type: 'dsh-fetch-chunk', chunk: JSON.stringify({ type: 'server-response', rpcId: requestBodyOf(a).rpcId, result: { ok: true, value: { items: [] } } }) })
+    fake.emit({ id: a.id, type: 'dsh-fetch-end' })
+
+    expect((await second).result).toEqual({ ok: true, value: describeValue })
+    expect((await first).result).toEqual({ ok: true, value: { items: [] } })
+    expect(fake.listenerCount()).toBe(0)
   })
 })
