@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { collectPythonDependencies, isPermissive, type Manifest, manifestPatterns, parsePyprojectRequirements, parseVendoredRows, render, tierExternalDeps } from './gen-third-party-notices.ts'
+import { collectPythonDependencies, isPermissive, type Manifest, manifestPatterns, normalizeRepo, parsePyprojectRequirements, parseVendoredRows, render, tierExternalDeps } from './gen-third-party-notices.ts'
 
 const root = resolve(import.meta.dirname, '..')
 
@@ -12,6 +12,13 @@ describe('THIRD_PARTY_NOTICES.md', () => {
   // this assertion means the notices were committed without that hook.
   it('matches what the generator produces from the current manifests', () => {
     expect(readFileSync(resolve(root, 'THIRD_PARTY_NOTICES.md'), 'utf8'), 'stale notices — run `pnpm run gen-third-party-notices`').toBe(render())
+  })
+})
+
+describe('normalizeRepo', () => {
+  it('normalizes SCP-style GitHub repository URLs', () => {
+    expect(normalizeRepo('git@github.com:moxystudio/node-cross-spawn.git'))
+      .toBe('https://github.com/moxystudio/node-cross-spawn')
   })
 })
 

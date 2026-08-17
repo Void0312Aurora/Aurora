@@ -441,6 +441,10 @@ function ciWindowsBlockingGates(): Gate[] {
   return [
     pnpmScript('windows-build', 'build', { label: 'build' }),
     pnpmScript('windows-site', 'docs:build', { label: 'production site' }),
+    pnpmScript('windows-command-shim', 'test:windows-command-shim', {
+      label: 'Windows command shim',
+      needs: ['windows-build'],
+    }),
   ]
 }
 
@@ -453,6 +457,10 @@ function ciWindowsCompleteGates(): Gate[] {
   return [
     pnpmScript('build', 'build'),
     pnpmScript('windows-site', 'docs:build', { label: 'production site' }),
+    pnpmScript('windows-command-shim', 'test:windows-command-shim', {
+      label: 'Windows command shim',
+      needs: ['build'],
+    }),
     ...observational,
   ]
 }
