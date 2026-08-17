@@ -189,12 +189,12 @@ describe('PostMessageApiClient', () => {
     expect(fake.listenerCount()).toBe(0)
   })
 
-  it('does not send an abort when the initial request post throws', async () => {
+  it.each([new Error('port closed'), 'port closed'])('does not send an abort when the initial request post throws %s', async (failure) => {
     const listeners = new Set<(message: BridgeResponseMessage) => void>()
     const sent: BridgeRequestMessage[] = []
     const port = {
       postMessage(message: BridgeRequestMessage): void {
-        if (message.type === 'dsh-fetch') throw new Error('port closed')
+        if (message.type === 'dsh-fetch') throw failure
         sent.push(message)
       },
       onMessage(listener: (message: BridgeResponseMessage) => void): () => void {
@@ -210,6 +210,22 @@ describe('PostMessageApiClient', () => {
 
     expect(sent).toEqual([])
     expect(listeners.size).toBe(0)
+  })
+
+  it('contains an abort-delivery failure after rejecting the local request', async () => {
+    const fake = fakePort((message) => {
+      if (message.type === 'dsh-fetch-abort') throw new Error('abort port closed')
+    })
+    const abort = new AbortController()
+    const client = new ProbeClient(fake.port)
+    const response = client.probeFetch(new URL('http://host/api/events.mux'), { signal: abort.signal })
+    await settle()
+
+    abort.abort()
+
+    await expect(response).rejects.toThrow(/aborted/i)
+    expect(fake.sent.map(message => message.type)).toEqual(['dsh-fetch', 'dsh-fetch-abort'])
+    expect(fake.listenerCount()).toBe(0)
   })
 
   it('defers a reentrant abort until the initial request post succeeds', async () => {
@@ -254,6 +270,72 @@ describe('PostMessageApiClient', () => {
     await settle()
     fake.emit({ id: start.id, type: 'dsh-fetch-error', message: 'pipe collapsed' })
     await expect(consumed).rejects.toThrow(/pipe collapsed/)
+  })
+
+  it('rejects duplicate response heads and aborts the upstream request once', async () => {
+    const fake = fakePort((message) => {
+      if (message.type === 'dsh-fetch-abort') {
+        fake.emit({ id: message.id, type: 'dsh-fetch-head', status: 200 })
+      }
+    })
+    const client = new ProbeClient(fake.port)
+    const response = client.probeFetch(new URL('http://host/api/events.mux'))
+    await settle()
+
+    const start = fake.sent[0]!
+    fake.emit({ id: start.id, type: 'dsh-fetch-head', status: 200 })
+    const body = (await response).text()
+    fake.emit({ id: start.id, type: 'dsh-fetch-head', status: 200 })
+
+    await expect(body).rejects.toThrow(/duplicate response head/)
+    expect(fake.sent.filter(message => message.type === 'dsh-fetch-abort')).toHaveLength(1)
+    expect(fake.listenerCount()).toBe(0)
+  })
+
+  it.each([
+    ['chunk', { type: 'dsh-fetch-chunk', chunk: 'orphan' }],
+    ['end', { type: 'dsh-fetch-end' }],
+  ] as const)('rejects a response %s received before its head', async (_kind, message) => {
+    const fake = fakePort()
+    const client = new ProbeClient(fake.port)
+    const response = client.probeFetch(new URL('http://host/api/events.mux'))
+    await settle()
+
+    const start = fake.sent[0]!
+    fake.emit({ id: start.id, ...message })
+
+    await expect(response).rejects.toThrow(/preceded response head/)
+    expect(fake.sent.filter(item => item.type === 'dsh-fetch-abort')).toHaveLength(1)
+    expect(fake.listenerCount()).toBe(0)
+  })
+
+  it('cleans a synchronously completed response after subscription setup returns', async () => {
+    const seed = fakePort()
+    const seedClient = new ProbeClient(seed.port)
+    const seedResponse = seedClient.probeFetch(new URL('http://host/api/session.list'))
+    await settle()
+    const seedStart = seed.sent[0]!
+    seed.emit({ id: seedStart.id, type: 'dsh-fetch-head', status: 200 })
+    seed.emit({ id: seedStart.id, type: 'dsh-fetch-end' })
+    await (await seedResponse).text()
+
+    const queuedId = seedStart.id + 1
+    let unsubscribed = false
+    let posted = false
+    const client = new ProbeClient({
+      postMessage() { posted = true },
+      onMessage(next) {
+        next({ id: queuedId, type: 'dsh-fetch-head', status: 200 })
+        next({ id: queuedId, type: 'dsh-fetch-end' })
+        return () => { unsubscribed = true }
+      },
+    })
+
+    const response = await client.probeFetch(new URL('http://host/api/session.list'))
+
+    await expect(response.text()).resolves.toBe('')
+    expect(unsubscribed).toBe(true)
+    expect(posted).toBe(false)
   })
 
   it('surfaces a non-2xx head as the base transport failure', async () => {
