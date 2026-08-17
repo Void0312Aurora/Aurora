@@ -55,7 +55,7 @@ export const inject: string[] = []
 export interface ConnectionHandle {
   /** Shared api client (fixture or real, decided at boot from the page URL). */
   readonly api: IApiClient
-  /** Whether the current page authority is loopback; non-browser contexts default to true. */
+  /** Whether the selected transport can use Host capabilities restricted to loopback clients. */
   readonly isLoopback: boolean
   /**
    * Start the connect/pump/reconnect loop with the consumer's frame sinks.
@@ -90,8 +90,8 @@ export function apply(ctx: Context): void {
     // A bridged webview reaches the server through the extension host's own
     // loopback fetch, so it carries loopback capability regardless of the
     // page authority (the embedder origin is never the wire authority).
-    // Fixture mode has no host behind it even when the page itself is served
-    // from loopback; host-only interactions must use their in-memory fallback.
+    // Fixture mode has no Host behind it even when its document is served from
+    // loopback; Host-only interactions must use their in-memory fallback.
     isLoopback: bridgePort !== undefined
       || pageLocation === undefined
       || (!fixture && isLoopbackHostname(pageLocation.hostname)),

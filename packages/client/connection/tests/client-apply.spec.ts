@@ -25,18 +25,21 @@ async function mount(): Promise<ConnectionHandle> {
 }
 
 describe('connection client apply', () => {
-  it('mounts ctx.connection with the real client when no ?fixture switch is present', async () => {
+  it('gives a real loopback page Host-only capability', async () => {
     ;(globalThis as Win).location = { hostname: 'localhost', search: '' }
     const handle = await mount()
     expect(handle.api).toBeInstanceOf(WebApiClient)
     expect(handle.isLoopback).toBe(true)
   })
 
-  it('selects the fixture client under ?fixture (and with no location at all stays real)', async () => {
+  it('keeps fixture transport Hostless even when its document is served from loopback', async () => {
     ;(globalThis as Win).location = { hostname: '127.0.0.1', search: '?fixture' }
     const fixture = await mount()
     expect(fixture.api).toBeInstanceOf(FixtureApiClient)
     expect(fixture.isLoopback).toBe(false)
+  })
+
+  it('uses the real client and loopback capability when no browser location exists', async () => {
     delete (globalThis as Win).location
     const handle = await mount()
     expect(handle.api).toBeInstanceOf(WebApiClient)
@@ -48,7 +51,7 @@ describe('connection client apply', () => {
     expect((await mount()).isLoopback).toBe(false)
   })
 
-  it('selects the webview bridge transport when the bootstrap filled the global seat', async () => {
+  it('gives the webview bridge Host capability regardless of page authority or fixture query', async () => {
     // A non-loopback page authority (the embedder origin) must not matter:
     // the bridge reaches the server through the extension host's loopback fetch.
     ;(globalThis as Win).location = { hostname: 'webview.invalid', search: '?fixture' }
