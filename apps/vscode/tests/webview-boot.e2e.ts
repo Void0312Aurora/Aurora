@@ -61,4 +61,20 @@ describe('webview bundle boots under the panel CSP', () => {
     expect(pageErrors, `uncaught errors in the webview bundle: ${pageErrors.join(' | ')}`).toEqual([])
     await page.close()
   })
+
+  it('renders the incompatible-host state before the client graph starts', async () => {
+    const page = await browser!.newPage()
+    await page.goto(`${origin}/?protocol=2`, { waitUntil: 'load' })
+    const alert = page.getByRole('alert')
+    await alert.waitFor()
+
+    expect(await alert.ariaSnapshot()).toMatchInlineSnapshot(`
+      "- alert:
+        - heading "Incompatible DeepSeek Harness host" [level=1]
+        - paragraph: host protocolVersion 2 != client 1
+        - paragraph: "Update the VS Code extension and dsh to compatible versions, then run Developer: Reload Window.""
+    `)
+    expect(await page.locator('[data-route]').count()).toBe(0)
+    await page.close()
+  })
 })

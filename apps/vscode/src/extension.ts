@@ -10,8 +10,7 @@
 import * as vscode from 'vscode'
 import type { BridgeRequestMessage } from '@deepseek-ai/dsh-client-connection/client'
 import type { AskUserQuestionAnswer, AskUserQuestionItem } from '@deepseek-ai/dsh-user-interaction/types'
-// One contract, both ends: the webview half turns this message into a route.
-import type { RouteMessage } from '../webview/route-bridge.ts'
+import { isWebviewReadyMessage } from '../webview/route-bridge.ts'
 import { ActiveSessionTracker } from './active-session.ts'
 import { ApiBridge } from './bridge.ts'
 import { IdeContextFeed } from './context-feed.ts'
@@ -20,6 +19,8 @@ import type { EditorState, IdeDiagnostic } from './ide-context.ts'
 import { NativeInteractions, type ApprovalPrompt, type NativeUi } from './interactions.ts'
 import { panelHtml, WEBVIEW_DIST } from './panel.ts'
 import { ServerRuntime } from './runtime.ts'
+import { RuntimeLifecycle } from './runtime-lifecycle.ts'
+import { ViewRouteRelay } from './view-route.ts'
 
 let interactions: NativeInteractions | undefined
 let tracker: ActiveSessionTracker | undefined
@@ -41,7 +42,7 @@ function nativeLayerLive(): boolean {
 // never a captured ServerRuntime instance, so a restart that swaps `runtime`
 // is followed automatically without rebuilding the panel or its bridge.
 function currentOrigin(): URL | undefined {
-  return runtime?.url
+  return runtimeLifecycle?.current?.url
 }
 
 /** Lines of file text sampled around the cursor when there is no selection. */
@@ -59,9 +60,7 @@ function panelAssets(webview: vscode.Webview, extensionUri: vscode.Uri): Paramet
   }
 }
 
-let runtime: ServerRuntime | undefined
-/** The live sidebar view, while VS Code keeps it resolved. */
-let view: vscode.WebviewView | undefined
+let runtimeLifecycle: RuntimeLifecycle<ServerRuntime> | undefined
 
 /** Working directory for the managed server: the window's first workspace folder. */
 function workspaceCwd(): string | undefined {
@@ -169,8 +168,8 @@ async function askQuestionsNatively(items: AskUserQuestionItem[], signal: AbortS
  * Start the host-side native layer (approval/question prompts + IDE-context
  * feed) once, after gating on the host's protocol version. An independently
  * released extension may reach a `DSH_BIN`/PATH `dsh` of a different version;
- * on a mismatch the native layer stays off and the user is warned, while the
- * webview GUI (bundled same-version) still loads.
+ * on a mismatch the native layer stays off and the user is warned. The
+ * webview performs the same gate before its client graph starts.
  */
 async function ensureNativeLayer(output: vscode.OutputChannel): Promise<void> {
   if (nativeStarted) return
@@ -187,7 +186,7 @@ async function ensureNativeLayer(output: vscode.OutputChannel): Promise<void> {
   if (!check.ok) {
     output.appendLine(`[native] protocol gate failed, native layer disabled: ${check.reason}`)
     void vscode.window.showWarningMessage(
-      `DeepSeek Harness: editor-native approvals and context are disabled — ${check.reason}. The panel still works.`,
+      `DeepSeek Harness host is incompatible — ${check.reason}. Update the extension or dsh, then reload the VS Code window.`,
     )
     return
   }
@@ -303,41 +302,43 @@ function disposeNativeLayer(): void {
   nativeStarted = false
 }
 
-function ensureRuntime(context: vscode.ExtensionContext, output: vscode.OutputChannel): ServerRuntime {
+function createRuntime(
+  context: vscode.ExtensionContext,
+  output: vscode.OutputChannel,
+  onExit: () => void,
+): ServerRuntime {
   const cwd = workspaceCwd()
-  runtime ??= new ServerRuntime({
+  return new ServerRuntime({
     appDir: context.extensionUri.fsPath,
     ...cwd === undefined ? {} : { cwd },
     env: process.env,
     log: (line) => { output.appendLine(line) },
     onExit: () => {
+      onExit()
       void vscode.window.showWarningMessage('dsh web exited; the panel will reconnect when it is started again.')
     },
   })
-  return runtime
 }
 
-/** Start (or restart) the managed server and the native layer; safe to call with a live view. */
-function startRuntime(context: vscode.ExtensionContext, output: vscode.OutputChannel): void {
-  const server = ensureRuntime(context, output)
-  server.start().then(() => ensureNativeLayer(output)).catch((error: unknown) => {
-    const message = error instanceof Error ? error.message : String(error)
-    // A restart/deactivate disposes the runtime, which aborts an in-flight
-    // readiness poll and rejects this start — intentional teardown, not a
-    // failure the user should see a popup for.
-    if (server.isDisposed) {
-      output.appendLine(`dsh web start cancelled by teardown: ${message}`)
-      return
-    }
-    output.appendLine(`dsh web failed to start: ${message}`)
-    void vscode.window.showErrorMessage(`DeepSeek Harness: dsh web failed to start — ${message}`)
-  })
+/** Report a genuine startup failure after the lifecycle has cleaned its runtime. */
+function reportRuntimeStartError(output: vscode.OutputChannel, error: unknown): void {
+  const message = error instanceof Error ? error.message : String(error)
+  output.appendLine(`dsh web failed to start: ${message}`)
+  void vscode.window.showErrorMessage(`DeepSeek Harness: dsh web failed to start — ${message}`)
 }
 
-/** Ask the webview to route to a pane; a no-op while the view is not resolved. */
-function routeTo(route: RouteMessage['route']): void {
-  const message: RouteMessage = { type: 'dsh-route', route }
-  void view?.webview.postMessage(message)
+/** Report a runtime teardown failure after extension disposal requested it. */
+function reportRuntimeTeardownError(output: vscode.OutputChannel, error: unknown): void {
+  const message = error instanceof Error ? error.message : String(error)
+  output.appendLine(`dsh web failed to stop: ${message}`)
+  void vscode.window.showErrorMessage(`DeepSeek Harness: dsh web failed to stop — ${message}`)
+}
+
+/** Narrow one untrusted webview message to the API bridge request vocabulary. */
+function isBridgeRequestMessage(message: unknown): message is BridgeRequestMessage {
+  if (typeof message !== 'object' || message === null) return false
+  const type = (message as { type?: unknown }).type
+  return type === 'dsh-fetch' || type === 'dsh-fetch-abort'
 }
 
 /**
@@ -349,11 +350,13 @@ function routeTo(route: RouteMessage['route']): void {
 function createViewProvider(
   context: vscode.ExtensionContext,
   output: vscode.OutputChannel,
+  lifecycle: RuntimeLifecycle<ServerRuntime>,
+  routes: ViewRouteRelay<vscode.Webview>,
 ): vscode.WebviewViewProvider {
   return {
     resolveWebviewView(resolved) {
-      view = resolved
-      startRuntime(context, output)
+      routes.attach(resolved.webview)
+      void lifecycle.start().catch((error: unknown) => { reportRuntimeStartError(output, error) })
       resolved.webview.options = {
         enableScripts: true,
         localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'dist')],
@@ -363,13 +366,17 @@ function createViewProvider(
         post: (message) => { void resolved.webview.postMessage(message) },
       })
       resolved.webview.html = panelHtml(panelAssets(resolved.webview, context.extensionUri))
-      const receiving = resolved.webview.onDidReceiveMessage((message: BridgeRequestMessage) => {
-        bridge.handle(message)
+      const receiving = resolved.webview.onDidReceiveMessage((message: unknown) => {
+        if (isWebviewReadyMessage(message)) {
+          routes.markWebviewReady(resolved.webview)
+          return
+        }
+        if (isBridgeRequestMessage(message)) bridge.handle(message)
       })
       resolved.onDidDispose(() => {
         receiving.dispose()
         bridge.dispose()
-        if (view === resolved) view = undefined
+        routes.detach(resolved.webview)
       })
     },
   }
@@ -385,33 +392,39 @@ export const VIEW_ID = 'dsh.sidebar'
  */
 export function activate(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel('DeepSeek Harness')
+  const routes = new ViewRouteRelay<vscode.Webview>()
+  const lifecycle = new RuntimeLifecycle<ServerRuntime>({
+    create: () => createRuntime(context, output, () => { routes.markHostUnavailable() }),
+    onReady: async () => {
+      routes.markHostReady()
+      await ensureNativeLayer(output)
+    },
+    onStartError: (error) => { reportRuntimeStartError(output, error) },
+  })
+  runtimeLifecycle = lifecycle
   context.subscriptions.push(
     output,
-    vscode.window.registerWebviewViewProvider(VIEW_ID, createViewProvider(context, output), {
+    vscode.window.registerWebviewViewProvider(VIEW_ID, createViewProvider(context, output, lifecycle, routes), {
       // The GUI is a long-lived session surface; re-resolving it whenever the
       // sidebar is hidden would drop composer drafts and scroll state.
       webviewOptions: { retainContextWhenHidden: true },
     }),
     // Navigation lives in native view title actions: they cost the webview no
     // pixels, which matters most in a 300-400px column.
-    vscode.commands.registerCommand('dsh.showChat', () => { routeTo('chat') }),
-    vscode.commands.registerCommand('dsh.showSessions', () => { routeTo('sessions') }),
+    vscode.commands.registerCommand('dsh.showChat', () => { routes.routeTo('chat') }),
+    vscode.commands.registerCommand('dsh.showSessions', () => { routes.routeTo('sessions') }),
     vscode.commands.registerCommand('dsh.focus', async () => {
       await vscode.commands.executeCommand(`${VIEW_ID}.focus`)
     }),
     vscode.commands.registerCommand('dsh.restartServer', async () => {
-      // Tear the native layer and the server down, then bring both back. The
-      // view stays: its bridge resolves the origin through `currentOrigin`, so
-      // it follows the new server once startRuntime swaps `runtime`, and the
-      // webview's own connection loop reconnects.
       disposeNativeLayer()
-      await runtime?.dispose()
-      runtime = undefined
-      startRuntime(context, output)
+      routes.markHostUnavailable()
+      await lifecycle.restart()
     }),
     { dispose: () => {
       disposeNativeLayer()
-      void runtime?.dispose()
+      routes.markHostUnavailable()
+      void lifecycle.deactivate().catch((error: unknown) => { reportRuntimeTeardownError(output, error) })
     } },
   )
 }
@@ -419,7 +432,7 @@ export function activate(context: vscode.ExtensionContext): void {
 /** Await server teardown when the extension host deactivates. */
 export async function deactivate(): Promise<void> {
   disposeNativeLayer()
-  const current = runtime
-  runtime = undefined
-  await current?.dispose()
+  const lifecycle = runtimeLifecycle
+  runtimeLifecycle = undefined
+  await lifecycle?.deactivate()
 }

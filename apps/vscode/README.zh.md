@@ -12,9 +12,9 @@ GUI 的宽屏 shell 把三个槽排成可拖拽的分栏，且拒绝让中栏低
 
 `ctx.layout` 逐字实现宽屏 shell 的 `ILayout`，因此跨插件的面板手势照常工作，只是含义改变：切换侧栏变成在会话窗格与对话之间路由，打开详情变成把该窗格提到前面。
 
-导航位于**原生 view title actions**，而非 webview 像素——后者是窄栏里最稀缺的资源。命令 post 一条路由消息，由 `webview/route-bridge.ts` 转成 `ctx.layout` 调用。
+导航位于**原生 view title actions**，而非 webview 像素——后者是窄栏里最稀缺的资源。宿主会保留最新的目标路由，直到 webview 报告页面级监听器已就绪；webview 随后经 `webview/route-bridge.ts` 重放该路由，`NarrowLayoutService` 还会继续保留它，直到 root store 接入。因此 title action 能跨过初始页面与插件启动，而不是一条即发即弃的消息。
 
-该 shell 住在本 app 而非 `packages/client`，因为 VS Code 侧栏是它唯一的消费者，与紧邻的主题适配器同理；出现第二个窄容器宿主时才值得把它提升为包。
+该 shell 住在本 app 而非 `packages/client`，因为 VS Code 侧栏是它唯一的消费者；出现第二个窄容器宿主时才值得把它提升为包。
 
 ### 让占用者放得下
 
@@ -31,7 +31,7 @@ webview (browser)            extension host (Node)             dsh web
   full dsh client stack  ◀──  postMessage  ◀──  SSE/JSON  ◀──────  /api
 ```
 
-webview 的页面 origin 是 `vscode-webview://…`，会被服务器的 `/api` 浏览器信任栅栏拒绝。因此 webview 从不直接 fetch 服务器：它的传输（[`@deepseek-ai/dsh-client-connection`](../../packages/client/connection/README.md) 的 `PostMessageApiClient`）把每个请求 post 给扩展宿主，宿主再以服务器的回环 origin 重放——回环 Host 与任何非浏览器客户端一样通过栅栏。桥把每个中继请求收束在该 origin 的 `/api/` 之下：绝对 URL、protocol-relative 或反斜杠 authority、非 API 路径在任何 fetch 之前即被拒绝，被注入的 webview 脚本无法借宿主的回环网络触达去别的目标。GUI 本身就是普通 dsh 客户端栈，由 `webview/vite.config.ts` 静态打包（webview 的 CSP 禁止 fetch 插件 bundle，所以所有插件打进同一个 bundle），并通过共享的 `AppWebEntry` 内核以静态插件方式启动 roster。
+webview 的页面 origin 是 `vscode-webview://…`，会被服务器的 `/api` 浏览器信任栅栏拒绝。因此 webview 从不直接 fetch 服务器：它的传输（[`@deepseek-ai/dsh-client-connection`](../../packages/client/connection/README.md) 的 `PostMessageApiClient`）把请求 post 给扩展宿主，宿主再以服务器的回环 origin 重放——回环 Host 与任何非浏览器客户端一样通过栅栏。扩展宿主会保留服务器就绪状态，直到页面监听器安装完成，因此 bootstrap 不会把正常的启动间隔误判为不兼容。收到该信号后，bootstrap 在把传输公布给插件图之前只发送 `host.describe`，并要求 host 的 `protocolVersion` 等于内置客户端版本；版本更旧、更新、缺失或格式错误时会渲染不兼容 host 状态，客户端插件及其 stream 均不启动。桥把每个中继请求收束在该 origin 的 `/api/` 之下：绝对 URL、protocol-relative 或反斜杠 authority、非 API 路径在任何 fetch 之前即被拒绝，被注入的 webview 脚本无法借宿主的回环网络触达别的目标。兼容时的 GUI 就是普通 dsh 客户端栈，由 `webview/vite.config.ts` 静态打包（webview 的 CSP 禁止 fetch 插件 bundle，所以所有插件打进同一个 bundle），并通过共享的 `AppWebEntry` 内核以静态插件方式启动 roster。
 
 扩展按需拉起：
 
@@ -39,11 +39,11 @@ webview 的页面 origin 是 `vscode-webview://…`，会被服务器的 `/api` 
 dsh web --host 127.0.0.1 --port 0
 ```
 
-经共享的 [`@deepseek-ai/dsh-web-launcher`](../../packages/util/web-launcher/README.md) 原语（桌面外壳用的是同一个），按 `DSH_BIN` → 内嵌闭包 → checkout → PATH 顺序解析 `dsh`。`--port 0` 意味着并行窗口永不冲突。扩展宿主 deactivate 时受管服务器会被（树）终止。
+经共享的 [`@deepseek-ai/dsh-web-launcher`](../../packages/util/web-launcher/README.md) 原语（桌面外壳用的是同一个），按 `DSH_BIN` → 内嵌闭包 → checkout → PATH 顺序解析 `dsh`。`--port 0` 意味着并行窗口永不冲突。启动、重启与 deactivate 由同一个串行生命周期事务拥有：它会在等待 disposer 前先解除 runtime 所有权，清理失败的启动，并在 teardown 开始时同步关闭发布，因此并发重启不会遗留服务器，和 deactivate 竞态的重启也不会在其后拉起新服务器。
 
 ## 原生交互
 
-在 webview 之外，扩展宿主开自己的 mux 流（一个普通回环 wire 客户端——扩展宿主不是浏览器，直接通过 `/api` 信任栅栏），把 agent 的**审批**与**问答**请求呈现为编辑器原生提示：审批用带 Allow/Reject 的通知，问答用 QuickPick 或输入框。原生层只在 host 的 `protocolVersion` 与扩展自身 wire 客户端匹配后启动——不匹配时（经 `DSH_BIN`/PATH 的更老外部 `dsh`）面板照常工作，原生层保持关闭并给出警告。审批提示会用按会话缓存的 `tool/call` view 补充"这次调用要做什么"。由于 wire 是多客户端，这与 webview 面板内的提示并存：哪个界面先应答哪个生效，另一个的迟到应答是无害空操作。问答在别处被解决时其 QuickPick/输入框会自行关闭；审批通知无法被程序化关闭（VS Code 限制）——它是非模态的，直接被取代。
+在 webview 之外，扩展宿主开自己的 mux 流（一个普通回环 wire 客户端——扩展宿主不是浏览器，直接通过 `/api` 信任栅栏），把 agent 的**审批**与**问答**请求呈现为编辑器原生提示：审批用带 Allow/Reject 的通知，问答用 QuickPick 或输入框。原生层只在同一项 `protocolVersion` 检查通过后启动；外部 `dsh` 不兼容时，GUI 启动和原生集成都保持关闭，并显示明确说明。审批提示会用按会话缓存的 `tool/call` view 补充"这次调用要做什么"。由于 wire 是多客户端，这与 webview 内的提示并存：哪个界面先应答哪个生效，另一个的迟到应答是无害空操作。问答在别处被解决时其 QuickPick/输入框会自行关闭；审批通知无法被程序化关闭（VS Code 限制）——它是非模态的，直接被取代。
 
 ## 编辑器上下文注入
 
@@ -52,8 +52,8 @@ dsh web --host 127.0.0.1 --port 0
 ## 命令
 
 - **DeepSeek Harness: Focus Sidebar**——显示该视图（VS Code 在首次显示时解析它，从而启动服务器）。
-- **DeepSeek Harness: Show Conversation** / **Show Sessions**——路由前台窗格；两者都是该视图的 title action。
-- **DeepSeek Harness: Restart Server**——树杀并重启受管服务器。视图会保留：桥经活的 getter 解析服务器 origin，webview 自行重连到新端口。
+- **DeepSeek Harness: Show Conversation** / **Show Sessions**——路由前台窗格；两者都是该视图的 title action，最新请求会在 webview 就绪后重放。
+- **DeepSeek Harness: Restart Server**——串行执行受管服务器的树杀与重启。视图会保留：桥经活的 getter 解析服务器 origin，webview 自行重连到新端口。
 
 ## Windows
 
@@ -83,7 +83,7 @@ pnpm --filter dsh-vscode run package    # packs a vsix for the host platform
 
 ## 测试
 
-`tests/` 无密钥地在注入的客户端、UI、spawn 与调度器上覆盖纯扩展宿主逻辑：启动/就绪/关停生命周期含 dispose 取消进行中的轮询（`runtime.spec.ts`）、postMessage↔fetch 中继及其 SSRF 收束（`bridge.spec.ts`）、面板 HTML/CSP（`panel.spec.ts`）、静态 roster 与已交付 web 配置的一致性（`roster.spec.ts`）、原生审批/问答消费者含重连重置与按会话隔离的调用缓存（`interactions.spec.ts`）、活动会话跟踪器（`active-session.spec.ts`）、IDE 上下文采样器与边界（`ide-context.spec.ts`），以及防抖串行化的上下文 feed（`context-feed.spec.ts`）。浏览器通道（`pnpm run test:web`，配置 `vitest.web.config.ts`）通过真实 `panelHtml()` 文档及已交付的 CSP 提供构建出的 `dist/webview`：`webview-boot.e2e.ts` 除非 React 挂载且无未捕获错误否则失败，而 `sidebar.snapshot.ts` 会以 259px 启动无密钥 fixture（测试前置数据），并记录会话路由、问答和审批 composer、代表性工具行以及横向约束。该通道需要先构建 webview bundle（`pnpm --filter dsh-vscode run build:webview`）并具备 Playwright 浏览器；当 Playwright CDN 不可达时，可设置 `DSH_CHROMIUM_PATH` 复用本机已有的 Chromium。在真实编辑器里启动面板仍是手动步骤：仓库当前没有 `@vscode/test-electron` 通道。
+`tests/` 无密钥地在注入的客户端、UI、spawn 与调度器上覆盖纯扩展宿主逻辑：进程 runtime（`runtime.spec.ts`）、并发 restart/deactivate 下的串行所有权（`runtime-lifecycle.spec.ts`）、postMessage↔fetch 中继及其 SSRF 收束（`bridge.spec.ts`）、服务器就绪门禁及对更旧／更新／缺失协议版本的启动前拒绝（`webview-bootstrap.spec.ts`）、ready/replay 路由（`view-route.spec.ts`、`route-bridge.spec.ts`、`shell.spec.tsx`）、视图 HTML/CSP（`panel.spec.ts`）、静态 roster 与已交付 web 配置的一致性（`roster.spec.ts`），以及原生交互、活动会话跟踪、IDE 上下文采样和串行 context feed。浏览器通道（`pnpm run test:web`，配置 `vitest.web.config.ts`）通过真实 `panelHtml()` 文档及已交付的 CSP 提供构建出的 `dist/webview`：`webview-boot.e2e.ts` 除非 React 挂载且无未捕获错误否则失败，而 `sidebar.snapshot.ts` 会以 259px 启动无密钥 fixture（测试前置数据），并通过与 Web 应用通道相同的稳定 ARIA／golden helper 记录会话路由、问答和审批 composer、代表性工具行以及横向约束。浏览器启动失败会先关闭已经监听的测试服务器再向上传播。该通道需要先构建 webview bundle（`pnpm --filter dsh-vscode run build:webview`）并具备 Playwright 浏览器；当 Playwright CDN 不可达时，可设置 `DSH_CHROMIUM_PATH` 复用本机已有的 Chromium。在真实编辑器里启动视图仍是手动步骤：仓库当前没有 `@vscode/test-electron` 通道。
 
 ## Known Limitations and Deferred Work
 

@@ -9,6 +9,7 @@
  */
 
 import { AbstractApiClient } from './api.ts'
+import { API_PROTOCOL_VERSION } from '@deepseek-ai/dsh-host-apiproxy/api'
 
 /** Webview → extension host: one request start, or the abort of one in flight. */
 export type BridgeRequestMessage =
@@ -50,6 +51,11 @@ export interface WebviewBridgePort {
    */
   onMessage(listener: (message: BridgeResponseMessage) => void): () => void
 }
+
+/** Outcome of the webview's pre-boot protocol handshake. */
+export type WebviewProtocolCheck =
+  | { ok: true; hostVersion: string }
+  | { ok: false; reason: string }
 
 declare global {
   /** The global seat the webview bootstrap fills before the client tree boots. */
@@ -201,5 +207,38 @@ export class PostMessageApiClient extends AbstractApiClient {
         fail(error instanceof Error ? error : new Error(String(error)))
       }
     })
+  }
+}
+
+/**
+ * Probe an embedder bridge before the client plugin graph starts. Only
+ * `host.describe` crosses the port during this check; callers must not publish
+ * the port to the connection plugin unless the versions match.
+ * @param port - the embedder bridge port.
+ * @param signal - optional cancellation for the handshake.
+ * @returns compatibility with this client's API protocol.
+ */
+export async function verifyWebviewBridgeProtocol(
+  port: WebviewBridgePort,
+  signal?: AbortSignal,
+): Promise<WebviewProtocolCheck> {
+  try {
+    const response = await new PostMessageApiClient(port).host.describe({}, signal)
+    if (!response.result.ok) {
+      return { ok: false, reason: `host.describe failed: ${response.result.error.code}` }
+    }
+    const { protocolVersion, version } = response.result.value
+    if (protocolVersion !== API_PROTOCOL_VERSION) {
+      return {
+        ok: false,
+        reason: `host protocolVersion ${String(protocolVersion)} != client ${String(API_PROTOCOL_VERSION)}`,
+      }
+    }
+    return { ok: true, hostVersion: version }
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `host.describe returned an incompatible response: ${error instanceof Error ? error.message : String(error)}`,
+    }
   }
 }

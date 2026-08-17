@@ -1,7 +1,7 @@
 {
   "name": "dsh-vscode",
-  "displayName": "DeepSeek Harness Panel",
-  "description": "VS Code panel hosting the full DeepSeek Harness GUI: a managed dsh web per window, the complete client stack in a webview, and editor-side integrations",
+  "displayName": "DeepSeek Harness Sidebar",
+  "description": "VS Code Secondary Side Bar view hosting the DeepSeek Harness GUI, one managed dsh web per window, and editor-side integrations",
   "version": "0.0.1",
   "private": true,
   "type": "module",
