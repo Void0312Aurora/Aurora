@@ -10,6 +10,7 @@
   "include": [
     "apps/web/tests/scaffold.ts",
     "apps/web/tests/stable-aria.ts",
+    "apps/test-support/snapshot.ts",
     "apps/web/tests/support.ts",
     "apps/web/tests/scaffold-hermetic.e2e.ts",
     "apps/web/tests/core-web-profile.snapshot.ts",
@@ -45,6 +46,9 @@
     "apps/web/tests/startup-auto-selection.e2e.ts",
     "apps/web/tests/subagent-conversation.e2e.ts",
     "apps/web/tests/bash-abort-row.e2e.ts",
+    "apps/vscode/src/panel.ts",
+    "apps/vscode/tests/sidebar.snapshot.ts",
+    "apps/vscode/tests/support/webview-browser.ts",
     "apps/cli/tests/**/*.ts",
     "apps/desktop/tests/**/*.ts",
     "examples/*/src/**/*.ts",

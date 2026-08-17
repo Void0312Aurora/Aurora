@@ -1,10 +1,9 @@
 /**
  * Pure resolution of a tool view's model-facing paths into editor targets and
- * whole-file diff materials. The wire carries model-facing paths (relative to
- * the session cwd) and result-side diffs as 3-line-context hunks, never whole
- * files; the editor needs absolute paths and, for a native two-pane diff, the
- * full before/after text. This module owns the path math and the hunk→whole
- * reconstruction so the vscode-coupled command glue stays thin and untested.
+ * consistent two-pane diff materials. The wire carries model-facing paths
+ * (relative to the session cwd), edit hunks, and whole content only for file
+ * creation. This module owns path resolution and preserves those wire
+ * materials so the vscode-coupled command glue stays thin.
  */
 
 import { isAbsolute, resolve } from 'node:path'

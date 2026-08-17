@@ -77,7 +77,19 @@ describe('sidebar shell apply', () => {
     expect(() => { layout.toggleSidebar() }).toThrow(/route actions not wired/)
     expect(() => { layout.openDetails() }).toThrow(/route actions not wired/)
     expect(() => { layout.closeDetails() }).toThrow(/route actions not wired/)
-    expect(() => { layout.show('chat') }).toThrow(/route actions not wired/)
+  })
+
+  it('replays the latest host route after the root entry mounts', async () => {
+    const { ctx, slots } = await bench()
+    await ctx.plugin({ inject: [...inject], apply }).await()
+    const layout = ctx.get('layout') as NarrowLayoutService
+    layout.show('sessions')
+    layout.show('details')
+
+    const entry = slots.entries('root')[0]!
+    const instance = (entry.store as ReturnType<typeof createNarrowStore>).create()
+    ;(entry.inject as unknown as (a: typeof instance.actions) => object)(instance.actions)
+    expect(instance.getSnapshot().route).toBe('details')
   })
 
   it('teardown unwinds the service, the root registration, and the child declarations', async () => {

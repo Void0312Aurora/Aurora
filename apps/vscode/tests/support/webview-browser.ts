@@ -11,6 +11,7 @@ import type { AddressInfo } from 'node:net'
 import { extname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium, type Browser } from 'playwright'
+import { API_PROTOCOL_VERSION } from '@deepseek-ai/dsh-host-apiproxy/api'
 import { panelHtml, WEBVIEW_DIST } from '../../src/panel.ts'
 
 /** Built webview directory consumed by this artifact-plane harness. */
@@ -28,6 +29,54 @@ export interface WebviewBrowserHarness {
   browser: Browser
   origin: string
   close(): Promise<void>
+}
+
+/** Server close face used by the launch/cleanup transaction. */
+export interface CloseableServer {
+  close(callback: (error?: Error) => void): void
+}
+
+function closeServer(server: CloseableServer): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    server.close((error) => { if (error === undefined) resolve(); else reject(error) })
+  })
+}
+
+/**
+ * Finish browser harness startup around an already-listening server. A launch
+ * failure closes the server before it is rethrown.
+ * @param server - listening HTTP server owned by this transaction.
+ * @param origin - server origin exposed to the browser.
+ * @param launch - browser launcher.
+ * @returns the completed harness.
+ */
+export async function launchBrowserForServer(
+  server: CloseableServer,
+  origin: string,
+  launch: () => Promise<Browser>,
+): Promise<WebviewBrowserHarness> {
+  let browser: Browser
+  try {
+    browser = await launch()
+  } catch (error) {
+    try {
+      await closeServer(server)
+    } catch (closeError) {
+      throw new AggregateError([error, closeError], 'browser launch failed and the webview server did not close')
+    }
+    throw error
+  }
+  return {
+    browser,
+    origin,
+    async close() {
+      const failures: unknown[] = []
+      await browser.close().catch((error: unknown) => { failures.push(error) })
+      await closeServer(server).catch((error: unknown) => { failures.push(error) })
+      if (failures.length === 1) throw failures[0]
+      if (failures.length > 1) throw new AggregateError(failures, 'webview browser teardown failed')
+    },
+  }
 }
 
 function listen(): Promise<{ server: Server; origin: string }> {
@@ -51,7 +100,27 @@ function listen(): Promise<{ server: Server; origin: string }> {
         }
         if (pathname === '/vscode-api-stub.js') {
           response.writeHead(200, { 'content-type': 'text/javascript' })
-          response.end('window.acquireVsCodeApi = () => ({ postMessage() {}, getState() { return undefined }, setState() {} })')
+          response.end(`window.acquireVsCodeApi = () => ({
+  postMessage(message) {
+    if (message.type === 'dsh-webview-ready') {
+      queueMicrotask(() => { window.postMessage({ type: 'dsh-host-ready' }, '*') })
+      return
+    }
+    if (message.type !== 'dsh-fetch' || message.path !== '/api/host.describe') return
+    const rpcId = JSON.parse(message.body ?? '{}').rpcId
+    const requested = new URLSearchParams(location.search).get('protocol')
+    const protocolVersion = requested === null ? ${String(API_PROTOCOL_VERSION)} : Number(requested)
+    const value = { protocolVersion, version: 'browser-fixture', cwd: '/fixture', attachedSessions: 0 }
+    const chunk = JSON.stringify({ type: 'server-response', rpcId, result: { ok: true, value } })
+    queueMicrotask(() => {
+      window.postMessage({ type: 'dsh-fetch-head', id: message.id, status: 200 }, '*')
+      window.postMessage({ type: 'dsh-fetch-chunk', id: message.id, chunk }, '*')
+      window.postMessage({ type: 'dsh-fetch-end', id: message.id }, '*')
+    })
+  },
+  getState() { return undefined },
+  setState() {},
+})`)
           return
         }
         const relative = pathname.slice(1)
@@ -88,18 +157,9 @@ export async function startWebviewBrowser(): Promise<WebviewBrowserHarness> {
   }
   const { server, origin } = await listen()
   const executablePath = process.env.DSH_CHROMIUM_PATH
-  const browser = await chromium.launch(executablePath === undefined ? {} : { executablePath })
-  return {
-    browser,
+  return launchBrowserForServer(
+    server,
     origin,
-    async close() {
-      const failures: unknown[] = []
-      await browser.close().catch((error: unknown) => { failures.push(error) })
-      await new Promise<void>((resolve, reject) => {
-        server.close((error) => { if (error === undefined) resolve(); else reject(error) })
-      }).catch((error: unknown) => { failures.push(error) })
-      if (failures.length === 1) throw failures[0]
-      if (failures.length > 1) throw new AggregateError(failures, 'webview browser teardown failed')
-    },
-  }
+    () => chromium.launch(executablePath === undefined ? {} : { executablePath }),
+  )
 }

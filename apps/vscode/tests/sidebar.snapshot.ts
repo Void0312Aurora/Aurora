@@ -4,12 +4,13 @@
  * and renders the narrow shell plus resident interaction and tool-card state.
  */
 
-import { existsSync } from 'node:fs'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { Locator, Page } from 'playwright'
+import type { Page } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import {
+  captureStableAria,
+  compareOrRefreshTextGolden,
+} from '../../test-support/snapshot.ts'
 import { startWebviewBrowser, type WebviewBrowserHarness } from './support/webview-browser.ts'
 
 const EXPECTED = fileURLToPath(new URL('./snapshots/sidebar/sidebar.expected.md', import.meta.url))
@@ -22,17 +23,6 @@ function normalize(snapshot: string): string {
     .replace(/(?<!\d)\d{2}:\d{2}(?!\d)/g, '{{clock}}')
 }
 
-async function stableAria(locator: Locator): Promise<string> {
-  let previous = normalize(await locator.ariaSnapshot())
-  await expect.poll(async () => {
-    const current = normalize(await locator.ariaSnapshot())
-    const stable = current === previous
-    previous = current
-    return stable
-  }, { timeout: 5_000, message: 'sidebar aria snapshot did not stabilize' }).toBe(true)
-  return previous
-}
-
 async function route(page: Page, destination: 'chat' | 'sessions'): Promise<void> {
   await page.evaluate((route) => {
     window.postMessage({ type: 'dsh-route', route }, '*')
@@ -41,16 +31,12 @@ async function route(page: Page, destination: 'chat' | 'sessions'): Promise<void
 }
 
 async function compareOrRefresh(actual: string): Promise<void> {
-  const payload = `${actual.trimEnd()}\n`
-  if (refreshing) {
-    await mkdir(dirname(EXPECTED), { recursive: true })
-    await writeFile(EXPECTED, payload)
-    return
-  }
-  if (!existsSync(EXPECTED)) {
-    throw new Error(`missing golden ${EXPECTED}; run DSH_SNAPSHOT=refresh pnpm run test:web:built to generate it`)
-  }
-  expect(payload).toBe(await readFile(EXPECTED, 'utf8'))
+  await compareOrRefreshTextGolden({
+    path: EXPECTED,
+    actual,
+    refresh: refreshing,
+    missingMessage: `missing golden ${EXPECTED}; run DSH_SNAPSHOT=refresh pnpm run test:web:built to generate it`,
+  })
 }
 
 describe('assembled VS Code sidebar snapshot', () => {
@@ -79,7 +65,7 @@ describe('assembled VS Code sidebar snapshot', () => {
 
     await route(page, 'sessions')
     const frame = page.locator('[data-route]')
-    const sessions = await stableAria(frame)
+    const sessions = await captureStableAria(frame, normalize)
     const tree = page.getByRole('tree', { name: 'Sessions' })
     await tree.getByText('Fixture 历史会话', { exact: true }).click()
     await route(page, 'chat')
@@ -90,7 +76,7 @@ describe('assembled VS Code sidebar snapshot', () => {
     await question.waitFor()
     await bash.waitFor()
     await webSearch.waitFor()
-    const questionSnapshot = await stableAria(question)
+    const questionSnapshot = await captureStableAria(question, normalize)
     await question.getByRole('button', { name: 'Dismiss all questions' }).click()
     await question.waitFor({ state: 'detached' })
     const approval = page.locator('[data-approval-key]')
@@ -141,13 +127,13 @@ describe('assembled VS Code sidebar snapshot', () => {
       questionSnapshot,
       '',
       '## Approval',
-      await stableAria(approval),
+      await captureStableAria(approval, normalize),
       '',
       '## Bash tool row',
-      await stableAria(bash),
+      await captureStableAria(bash, normalize),
       '',
       '## Web search tool row',
-      await stableAria(webSearch),
+      await captureStableAria(webSearch, normalize),
     ].join('\n'))
 
     expect(layout.uncontainedOutside).toEqual([])

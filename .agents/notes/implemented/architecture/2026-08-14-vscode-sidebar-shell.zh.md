@@ -18,7 +18,9 @@ Status: implemented
 
 **窗格是叠起来的路由，且全部保持挂载。** 一次一个在前，由 CSS 依据 shell 自有 store 中的路由来选择。卸载其余窗格会丢掉滚动位置、composer 草稿与流式回合的实时订阅，因此用 `display: none` 隐藏。`ctx.layout` 逐字实现宽屏 shell 的 `ILayout`——三个方法——只改变含义：切换侧栏在会话窗格与对话之间路由，打开详情把该窗格提到前面。
 
-**导航是原生的。** 视图贡献进 `viewsContainers.secondarySidebar`，该能力在 VS Code 1.106 定案，我们的 `^1.125` 引擎范围可直接使用，因此扩展无需用户拖动即落在右侧栏。title actions 承担导航行：它们不消耗 webview 像素——窄栏中最稀缺的资源。其命令 post 一条路由消息，由 `webview/route-bridge.ts` 转成 `ctx.layout` 调用；它监听 `window` 而非 api 客户端的桥端口——路由不是 wire 流量，把它挡在那条通道之外可让 connection 包的消息联合类型保持不变。
+**导航是原生的。** 视图贡献进 `viewsContainers.secondarySidebar`，该能力在 VS Code 1.106 定案，我们的 `^1.125` 引擎范围可直接使用，因此扩展无需用户拖动即落在右侧栏。title actions 承担导航行：它们不消耗 webview 像素——窄栏中最稀缺的资源。宿主会保留最新目标路由，直到 webview 报告页面监听器已经安装；页面级路由通道随后把该值重放给 `webview/route-bridge.ts`，`NarrowLayoutService` 再继续保留，直到 root store 接入。路由仍独立于 API bridge 的消息联合类型，同时能跨过页面与插件启动。
+
+**服务器由单一生命周期事务拥有，协议兼容性先于 GUI 启动。** 启动只发布一个受管 runtime 候选；restart 与 deactivate 经同一所有者串行化，在等待 disposer 前先解除候选所有权，而同步设置的 deactivate 标记会阻止已排队或迟到的工作在其后发布。扩展会保留服务器就绪状态，直到页面监听器安装完成，防止把正常启动间隔误判为不兼容。收到该信号后，webview bootstrap 只为 `host.describe` 暂时使用 bridge，要求 host 的 `protocolVersion` 匹配内置客户端，并仅在成功后把 bridge 公布给 `AppWebEntry`。版本更旧、更新、缺失或格式错误时会渲染不兼容 host 状态，客户端图及其 stream 均不启动；编辑器原生层采用同一版本要求。
 
 **该 shell 住在 app 里，而非 `packages/client`。** VS Code 侧栏是它唯一的消费者，而紧邻的主题适配器已经确立了"webview 自有模块"的先例。出现第二个窄容器宿主时才值得把它提升为包。
 
@@ -36,10 +38,10 @@ Status: implemented
 
 ## 后果
 
-侧栏在实测 259px 宽度下渲染出真实 GUI，三个窗格挂载、一个激活，title actions 在其间路由；已在真实编辑器的扩展开发宿主中验证。shell 的契约、路由语义与框架行为由 `apps/vscode/tests/shell.spec.tsx` 覆盖，`roster.spec.ts` 现在断言这次替换本身——有且仅有一个 shell，且就是这一个。
+侧栏在实测 259px 宽度下渲染出真实 GUI，三个窗格挂载、一个激活，title actions 在其间路由；已在真实编辑器的扩展开发宿主中验证。确定性测试覆盖并发 restart/deactivate、服务器就绪协议门禁、不兼容 bridge 协议、ready/replay 路由、shell 契约以及单 shell roster 替换。
 
 施加紧凑尺度后，259px 的侧栏在 hero、会话窗格与设置模态上报告零个横向溢出元素、零个横向滚动容器，其中包括携带完整控件集（附件、权限、模型、发送）的 composer。设置模态从内容列仅剩约 23px——视口钳制后的面板里塞着 188px 导航轨——变成占满整个界面。另有两处会溢出自身容器的钳制被当作纯逻辑修掉，而非样式问题：slash 菜单的 260px 下限与 trajectory 详情面板的 320px 下限，现在会在容器比下限本身更窄时让步。
 
-组装后的浏览器快照通过生产 CSP，以 259px 宽度针对无密钥 fixture（测试前置数据）启动构建出的 webview，并记录会话页、问答与审批 composer，以及代表性的 Bash 和 Web Search 行。shell 没有根级横向滚动或未收束的溢出；一个 Markdown 表格保留了一处有意的内容级横向滚动容器。在编辑器宿主通道出现之前，Extension Development Host 内的真实提供方轮次仍需手动核验。
+组装后的浏览器快照通过生产 CSP，以 259px 宽度针对无密钥 fixture（测试前置数据）启动构建出的 webview，并通过 Web 通道共享的稳定 ARIA／golden helper 记录会话页、问答与审批 composer，以及代表性的 Bash 和 Web Search 行。shell 没有根级横向滚动或未收束的溢出；一个 Markdown 表格保留了一处有意的内容级横向滚动容器。浏览器启动失败会先关闭测试服务器再向上传播。在编辑器宿主通道出现之前，Extension Development Host 内的真实提供方轮次仍需手动核验。
 
 bundle 重量未变：它由完整插件 roster 与 `ui-primitives` 的 Markdown/KaTeX/shiki 栈主导，而后者是 web shell seed 里的平台单例。给它瘦身与布局是两个问题，本次改动刻意不碰。

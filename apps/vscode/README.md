@@ -12,9 +12,9 @@ The substitution costs no plugin any change. `root` takes a single occupant, so 
 
 `ctx.layout` is implemented verbatim from the wide shell's `ILayout`, so cross-plugin panel gestures keep working with only their meaning changed: toggling the sidebar routes between the sessions pane and the conversation, and opening details brings that pane forward.
 
-Navigation lives in **native view title actions**, not webview pixels — the scarcest resource in a narrow column. The commands post a route message that `webview/route-bridge.ts` turns into a `ctx.layout` call.
+Navigation lives in **native view title actions**, not webview pixels — the scarcest resource in a narrow column. The host retains the latest requested route until the webview reports that its page-level listener is ready; the webview then replays that route through `webview/route-bridge.ts`, and `NarrowLayoutService` retains it again until the root store attaches. A title action therefore survives initial page and plugin boot instead of becoming a one-shot message.
 
-The shell lives in this app rather than `packages/client` because the VS Code sidebar is its only consumer, the same way the theme adapter next to it does; a second narrow-container host is what would justify promoting it to a package.
+The shell lives in this app rather than `packages/client` because the VS Code sidebar is its only consumer; a second narrow-container host is what would justify promoting it to a package.
 
 ### Fitting the occupants
 
@@ -31,7 +31,7 @@ webview (browser)            extension host (Node)             dsh web
   full dsh client stack  ◀──  postMessage  ◀──  SSE/JSON  ◀──────  /api
 ```
 
-The webview's page origin is `vscode-webview://…`, which the server's `/api` browser-trust fence refuses. So the webview never fetches the server directly: its transport (`PostMessageApiClient` from [`@deepseek-ai/dsh-client-connection`](../../packages/client/connection/README.md)) posts every request to the extension host, which replays it against the server's loopback origin — a loopback Host passes the fence like any non-browser client. The bridge confines every relayed request to that origin under `/api/`: an absolute URL, a protocol-relative or backslash authority, or a non-API path is refused before any fetch, so injected webview script cannot borrow the host's loopback network reach for other targets. The GUI itself is the ordinary dsh client stack, bundled statically by `webview/vite.config.ts` (the webview's CSP forbids fetching plugin bundles, so every plugin ships inside one bundle) and booted through the shared `AppWebEntry` kernel with the roster registered as static plugins.
+The webview's page origin is `vscode-webview://…`, which the server's `/api` browser-trust fence refuses. So the webview never fetches the server directly: its transport (`PostMessageApiClient` from [`@deepseek-ai/dsh-client-connection`](../../packages/client/connection/README.md)) posts requests to the extension host, which replays them against the server's loopback origin — a loopback Host passes the fence like any non-browser client. The extension host retains server readiness until the page listener is installed, so the bootstrap does not misclassify an ordinary startup interval as incompatibility. After that signal, the bootstrap sends only `host.describe` before publishing the transport to the plugin graph and requires the host's `protocolVersion` to equal the bundled client's; an older, newer, missing, or malformed version renders an incompatible-host state and starts neither the client plugins nor their streams. The bridge confines every relayed request to that origin under `/api/`: an absolute URL, a protocol-relative or backslash authority, or a non-API path is refused before any fetch, so injected webview script cannot borrow the host's loopback network reach for other targets. The compatible GUI is the ordinary dsh client stack, bundled statically by `webview/vite.config.ts` (the webview's CSP forbids fetching plugin bundles, so every plugin ships inside one bundle) and booted through the shared `AppWebEntry` kernel with the roster registered as static plugins.
 
 The extension launches, on demand:
 
@@ -39,11 +39,11 @@ The extension launches, on demand:
 dsh web --host 127.0.0.1 --port 0
 ```
 
-through the shared [`@deepseek-ai/dsh-web-launcher`](../../packages/util/web-launcher/README.md) primitive (the desktop shell uses the same one), which resolves `dsh` in the order `DSH_BIN` → embedded closure → checkout → PATH. `--port 0` means parallel windows never collide. The managed server is torn down (tree-killed) when the extension host deactivates.
+through the shared [`@deepseek-ai/dsh-web-launcher`](../../packages/util/web-launcher/README.md) primitive (the desktop shell uses the same one), which resolves `dsh` in the order `DSH_BIN` → embedded closure → checkout → PATH. `--port 0` means parallel windows never collide. One serialized lifecycle transaction owns start, restart, and deactivation: it detaches a runtime before awaiting disposal, cleans failed starts, and closes publication synchronously when teardown begins, so concurrent restarts cannot orphan a server and a restart racing deactivation cannot launch one afterward.
 
 ## Native interactions
 
-Beside the webview, the extension host opens its own mux stream (a plain loopback wire client — the extension host is not a browser, so it passes the `/api` trust fence directly) and surfaces the agent's **approval** and **question** requests as cancellable editor-native prompts: a QuickPick with Allow/Reject for approvals, and a tagged QuickPick plus input box for questions. Question controls expose ordinary selections, Other, and explicit Skip; multi-select questions preserve selected options alongside custom text, and blank custom input remains open with validation. An approval prompt is enriched with what the call will do from a cached `tool/call` view scoped by session, call id, and tool name. Because the wire is multi-client, this runs alongside the webview's in-panel prompts: whichever surface answers first wins, and a prompt still open when the request resolves elsewhere closes without sending a late answer.
+Beside the webview, the extension host opens its own mux stream (a plain loopback wire client — the extension host is not a browser, so it passes the `/api` trust fence directly) and surfaces the agent's **approval** and **question** requests as cancellable editor-native prompts. This native layer starts only after the same `protocolVersion` check; an incompatible external `dsh` leaves both GUI boot and native integration disabled with a visible explanation. Approvals use an Allow/Reject QuickPick, while questions use tagged option/Other/Skip items plus a validated input box; multi-select preserves selected options alongside custom text. An approval prompt is enriched from a cached `tool/call` view scoped by session, call id, and tool name. Because the wire is multi-client, whichever surface answers first wins, and a prompt still open when the request resolves elsewhere closes without sending a late answer.
 
 ## Editor context injection
 
@@ -52,8 +52,8 @@ The extension feeds the model your editor context so a prompt can refer to "this
 ## Commands
 
 - **DeepSeek Harness: Focus Sidebar** — reveal the view (VS Code resolves it on first reveal, which starts the server).
-- **DeepSeek Harness: Show Conversation** / **Show Sessions** — route the front pane; both are title actions on the view.
-- **DeepSeek Harness: Restart Server** — tree-kill and relaunch the managed server. The view stays: the bridge resolves the server origin through a live getter, so the webview reconnects to the new port by itself.
+- **DeepSeek Harness: Show Conversation** / **Show Sessions** — route the front pane; both are title actions on the view, and their latest request is replayed after webview readiness.
+- **DeepSeek Harness: Restart Server** — serialize tree-kill and relaunch of the managed server. The view stays: the bridge resolves the server origin through a live getter, so the webview reconnects to the new port by itself.
 
 ## Windows
 
@@ -83,7 +83,7 @@ Because the closure carries platform-native addons, the vsix is **per-platform**
 
 ## Tests
 
-`tests/` covers the pure extension-host logic keyless over injected clients, UI, spawn, and schedulers: process transactions and restart/origin ownership, the postMessage↔fetch relay and its SSRF confinement, cancellable native controls, active-session and context targeting, panel HTML/CSP, and static-roster parity. The browser lane (`pnpm run test:web`, config `vitest.web.config.ts`) serves the built `dist/webview` through the real `panelHtml()` document with the shipped CSP; `sidebar.snapshot.ts` boots the keyless fixture at 259px and records the sessions route, interaction composers, representative tool rows, and horizontal containment. `pnpm run test:vscode:electron` also launches the built extension in an isolated Extension Development Host, starts the production `dsh web` composition with only the LLM replaced by a recorded replay, drives the built webview through a prompt, requires the production JSONL to place IDE context before the prompt and first request header, and restarts the managed server. Neither lane claims a live-provider transcript.
+`tests/` covers the pure extension-host logic keyless over injected clients, UI, spawn, and schedulers: the process runtime (`runtime.spec.ts`), serialized ownership across concurrent restart/deactivation (`runtime-lifecycle.spec.ts`), the postMessage↔fetch relay and its SSRF confinement (`bridge.spec.ts`), server-ready gating plus pre-boot protocol rejection (`webview-bootstrap.spec.ts`), ready/replay routing, panel HTML/CSP, roster parity, native interactions, active-session tracking, IDE-context sampling, and the serialized context feed. The browser lane serves the built `dist/webview` through the real `panelHtml()` document with the shipped CSP; `sidebar.snapshot.ts` boots the keyless fixture at 259px and records routes, interaction composers, representative tool rows, and horizontal containment. `pnpm run test:vscode:electron` also launches the built extension in an isolated Extension Development Host, starts the production `dsh web` composition with only the LLM replaced by a recorded replay, drives the built webview through a prompt, requires the production JSONL to place IDE context before the prompt and first request header, and restarts the managed server. Neither lane claims a live-provider transcript.
 
 ## Known Limitations and Deferred Work
 

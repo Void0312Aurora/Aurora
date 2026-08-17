@@ -19,6 +19,9 @@
     "webview",
     "tests"
   ],
+  "exclude": [
+    "tests/sidebar.snapshot.ts"
+  ],
   "references": [
     { "path": "../../packages/util/process-tree" },
     { "path": "../../packages/util/web-launcher" },
