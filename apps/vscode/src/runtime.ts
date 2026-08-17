@@ -12,6 +12,7 @@ import type { ChildProcess } from 'node:child_process'
 import { killProcessTree } from '@deepseek-ai/dsh-process-tree'
 import {
   childExited,
+  requireWebLaunchPipes,
   resolveWebLaunch,
   spawnWebLaunch,
   type SpawnFn,
@@ -19,6 +20,13 @@ import {
   waitForReadyLine,
 } from '@deepseek-ai/dsh-web-launcher'
 
+/** One startup generation and the exact child/listeners it owns. */
+interface StartAttempt {
+  child?: ChildProcess
+  detach?: () => void
+  abort?: AbortController
+  cleanup?: Promise<void>
+}
 /** Facts the runtime needs from the extension host. */
 export interface ServerRuntimeOptions {
   /** Extension payload root: anchors the embedded closure and checkout discovery. */
@@ -41,10 +49,9 @@ export interface ServerRuntimeOptions {
 
 /** Lifecycle owner of one managed `dsh web` process. */
 export class ServerRuntime {
-  private child: ChildProcess | undefined
+  private attempt: StartAttempt | undefined
   private urlValue: URL | undefined
   private startTask: Promise<URL> | undefined
-  private startAbort: AbortController | undefined
   private disposed = false
 
   /** @param options - environment facts and lifecycle sinks. */
@@ -55,11 +62,7 @@ export class ServerRuntime {
     return this.urlValue
   }
 
-  /**
-   * True once {@link dispose} ran (set synchronously before the start abort
-   * fires, so a caller observing a rejected start sees it without a race).
-   * A start that rejects against a disposed runtime is teardown, not failure.
-   */
+  /** Whether teardown has permanently claimed this runtime generation. */
   get isDisposed(): boolean {
     return this.disposed
   }
@@ -72,21 +75,24 @@ export class ServerRuntime {
    */
   start(): Promise<URL> {
     if (this.disposed) return Promise.reject(new Error('dsh runtime is disposed'))
-    this.startTask ??= this.performStart().catch((error: unknown) => {
-      // A failed attempt must not poison the next start.
-      this.startTask = undefined
+    if (this.startTask !== undefined) return this.startTask
+    const attempt: StartAttempt = {}
+    this.attempt = attempt
+    const task = this.performStart(attempt).catch(async (error: unknown) => {
+      await this.stopAttempt(attempt)
+      // A failed attempt must not poison the next start, but a newer attempt
+      // owns its own task and must not be cleared by this generation.
+      if (this.startTask === task) this.startTask = undefined
       throw error
     })
+    this.startTask = task
     return this.startTask
   }
 
-  private async performStart(): Promise<URL> {
+  private async performStart(attempt: StartAttempt): Promise<URL> {
     const { options } = this
-    // One controller per attempt: dispose() aborts it so the readiness poll
-    // (up to 30s) stops at once instead of running out against a server we are
-    // already tearing down.
     const startAbort = new AbortController()
-    this.startAbort = startAbort
+    attempt.abort = startAbort
     const launch = resolveWebLaunch({
       env: options.env,
       appDir: options.appDir,
@@ -102,21 +108,34 @@ export class ServerRuntime {
       ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
       env: options.env,
     }, options.spawn)
-    this.child = child
-    const { stdout, stderr } = child
+    attempt.child = child
+    const { stdout, stderr } = requireWebLaunchPipes(child)
     stderr.setEncoding('utf8')
-    stderr.on('data', (chunk: string) => { options.log(`[dsh web:err] ${chunk.trimEnd()}`) })
-    child.on('exit', (code, signal) => {
-      if (this.child !== child) return
-      this.child = undefined
+    const onStderr = (chunk: string): void => { options.log(`[dsh web:err] ${chunk.trimEnd()}`) }
+    stderr.on('data', onStderr)
+    const onExit = (code: number | null, signal: NodeJS.Signals | null): void => {
+      if (this.attempt !== attempt) return
+      attempt.detach?.()
+      this.attempt = undefined
       this.urlValue = undefined
       this.startTask = undefined
       if (this.disposed) return
       options.log(`dsh web exited (code ${String(code)} signal ${String(signal)})`)
       options.onExit?.(code, signal)
-    })
+    }
+    child.on('exit', onExit)
+    let rejectSpawn: ((error: Error) => void) | undefined
+    const onError = (error: Error): void => {
+      rejectSpawn?.(new Error(`failed to spawn dsh web via ${launch.source}: ${error.message}`))
+    }
+    child.on('error', onError)
+    attempt.detach = () => {
+      stderr.off('data', onStderr)
+      child.off('exit', onExit)
+      child.off('error', onError)
+    }
     const spawnFailure = new Promise<never>((_resolve, reject) => {
-      child.on('error', (error) => { reject(new Error(`failed to spawn dsh web via ${launch.source}: ${error.message}`)) })
+      rejectSpawn = reject
     })
     stdout.setEncoding('utf8')
     const url = await Promise.race([
@@ -135,24 +154,41 @@ export class ServerRuntime {
     if (childExited(child)) {
       throw new Error(`dsh web exited (code ${String(child.exitCode)} signal ${String(child.signalCode)}) while its port was verified; not adopting the server`)
     }
+    // The runtime may have been disposed or replaced while readiness crossed
+    // awaits. Never publish a URL for a generation that no longer owns state.
+    if (this.disposed || this.attempt !== attempt) {
+      throw new Error('dsh web startup was superseded by teardown')
+    }
     this.urlValue = url
     options.log(`dsh web ready at ${url.href}`)
     return url
   }
 
+  /** Stop one exact generation once; detach callbacks before killing it. */
+  private stopAttempt(attempt: StartAttempt): Promise<void> {
+    attempt.cleanup ??= (async () => {
+      attempt.abort?.abort()
+      attempt.detach?.()
+      const child = attempt.child
+      if (this.attempt === attempt) {
+        this.attempt = undefined
+        this.urlValue = undefined
+      }
+      if (child?.pid !== undefined && !childExited(child)) {
+        const killTree = this.options.killTree
+          ?? ((pid: number) => killProcessTree(pid, { logger: (message) => { this.options.log(`killTree ${message}`) } }))
+        await killTree(child.pid)
+      }
+    })()
+    return attempt.cleanup
+  }
+
   /** Terminate the server tree and refuse further starts. Idempotent. */
   async dispose(): Promise<void> {
     this.disposed = true
-    // Cancel an in-flight readiness poll so it does not run out its deadline.
-    this.startAbort?.abort()
-    const child = this.child
-    this.child = undefined
+    const attempt = this.attempt
     this.urlValue = undefined
     this.startTask = undefined
-    if (child?.pid !== undefined && !childExited(child)) {
-      const killTree = this.options.killTree
-        ?? ((pid: number) => killProcessTree(pid, { logger: (message) => { this.options.log(`killTree ${message}`) } }))
-      await killTree(child.pid)
-    }
+    if (attempt !== undefined) await this.stopAttempt(attempt)
   }
 }

@@ -9,7 +9,7 @@
 import { spawn as nodeSpawn, type ChildProcess } from 'node:child_process'
 import { join } from 'node:path'
 import { killProcessTree } from '@deepseek-ai/dsh-process-tree'
-import { resolveWebLaunch, spawnWebLaunch, waitForHttpOk, waitForReadyLine, childExited } from '@deepseek-ai/dsh-web-launcher'
+import { resolveWebLaunch, spawnWebLaunch, waitForHttpOk, waitForReadyLine, childExited, requireWebLaunchPipes } from '@deepseek-ai/dsh-web-launcher'
 import { app, BrowserWindow, dialog, Menu, nativeImage, shell, Tray } from './electron-api.ts'
 
 const APP_ID = 'ai.deepseek.dsh-desktop'
@@ -228,9 +228,10 @@ async function boot(): Promise<void> {
   console.log(`[dsh-desktop] launching dsh web (${launch.source}): ${launch.command} ${launch.args.join(' ')}`)
   const child = spawnWebLaunch(launch, { env: process.env })
   server = child
+  const { stdout, stderr } = requireWebLaunchPipes(child)
   let ready = false
   let stderrTail = ''
-  child.stderr.on('data', (chunk: Buffer) => {
+  stderr.on('data', (chunk: Buffer) => {
     stderrTail = (stderrTail + chunk.toString()).slice(-STDERR_TAIL_LIMIT)
   })
   child.on('error', (error) => {
@@ -278,10 +279,10 @@ async function boot(): Promise<void> {
     .unref()
   // Readable stream: yield strings, and a multibyte character split across
   // chunks is reassembled by the decoder instead of mojibaked.
-  child.stdout.setEncoding('utf8')
+  stdout.setEncoding('utf8')
   let url: URL | undefined
   try {
-    url = await waitForReadyLine(child.stdout, {
+    url = await waitForReadyLine(stdout, {
       onChunk: (chunk) => { process.stdout.write(`[dsh web] ${chunk}`) },
     })
     await waitForHttpOk(url)

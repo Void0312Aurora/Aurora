@@ -39,8 +39,8 @@ export interface SpawnWebLaunchOptions {
   platform?: NodeJS.Platform
 }
 
-/** A launched Web server whose fixed stdio contract exposes both output pipes. */
-export interface WebLaunchChild extends ChildProcess {
+/** Validated output pipes from a launched Web server. */
+export interface WebLaunchPipes {
   stdout: Readable
   stderr: Readable
 }
@@ -141,15 +141,13 @@ export function resolveWebLaunch(options: LaunchEnvironment): WebServerLaunch {
  * @param launch - resolved executable, arguments, and launch-specific facts.
  * @param options - host environment and working-directory defaults.
  * @param spawn - injectable process primitive; production uses `cross-spawn`.
- * @returns the live child with piped stdout and stderr.
+ * @returns the live child. Call `requireWebLaunchPipes` before consuming its output.
  */
 export function spawnWebLaunch(
   launch: WebServerLaunch,
   options: SpawnWebLaunchOptions,
   spawn: SpawnFn = crossSpawn,
-): WebLaunchChild {
-  // The return type narrows the generic cross-spawn declaration to the fixed
-  // stdio tuple owned here; callers never configure these streams separately.
+): ChildProcess {
   return spawn(launch.command, launch.args, {
     cwd: launch.cwd ?? options.cwd,
     env: { ...options.env, ...launch.env },
@@ -157,7 +155,23 @@ export function spawnWebLaunch(
     windowsHide: true,
     // POSIX children lead a process group; Windows cleanup uses taskkill /T.
     detached: (options.platform ?? process.platform) !== 'win32',
-  }) as WebLaunchChild
+  })
+}
+
+/**
+ * Require the output pipes requested by `spawnWebLaunch`. A lifecycle owner
+ * records the child before calling this function so it can terminate a live
+ * process when an injected or platform spawn implementation violates the
+ * stdio requirement.
+ * @param child - launched child whose stdout and stderr must both be piped.
+ * @returns the validated output streams.
+ */
+export function requireWebLaunchPipes(child: ChildProcess): WebLaunchPipes {
+  const { stdout, stderr } = child
+  if (stdout === null || stderr === null) {
+    throw new Error('dsh web spawned without its stdout/stderr pipes')
+  }
+  return { stdout, stderr }
 }
 
 /**
