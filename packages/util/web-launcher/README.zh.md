@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-供外壳宿主共享的 `dsh web` 启动原语：桌面外壳（`@deepseek-ai/dsh-desktop`）与 VS Code 扩展通过本包解析启动命令、描述 spawn 方式并探测就绪。它是纯 Node 逻辑——不引入 Electron 或 VS Code——spawn、窗口胶水与关停归消费方所有。
+供外壳宿主共享的 `dsh web` 启动原语：桌面外壳（`@deepseek-ai/dsh-desktop`）与 VS Code 扩展宿主消费本包来解析、描述 spawn 并探测 Web 服务器就绪。它是纯 Node 逻辑——不引入 Electron 或 VS Code——spawn、窗口胶水与关停归消费方所有。
 
 ## 接口面
 

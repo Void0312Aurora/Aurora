@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Shared `dsh web` launcher primitives for shell hosts: the desktop shell (`@deepseek-ai/dsh-desktop`) and the VS Code extension resolve, spawn-describe, and readiness-probe the Web server through this package. It is pure Node logic — no Electron or VS Code imports — so consumers own spawning, window glue, and teardown.
+Shared `dsh web` launcher primitives for shell hosts: the desktop shell (`@deepseek-ai/dsh-desktop`) and VS Code extension host consume this package to resolve, spawn, describe, and readiness-probe the Web server. It is pure Node logic — no Electron or VS Code imports — so consumers own spawning, window glue, and teardown.
 
 ## Surface
 
