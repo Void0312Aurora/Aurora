@@ -109,6 +109,17 @@ describe('gate graph validation', () => {
   })
 })
 
+describe('Windows blocking graph', () => {
+  it('requires the built launcher command-shim smoke', () => {
+    const subject = withPnpmEntrypoint(() => gatesForMode('ci-windows-blocking'))
+
+    expect(subject.find(item => item.id === 'windows-command-shim')).toMatchObject({
+      displayCommand: 'pnpm run test:windows-command-shim',
+      needs: ['windows-build'],
+    })
+  })
+})
+
 describe('Oxlint gate', () => {
   it('uses the package script when no worker bound is configured', () => {
     const subject = withEnv('DSH_OXLINT_THREADS', undefined, () =>
