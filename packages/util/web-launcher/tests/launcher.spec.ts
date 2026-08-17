@@ -196,6 +196,32 @@ describe('waitForReadyLine', () => {
     await new Promise(resolve => setTimeout(resolve, 20))
   })
 
+  it('reports an onChunk failure and keeps draining later chunks', async () => {
+    const forwarded: string[] = []
+    const reported = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const url = await waitForReadyLine(streamOf([
+        'dsh web: http://127.0.0.1:1234\n',
+        'callback failure\n',
+        'later output\n',
+      ]), {
+        onChunk: (chunk) => {
+          if (chunk.includes('callback failure')) throw new Error('log sink failed')
+          forwarded.push(chunk)
+        },
+      })
+
+      expect(url.href).toBe('http://127.0.0.1:1234/')
+      await vi.waitFor(() => { expect(forwarded).toContain('later output\n') })
+      expect(reported).toHaveBeenCalledWith(
+        'dsh-web-launcher: onChunk callback failed:',
+        expect.objectContaining({ message: 'log sink failed' }),
+      )
+    } finally {
+      reported.mockRestore()
+    }
+  })
+
   it('destroys the stream on timeout so the consumption loop cannot leak', async () => {
     const stream = new PassThrough()
     stream.write('nothing useful\n')
@@ -286,6 +312,37 @@ describe('waitForHttpOk', () => {
       .rejects.toThrow(/HTTP 500/)
     // The poll must have retried until the deadline, not given up after one attempt.
     expect(fetchImpl.mock.calls.length).toBeGreaterThan(1)
+  })
+
+  it('bounds a hanging fetch by the overall deadline', async () => {
+    const fetchImpl = vi.fn<typeof fetch>((_input, init) => new Promise<Response>((_resolve, reject) => {
+      const signal = init?.signal
+      signal?.addEventListener('abort', () => {
+        reject(signal.reason instanceof Error ? signal.reason : new Error(String(signal.reason)))
+      }, { once: true })
+    }))
+    const started = performance.now()
+
+    await expect(waitForHttpOk(new URL('http://127.0.0.1:1/'), {
+      fetchImpl,
+      timeoutMs: 30,
+      pollIntervalMs: 1_000,
+    })).rejects.toThrow(/within 30ms/)
+
+    expect(performance.now() - started).toBeLessThan(500)
+  })
+
+  it('bounds the polling sleep by the overall deadline', async () => {
+    const fetchImpl = vi.fn(async () => new Response('nope', { status: 503 }))
+    const started = performance.now()
+
+    await expect(waitForHttpOk(new URL('http://127.0.0.1:1/'), {
+      fetchImpl,
+      timeoutMs: 30,
+      pollIntervalMs: 1_000,
+    })).rejects.toThrow(/within 30ms/)
+
+    expect(performance.now() - started).toBeLessThan(500)
   })
 })
 

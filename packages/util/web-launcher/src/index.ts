@@ -1,8 +1,8 @@
 /**
  * Shared `dsh web` launcher: resolve how a shell spawns the Web server, parse
  * its readiness line, and poll for HTTP readiness. Pure Node logic with no
- * Electron or VS Code imports; consumers (the desktop shell, the VS Code
- * extension host) own spawning, window/tray glue, and teardown.
+ * Electron or VS Code imports; shell consumers own spawning, window/tray
+ * glue, and teardown.
  */
 
 import type { ChildProcess } from 'node:child_process'
@@ -140,7 +140,7 @@ export function parseReadyLine(line: string): URL | undefined {
 export interface ReadyLineOptions {
   /** How long to wait for the readiness line before failing. */
   timeoutMs?: number
-  /** Receives every raw chunk, for logging. */
+  /** Receives every raw chunk; thrown errors are reported and do not stop draining. */
   onChunk?: (chunk: string) => void
 }
 
@@ -181,7 +181,11 @@ export function waitForReadyLine(stdout: AsyncIterable<string>, options: ReadyLi
           const result = await iterator.next()
           if (result.done) break
           const chunk = result.value
-          options.onChunk?.(chunk)
+          try {
+            options.onChunk?.(chunk)
+          } catch (error) {
+            console.error('dsh-web-launcher: onChunk callback failed:', error)
+          }
           if (resolved) continue
           buffer += chunk
           const lines = buffer.split(/\r?\n/)
@@ -235,15 +239,18 @@ export async function waitForHttpOk(url: URL, options: HttpOkOptions = {}): Prom
   const pollIntervalMs = options.pollIntervalMs ?? 250
   const deadline = Date.now() + timeoutMs
   let lastError: unknown = new Error('no attempt made')
-  while (Date.now() < deadline) {
+  while (true) {
+    const remaining = deadline - Date.now()
+    if (remaining <= 0) break
     try {
-      const response = await fetchImpl(url, { signal: AbortSignal.timeout(2_000) })
+      const response = await fetchImpl(url, { signal: AbortSignal.timeout(Math.min(2_000, remaining)) })
       if (response.ok) return
       lastError = new Error(`HTTP ${response.status}`)
     } catch (error) {
       lastError = error
     }
-    await new Promise(resolve => setTimeout(resolve, pollIntervalMs))
+    const sleepMs = Math.min(pollIntervalMs, deadline - Date.now())
+    if (sleepMs > 0) await new Promise(resolve => setTimeout(resolve, sleepMs))
   }
   throw new Error(`dsh-web-launcher: server not reachable at ${url.href} within ${timeoutMs}ms (last error: ${String(lastError)})`)
 }

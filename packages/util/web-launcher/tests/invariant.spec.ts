@@ -13,6 +13,8 @@ describe('web-launcher invariant companion', () => {
       ctx.invariants.register('@deepseek-ai/dsh-web-launcher', () => {})
     }).toThrow(/already registered/)
     await fiber.dispose()
+    const dispose = ctx.invariants.register('@deepseek-ai/dsh-web-launcher', () => {})
+    dispose()
     await ctx.fiber.dispose()
   })
 })

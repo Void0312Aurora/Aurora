@@ -14,7 +14,7 @@ Web GUI 是产品交互最丰富的界面，却活在浏览器标签页里：没
 
 ## Decision
 
-**`apps/desktop` 是薄的 Electron 主进程，负责 spawn `dsh web` 并管理其生命周期；启动器决策与 Electron 无关，而组装后的生命周期通过构建后的 Electron 入口覆盖。** 共享的 `@deepseek-ai/dsh-web-launcher` 原语（`packages/util/web-launcher`，VS Code 扩展宿主同样消费）按固定顺序解析服务器命令——`DSH_BIN` 环境变量、嵌入闭包（`deploy/node_modules/@deepseek-ai/dsh/lib/bin.js`）、本检出目录的 CLI（构建产物 `lib/bin.js`，否则 tsx 源码启动）、PATH 上的 `dsh`——以 `web --host 127.0.0.1 --port 0` 启动，把 stdout 缓冲成行，解析就绪行（要求显式端口，因此被 chunk 切开的半行永远不会误匹配），并以短超时轮询 HTTP 200。`src/main.ts` 只是 Electron 胶水：单实例锁、窗口（沙箱渲染进程、无 preload）、托盘、子进程生命周期。主进程与孤儿 reaper 会在退出时等待共享的 `@deepseek-ai/dsh-process-tree` 原语；Windows 会在 `taskkill /T /F` 命令结束后完成，POSIX 则只有在确认进程组已消失后才会完成。本地子进程后端复用同一终止实现。
+**`apps/desktop` 是薄的 Electron 主进程，负责 spawn `dsh web` 并管理其生命周期；启动器决策与 Electron 无关，而组装后的生命周期通过构建后的 Electron 入口覆盖。** 共享的 `@deepseek-ai/dsh-web-launcher` 原语（`packages/util/web-launcher`，设计为后续供 VS Code 扩展宿主消费）按固定顺序解析服务器命令——`DSH_BIN` 环境变量、嵌入闭包（`deploy/node_modules/@deepseek-ai/dsh/lib/bin.js`）、本检出目录的 CLI（构建产物 `lib/bin.js`，否则 tsx 源码启动）、PATH 上的 `dsh`——以 `web --host 127.0.0.1 --port 0` 启动，把 stdout 缓冲成行，解析就绪行（要求显式端口，因此被 chunk 切开的半行永远不会误匹配），报告日志回调失败且不中断 stdout 排空，并在轮询 HTTP 200 时用总期限约束每次 fetch 与等待。`src/main.ts` 只是 Electron 胶水：单实例锁、窗口（沙箱渲染进程、无 preload）、托盘、子进程生命周期。主进程与孤儿 reaper 会在退出时等待共享的 `@deepseek-ai/dsh-process-tree` 原语；Windows 会在 `taskkill /T /F` 命令结束后完成，POSIX 则只有在确认进程组已消失后才会完成。本地子进程后端复用同一终止实现。
 
 **托盘常驻，而不是窗口生命周期。** 关闭窗口只隐藏它，服务器继续运行；托盘菜单重新打开窗口或退出（同时杀掉服务器）。二次启动聚焦已有窗口。打包版不需要 Node、`dsh` 或检出目录：嵌入闭包在 Electron-as-Node（`ELECTRON_RUN_AS_NODE=1`）下运行，且带 `--expose-internals`——harness 的 HMR 服务需要 Node 内部模块，而 `node-addon-require-builtin` 回退在 Electron 的 V8 下不可用（缺少 `GetAlignedPointerFromEmbedderData` 符号）。闭包内的原生插件（node-pty、koffi）是 N-API，无需针对 Electron 重新编译（`npmRebuild: false`）。
 
