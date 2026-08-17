@@ -22,6 +22,7 @@ interface WorkspacePackage {
 }
 
 const root = resolve(import.meta.dirname, '..')
+await verifyProductClosureParity()
 const { values } = parseArgs({
   args: process.argv.slice(2),
   options: { manifest: { type: 'string' } },
@@ -71,6 +72,25 @@ if (failures.length > 0) {
 }
 
 console.log(`verify-runtime-closure: ${queue.length} workspace packages form a closed runtime dependency graph.`)
+
+/** Keep the two self-contained GUI products on one exact server dependency set. */
+async function verifyProductClosureParity(): Promise<void> {
+  const desktop = await loadManifest(resolve(root, 'apps/desktop/closure/package.json'))
+  const vscode = await loadManifest(resolve(root, 'apps/vscode/closure/package.json'))
+  const desktopDependencies = desktop.dependencies ?? {}
+  const vscodeDependencies = vscode.dependencies ?? {}
+  const names = [...new Set([...Object.keys(desktopDependencies), ...Object.keys(vscodeDependencies)])].sort()
+  const differences = names.filter(name => desktopDependencies[name] !== vscodeDependencies[name])
+  if (differences.length === 0) return
+
+  console.error('verify-runtime-closure: desktop and VS Code closure dependency maps diverge:')
+  for (const name of differences) {
+    console.error(
+      `  ${name}: desktop=${desktopDependencies[name] ?? '<missing>'}; vscode=${vscodeDependencies[name] ?? '<missing>'}`,
+    )
+  }
+  process.exit(1)
+}
 
 async function loadWorkspacePackages(): Promise<Map<string, WorkspacePackage>> {
   const paths = globSync(['packages/*/*/package.json', 'vendor/*/package.json'], { cwd: root })
