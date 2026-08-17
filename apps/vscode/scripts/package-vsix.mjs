@@ -1,11 +1,8 @@
 /**
- * Cross-platform vsix packer. The `--target` must be chosen by the caller (the
- * closure carries platform-native N-API addons, so a vsix is per-platform),
- * but a package.json script cannot portably expand a default: POSIX
- * `${VAR:-default}` is passed through verbatim by Windows `cmd.exe`. This
- * script reads `DSH_VSIX_TARGET` from the environment (defaulting to the host
- * platform's vsce target) and invokes `vsce package` through the workspace's
- * own binary, so packaging works identically on every platform.
+ * Host-platform vsix packer. The materialized closure carries native addons
+ * selected by pnpm for the running platform and architecture, so the vsce
+ * target must match that host. `DSH_VSIX_TARGET` is an optional CI assertion,
+ * not a cross-compilation switch: a mismatch fails before vsce runs.
  */
 
 import { spawnSync } from 'node:child_process'
@@ -25,6 +22,13 @@ function hostTarget() {
 const target = process.env.DSH_VSIX_TARGET && process.env.DSH_VSIX_TARGET !== ''
   ? process.env.DSH_VSIX_TARGET
   : hostTarget()
+const detectedTarget = hostTarget()
+if (target !== detectedTarget) {
+  console.error(
+    `[dsh-vscode] target ${target} does not match this materialized closure (${detectedTarget}); package on a matching runner`,
+  )
+  process.exit(1)
+}
 
 // Resolve vsce from this package's own dependency tree so the packer never
 // depends on a globally installed binary.

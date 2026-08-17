@@ -55,11 +55,11 @@ host 构建产出一个自包含的 `dist/extension.js`（workspace 运行时导
 pnpm --filter dsh-vscode run package    # packs a vsix for the host platform
 ```
 
-`package` 跑完整仓库构建，物化 `deploy/`（`dsh-vscode-closure` 纯依赖 deploy root——与桌面外壳所载相同的自包含 `dsh web` 包），构建扩展，并经 [scripts/package-vsix.mjs](scripts/package-vsix.mjs) 对一个平台目标运行 `vsce package --no-dependencies`。目标默认取宿主平台；在环境中设置 `DSH_VSIX_TARGET`（如 `linux-x64`、`darwin-arm64`）可覆盖——由 Node 脚本读取，因此在各操作系统上行为一致，无需 POSIX shell 语法。vsix 的运行时位于 `dist/`、`deploy/` 与 `media/`，并包含 [.vscodeignore](.vscodeignore) 保留的扩展 manifest、双语 README 与许可证；源码和开发用 `node_modules` 树不会进入包内。
+`package` 跑完整仓库构建，物化 `deploy/`（`dsh-vscode-closure` 纯依赖 deploy root——与桌面外壳所载相同的自包含 `dsh web` 包），构建扩展，并经 [scripts/package-vsix.mjs](scripts/package-vsix.mjs) 为宿主平台运行 `vsce package --no-dependencies`。`DSH_VSIX_TARGET` 是发布任务可选的断言：它必须等于检测到的宿主目标，因为只改 vsce 标签无法替换已经为 `deploy/` 选择的原生插件。vsix 的运行时位于 `dist/`、`deploy/` 与 `media/`，并包含 [.vscodeignore](.vscodeignore) 保留的扩展 manifest、双语 README 与许可证；源码和开发用 `node_modules` 树不会进入包内。顶层 runtime-closure gate 要求桌面端与 VS Code 的依赖 map 始终完全一致。
 
 打包后的扩展不需要 Node、不需要 `dsh`、也不需要 checkout：启动器的内嵌闭包分支在 **VS Code 自己的 Electron-as-Node** 下运行捆绑的 CLI（`ELECTRON_RUN_AS_NODE=1` 加 `--expose-internals`，正是桌面外壳的机制，`process.execPath` 即扩展宿主的 Electron）。闭包的原生插件（node-pty、koffi）是 N-API，无需重新编译。
 
-由于闭包携带平台原生插件，vsix 是**按平台**的（`vsce package --target <target>`）；CI 矩阵按 `win32-x64`、`linux-x64`、`darwin-x64`、`darwin-arm64` 等各打一个。没有 `deploy/` 的 dev checkout 会落到 checkout 的已构建 CLI 或 PATH 上的 `dsh`，因此 `pnpm --filter dsh-vscode run build` 加 Extension Development Host 无需打包即可工作。
+由于闭包携带平台原生插件，vsix 是**按平台**的（`vsce package --target <target>`）；发布流水线必须分别在匹配的 `win32-x64`、`linux-x64`、`darwin-x64`、`darwin-arm64` 等受支持 runner 上打包。没有 `deploy/` 的 dev checkout 会落到 checkout 的已构建 CLI 或 PATH 上的 `dsh`，因此 `pnpm --filter dsh-vscode run build` 加 Extension Development Host 无需打包即可工作。
 
 ## 测试
 
