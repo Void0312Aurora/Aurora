@@ -12,9 +12,9 @@ Status: implemented
 
 ## 决策
 
-**采样与变化抑制是纯模块；feed 及其 VS Code 接线很薄。** `apps/vscode/src/ide-context.ts` 把普通的 `EditorState`（扩展从 VS Code API 构建）转成有界的 `IdeContextSnapshot`：一段模型面读数加一个作变化检测键的 `signature`。`apps/vscode/src/context-feed.ts` 对编辑器 nudge 防抖、采样、丢弃签名与该会话上次注入相同的快照，并调用 `session.injectContext`——no-wakeup wire 方法，因此读数为会话下一 step 暂存，绝不开启 turn。这是 tmux-context 插件的 render/suppress 形态搬到宿主侧：在 `agent/step` 上 nudge 变成在编辑器事件上 nudge，"与上次相同读数"的抑制完全一致。把纯核心留在 `vscode` 模块之外，让防抖、抑制、每会话签名记忆与拒绝重试都能无密钥测试。
+**采样与变化抑制是纯模块；feed 及其 VS Code 接线很薄。** `apps/vscode/src/ide-context.ts` 把普通的 `EditorState`（扩展从 VS Code API 构建）转成有界的 `IdeContextSnapshot`：一段模型面读数加一个作变化检测键的 `signature`。`apps/vscode/src/context-feed.ts` 对编辑器 nudge 防抖、采样、丢弃签名与该会话上次注入相同的快照，并调用 `session.injectContext`——no-wakeup wire 方法，因此读数为会话下一 step 暂存，绝不开启 turn。其 `sync()` 路径会取消待执行的防抖，并在会话首次变为活动状态时立即采样。把纯核心留在 `vscode` 模块之外，让防抖、立即同步、抑制、每会话签名记忆与拒绝重试都能无密钥测试。
 
-**目标会话在宿主侧从事件流跟踪。** `apps/vscode/src/active-session.ts` 跟随 host 流，记住最近运行的会话（最强的"用户在此"信号），回退到它见到的第一个会话，使全新的单会话窗口在任何 turn 运行前就有目标。这是启发式：webview 拥有真正的会话选择，在 webview→host 活动会话信号出现前，"最近运行"对常见的单会话流正确，多会话附着时则为近似。
+**目标会话在宿主侧从事件流跟踪。** `apps/vscode/src/active-session.ts` 跟随 host 流，记住最近运行的会话（最强的“用户在此”信号），回退到它见到的第一个会话，使全新的单会话窗口在任何 turn 运行前就有目标。它把活动会话变化报告给 feed，后者立即注入当前读数。扩展在面板拥有焦点时保留最后一个有效编辑器状态，因此在编辑器采样与会话发现之间打开面板不会清除应注入的文件。会话选择仍是启发式：webview 拥有真正的会话选择，在 webview→host 活动会话信号出现前，“最近运行”对常见的单会话流正确，多会话附着时则为近似。
 
 ## 考虑过的替代方案
 
@@ -25,4 +25,4 @@ Status: implemented
 
 ## 后果
 
-编辑器移动为活动会话喂入 prompt 可指代的有界上下文，既不唤醒模型也不灌满它。采样器（`ide-context.spec.ts`）、防抖/抑制/重试 feed（`context-feed.spec.ts`）与活动会话跟踪器（`active-session.spec.ts`）经注入的编辑器状态、客户端与调度器无密钥覆盖；`extension.ts` 里的 VS Code 编辑器采样器与事件接线按面板与原生 UI 胶水同理，在 `vscode` 模块边界不测。已知近似是多会话附着时的注入目标；README 记录之，修法与原生 diff/jump 触发等待的是同一个 webview→host 信号。有界值（`maxTextChars`、`maxDiagnostics`、游标窗口）在 v1 是 `extension.ts` 里的固定常量；待扩展有设置面后成为设置项。
+编辑器移动为活动会话喂入 prompt 可指代的有界上下文，既不唤醒模型也不灌满它。采样器（`ide-context.spec.ts`）、feed（`context-feed.spec.ts`）与活动会话跟踪器（`active-session.spec.ts`）经注入的编辑器状态、客户端与调度器无密钥覆盖。组装后的 `@vscode/test-electron` 通道在激活构建后的扩展前打开文件，等待会话发现，并在演练原生审批与重启前验证持久上下文注入。已知近似是多会话附着时的注入目标；README 记录之，webview→host 活动会话信号仍是后续细化方向。有界值（`maxTextChars`、`maxDiagnostics`、游标窗口）在 v1 是 `extension.ts` 里的固定常量；待扩展有设置面后成为设置项。

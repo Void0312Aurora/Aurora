@@ -652,12 +652,15 @@
         "webview/main.ts",
         "webview/theme.ts",
         "webview/node-module-stub.ts",
-        "tests/**/*.spec.ts"
+        "tests/**/*.spec.ts",
+        "tests/vscode/fixture-dsh.mjs",
+        "tests/vscode/suite/index.mjs"
       ],
       "project": [
         "src/**/*.ts",
         "webview/**/*.ts",
-        "tests/**/*.ts"
+        "tests/**/*.ts",
+        "tests/vscode/**/*.mjs"
       ]
     },
     "packages/client/modules": {

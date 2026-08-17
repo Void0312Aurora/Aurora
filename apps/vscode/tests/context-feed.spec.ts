@@ -100,6 +100,22 @@ describe('IdeContextFeed', () => {
     expect(injected.map(i => i.sessionId)).toEqual(['s1', 's2'])
   })
 
+  it('samples immediately when a session becomes active, ahead of the debounce', async () => {
+    const state: { session?: string } = {}
+    const { feed, scheduler, injected } = feedWith({
+      editor: () => ({ path: 'already-open.ts', selection: 'const ready = true', range: { start: 1, end: 1 }, diagnostics: [] }),
+      session: () => state.session,
+    })
+    feed.nudge()
+    expect(scheduler.pending()).toBe(true)
+    state.session = 'new-session'
+    await feed.sync()
+    expect(scheduler.pending()).toBe(false)
+    expect(injected).toHaveLength(1)
+    expect(injected[0]?.sessionId).toBe('new-session')
+    expect(injected[0]?.text).toContain('already-open.ts')
+  })
+
   it('injects nothing without an active session or an active editor', async () => {
     const noSession = feedWith({ editor: () => ({ path: 'a.ts', diagnostics: [] }), session: () => undefined })
     noSession.feed.nudge(); noSession.scheduler.tick(); await settle()

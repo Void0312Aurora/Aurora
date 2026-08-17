@@ -4,8 +4,9 @@
  * and answers them over `/api/respond`. It runs beside the webview's own
  * stream — the wire is multi-client, so whichever surface answers first wins
  * and the other's late answer is a harmless `not-pending` receipt. The
- * consumer keeps a `callId → tool view` cache so an approval prompt can show
- * what the call will do (the approval frame itself carries only a tool name).
+ * consumer keeps a `(sessionId, callId) → tool view` cache so an approval
+ * prompt can show what the call will do (the approval frame itself carries
+ * only a tool name).
  */
 
 import type { IApiClient } from '@deepseek-ai/dsh-host-apiproxy/client'
@@ -59,6 +60,11 @@ interface CachedCall {
   view?: ToolCallView
 }
 
+/** Scope a provider call id to the session that owns it. */
+function callKey(sessionId: string, callId: string): string {
+  return `${sessionId}\u0000${callId}`
+}
+
 /**
  * Consume the mux stream and drive native approval/question prompts. Start with
  * {@link run}; stop with {@link dispose}. Reconnection reopens the stream (the
@@ -96,9 +102,24 @@ export class NativeInteractions {
         this.options.log(`mux stream dropped: ${error instanceof Error ? error.message : String(error)}`)
       }
       if (abort.signal.aborted) return
-      // A clean end or a drop both reopen after a short backoff; pending
-      // approval/question frames replay on the fresh open.
+      // A fresh stream replays unresolved requests. Close this generation's
+      // controls before reopening so a replay cannot leave duplicate prompts.
+      this.resetPending()
       await new Promise(resolve => setTimeout(resolve, reconnectMs))
+    }
+  }
+
+  /** Abort and clear every prompt owned by the current stream generation. */
+  private resetPending(): void {
+    for (const controller of this.pending.values()) controller.abort()
+    this.pending.clear()
+  }
+
+  /** Drop cached tool calls after the session's turn settles. */
+  private purgeSessionCalls(sessionId: string): void {
+    const prefix = callKey(sessionId, '')
+    for (const key of this.calls.keys()) {
+      if (key.startsWith(prefix)) this.calls.delete(key)
     }
   }
 
@@ -111,7 +132,9 @@ export class NativeInteractions {
         if (frame.event.type === 'tool/call') {
           const data = frame.event.data as { callId: string; name: string }
           const view = frame.view?.for === 'call' ? frame.view.view : undefined
-          this.calls.set(data.callId, { name: data.name, ...view === undefined ? {} : { view } })
+          this.calls.set(callKey(frame.sessionId, data.callId), { name: data.name, ...view === undefined ? {} : { view } })
+        } else if (frame.event.type === 'turn/end') {
+          this.purgeSessionCalls(frame.sessionId)
         }
         break
       case 'approval/requested':
@@ -142,21 +165,27 @@ export class NativeInteractions {
     correlationId: string,
     frame: Extract<MuxFrame, { type: 'approval/requested' }>,
   ): Promise<void> {
+    if (this.pending.has(correlationId)) return
     const abort = new AbortController()
     this.pending.set(correlationId, abort)
     try {
-      const cached = frame.callId === undefined ? undefined : this.calls.get(frame.callId)
+      const cached = frame.callId === undefined
+        ? undefined
+        : this.calls.get(callKey(frame.sessionId, frame.callId))
+      // A reused call id with a mismatched tool name is not the approval's
+      // call; omit its details instead of presenting the wrong operation.
+      const call = cached?.name === frame.toolName ? cached.view : undefined
       const prompt: ApprovalPrompt = {
         sessionId: frame.sessionId,
         toolName: frame.toolName,
         ...frame.reason === undefined ? {} : { reason: frame.reason },
-        ...cached?.view === undefined ? {} : { call: cached.view },
+        ...call === undefined ? {} : { call },
       }
       const outcome = await this.options.ui.confirmApproval(prompt, abort.signal)
       if (outcome === 'dismissed' || abort.signal.aborted) return
       await this.respond(respondId, { sessionId: frame.sessionId, approvalId: frame.approvalId, outcome })
     } finally {
-      this.pending.delete(correlationId)
+      this.clearPending(correlationId, abort)
     }
   }
 
@@ -165,6 +194,7 @@ export class NativeInteractions {
     frame: Extract<MuxFrame, { type: 'question/requested' }>,
   ): Promise<void> {
     const correlationId = respondId as unknown as string
+    if (this.pending.has(correlationId)) return
     const abort = new AbortController()
     this.pending.set(correlationId, abort)
     try {
@@ -172,8 +202,13 @@ export class NativeInteractions {
       if (answer === undefined || abort.signal.aborted) return
       await this.respond(respondId, { sessionId: frame.sessionId, answer })
     } finally {
-      this.pending.delete(correlationId)
+      this.clearPending(correlationId, abort)
     }
+  }
+
+  /** Remove the entry only when it still owns this exact prompt generation. */
+  private clearPending(correlationId: string, abort: AbortController): void {
+    if (this.pending.get(correlationId) === abort) this.pending.delete(correlationId)
   }
 
   private async respond(rpcId: RpcId, value: unknown): Promise<void> {
@@ -193,7 +228,6 @@ export class NativeInteractions {
   dispose(): void {
     this.stopped = true
     this.streamAbort?.abort()
-    for (const controller of this.pending.values()) controller.abort()
-    this.pending.clear()
+    this.resetPending()
   }
 }

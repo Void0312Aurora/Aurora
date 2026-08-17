@@ -177,4 +177,56 @@ describe('NativeInteractions', () => {
     expect(confirmApproval).toHaveBeenCalledTimes(1)
     native.dispose()
   })
+
+  it('closes this stream generation\'s prompt before a replay opens another', async () => {
+    const fake = fakeClient()
+    const signals: AbortSignal[] = []
+    const ui: NativeUi = {
+      confirmApproval: (_prompt, signal) => new Promise((resolve) => {
+        signals.push(signal)
+        signal.addEventListener('abort', () => { resolve('dismissed') }, { once: true })
+      }),
+      askQuestions: async () => undefined,
+    }
+    const native = new NativeInteractions({ client: fake.client, ui, log: () => {}, reconnectMs: 1 })
+    void native.run()
+    await settle()
+    fake.emit(envelope('req-approve-5', { type: 'approval/requested', sessionId: 's1' as never, approvalId: 'ap5' as never, toolName: 'bash' }))
+    await settle()
+    fake.failStream(new Error('lost'))
+    await new Promise(resolve => setTimeout(resolve, 10))
+    expect(signals[0]?.aborted).toBe(true)
+    fake.emit(envelope('req-approve-5', { type: 'approval/requested', sessionId: 's1' as never, approvalId: 'ap5' as never, toolName: 'bash' }))
+    await settle()
+    expect(signals).toHaveLength(2)
+    native.dispose()
+  })
+
+  it('scopes cached approval details by session and verifies the tool name', async () => {
+    const fake = fakeClient()
+    const prompts: Parameters<NativeUi['confirmApproval']>[0][] = []
+    const ui: NativeUi = {
+      confirmApproval: (prompt) => { prompts.push(prompt); return Promise.resolve('rejected') },
+      askQuestions: async () => undefined,
+    }
+    const native = new NativeInteractions({ client: fake.client, ui, log: () => {} })
+    void native.run()
+    await settle()
+    fake.emit(envelope('event-s1', {
+      type: 'session/event', sessionId: 's1' as never,
+      event: { type: 'tool/call', seq: 1, time: 0, data: { turn: 0, step: 0, callId: 'same', name: 'write', arguments: '{}' } } as never,
+      view: { for: 'call', view: { card: 'diff', title: 'Write s1.ts', diffs: [{ path: 's1.ts', oldText: null, newText: 'x' }] } },
+    }))
+    fake.emit(envelope('event-s2', {
+      type: 'session/event', sessionId: 's2' as never,
+      event: { type: 'tool/call', seq: 1, time: 0, data: { turn: 0, step: 0, callId: 'same', name: 'write', arguments: '{}' } } as never,
+      view: { for: 'call', view: { card: 'diff', title: 'Write s2.ts', diffs: [{ path: 's2.ts', oldText: null, newText: 'y' }] } },
+    }))
+    fake.emit(envelope('approval-s1', { type: 'approval/requested', sessionId: 's1' as never, approvalId: 'ap-s1' as never, toolName: 'write', callId: 'same' as never }))
+    fake.emit(envelope('approval-mismatch', { type: 'approval/requested', sessionId: 's2' as never, approvalId: 'ap-s2' as never, toolName: 'bash', callId: 'same' as never }))
+    await settle()
+    expect(prompts[0]?.call).toMatchObject({ title: 'Write s1.ts' })
+    expect(prompts[1]?.call).toBeUndefined()
+    native.dispose()
+  })
 })

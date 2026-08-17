@@ -52,7 +52,12 @@ async function settle(): Promise<void> {
 describe('ActiveSessionTracker', () => {
   it('adopts the first added session and prefers a running flip', async () => {
     const fake = fakeHostStream()
-    const tracker = new ActiveSessionTracker({ client: fake.client, log: () => {} })
+    const changes: Array<[string | undefined, string | undefined]> = []
+    const tracker = new ActiveSessionTracker({
+      client: fake.client,
+      log: () => {},
+      onActiveChanged: (previous, current) => { changes.push([previous, current]) },
+    })
     void tracker.run()
     await settle()
     expect(tracker.active()).toBeUndefined()
@@ -68,6 +73,7 @@ describe('ActiveSessionTracker', () => {
     fake.emit({ type: 'host/session-status', sessionId: 's2' as never, running: true })
     await settle()
     expect(tracker.active()).toBe('s2')
+    expect(changes).toEqual([[undefined, 's1'], ['s1', 's2']])
     tracker.dispose()
   })
 
