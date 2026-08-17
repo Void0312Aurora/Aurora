@@ -50,11 +50,11 @@ The `subagent.*` domain addresses direct children by `{parentSessionId, childSes
 
 ## Model Experience
 
-None, as the package defines the client↔host wire contract and carriers; nothing here reaches a model request.
+None, as the package does not itself assemble a provider request; `session.injectContext` instead appends IDE-provided content as a durable sourced user message without starting a turn, and the next admitted model step reconstructs that message before the user's prompt while the other methods remain transport and control-plane operations.
 
 #### KV Cache effect
 
-None; this package neither assembles nor sends a provider request.
+An injected context message changes the next request prefix from that message onward and can reduce KV cache reuse. The package does not otherwise assemble or send provider requests.
 
 ## Known Limitations and Deferred Work
 
