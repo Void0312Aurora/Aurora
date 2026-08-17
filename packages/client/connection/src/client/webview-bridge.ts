@@ -63,66 +63,121 @@ function headersRecord(init: HeadersInit | undefined): Record<string, string> {
   return record
 }
 
+let nextBridgeRequestId = 1
+
+/** Allocate one correlation id across every client in this browser module instance. */
+function allocateBridgeRequestId(): number {
+  if (!Number.isSafeInteger(nextBridgeRequestId)) {
+    throw new Error('webview bridge: request id space exhausted')
+  }
+  return nextBridgeRequestId++
+}
+
 /**
  * Webview platform subclass: transport = the embedder postMessage port. The
  * response body is rebuilt as a ReadableStream fed by bridge chunks, so the
  * base client's unary JSON reads and SSE frame decoding work unchanged.
  */
 export class PostMessageApiClient extends AbstractApiClient {
-  private nextRequestId = 1
-
   /** @param port - the embedder messaging face the bootstrap adapted. */
   constructor(private readonly port: WebviewBridgePort) {
     super()
   }
 
   protected doFetch(input: URL, init?: RequestInit): Promise<Response> {
-    const id = this.nextRequestId++
+    const id = allocateBridgeRequestId()
     const signal = init?.signal ?? undefined
     return new Promise<Response>((resolve, reject) => {
       const encoder = new TextEncoder()
       let bodyController: ReadableStreamDefaultController<Uint8Array> | undefined
-      let settled = false
-      // Callers guard on `settled` before invoking: after the head, failures
-      // route to the body stream, never back to the fetch promise.
-      const finish = (): void => { unsubscribe() }
-      const failBeforeHead = (error: Error): void => {
-        settled = true
-        finish()
-        reject(error)
+      const lifecycle = {
+        headReceived: false,
+        requestPosted: false,
+        abortRequested: false,
+        abortPosted: false,
+        terminal: false,
       }
-      const unsubscribe = this.port.onMessage((message) => {
-        if (message.id !== id) return
+      let unsubscribe = (): void => {}
+      let onAbort = (): void => {}
+      const cleanup = (): void => {
+        if (lifecycle.terminal) return
+        lifecycle.terminal = true
+        unsubscribe()
+        signal?.removeEventListener('abort', onAbort)
+      }
+      const abortUpstream = (): void => {
+        if (!lifecycle.requestPosted || lifecycle.abortPosted) return
+        lifecycle.abortPosted = true
+        try {
+          this.port.postMessage({ type: 'dsh-fetch-abort', id })
+        } catch {
+          // The local request is already terminal; the port offers no other
+          // recovery channel when abort delivery itself fails.
+        }
+      }
+      const requestUpstreamAbort = (): void => {
+        lifecycle.abortRequested = true
+        abortUpstream()
+      }
+      const fail = (error: Error): void => {
+        if (lifecycle.terminal) return
+        if (lifecycle.headReceived) bodyController?.error(error)
+        else reject(error)
+        cleanup()
+      }
+      onAbort = (): void => {
+        requestUpstreamAbort()
+        fail(new DOMException('The operation was aborted.', 'AbortError'))
+      }
+      const subscribed = this.port.onMessage((message) => {
+        if (message.id !== id || lifecycle.terminal) return
         switch (message.type) {
           case 'dsh-fetch-head': {
-            settled = true
+            if (lifecycle.headReceived) {
+              requestUpstreamAbort()
+              fail(new Error('webview bridge: duplicate response head'))
+              return
+            }
+            lifecycle.headReceived = true
             const stream = new ReadableStream<Uint8Array>({
               start: (controller) => { bodyController = controller },
+              cancel: () => {
+                requestUpstreamAbort()
+                cleanup()
+              },
             })
             resolve(new Response(stream, { status: message.status }))
             break
           }
-          case 'dsh-fetch-chunk':
+          case 'dsh-fetch-chunk': {
+            if (!lifecycle.headReceived) {
+              requestUpstreamAbort()
+              fail(new Error('webview bridge: response chunk preceded response head'))
+              return
+            }
             bodyController?.enqueue(encoder.encode(message.chunk))
             break
-          case 'dsh-fetch-end':
+          }
+          case 'dsh-fetch-end': {
+            if (!lifecycle.headReceived) {
+              requestUpstreamAbort()
+              fail(new Error('webview bridge: response end preceded response head'))
+              return
+            }
             bodyController?.close()
-            finish()
+            cleanup()
             break
+          }
           case 'dsh-fetch-error': {
-            const error = new Error(message.message)
-            if (settled) bodyController?.error(error)
-            else failBeforeHead(error)
-            finish()
+            fail(new Error(message.message))
             break
           }
         }
       })
-      const onAbort = (): void => {
-        this.port.postMessage({ type: 'dsh-fetch-abort', id })
-        const error = new DOMException('The operation was aborted.', 'AbortError')
-        if (settled) bodyController?.error(error)
-        else failBeforeHead(error)
+      unsubscribe = subscribed
+      if (lifecycle.terminal) {
+        unsubscribe()
+        return
       }
       if (signal !== undefined) {
         if (signal.aborted) {
@@ -131,14 +186,20 @@ export class PostMessageApiClient extends AbstractApiClient {
         }
         signal.addEventListener('abort', onAbort, { once: true })
       }
-      this.port.postMessage({
-        type: 'dsh-fetch',
-        id,
-        path: input.pathname + input.search,
-        method: init?.method ?? 'GET',
-        headers: headersRecord(init?.headers),
-        ...typeof init?.body === 'string' ? { body: init.body } : {},
-      })
+      try {
+        this.port.postMessage({
+          type: 'dsh-fetch',
+          id,
+          path: input.pathname + input.search,
+          method: init?.method ?? 'GET',
+          headers: headersRecord(init?.headers),
+          ...typeof init?.body === 'string' ? { body: init.body } : {},
+        })
+        lifecycle.requestPosted = true
+        if (lifecycle.abortRequested) abortUpstream()
+      } catch (error) {
+        fail(error instanceof Error ? error : new Error(String(error)))
+      }
     })
   }
 }

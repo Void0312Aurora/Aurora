@@ -88,14 +88,35 @@ it('boots the built plugin graph and renders a fixture session end to end', asyn
   const root = document.createElement('div')
   root.id = 'root'
   document.body.appendChild(root)
-  win.__DSH_BOOT__ = { rev: 'fx', entries: PLUGINS.map(({ dir: _dir, ...plugin }) => plugin) }
+  const staticId = '@deepseek-ai/dsh-client-static-probe'
+  const staticUrl = '/plugins/static-probe.js'
+  let staticActivations = 0
+  const fetchedUrls: string[] = []
+  const executedUrls: string[] = []
+  win.__DSH_BOOT__ = {
+    rev: 'fx',
+    entries: [
+      ...PLUGINS.map(({ dir: _dir, ...plugin }) => plugin),
+      { id: staticId, url: staticUrl, rev: 'static', inject: [], immediately: true },
+    ],
+  }
   act(() => {
     const entry = new AppWebEntry(root, {
       fetchBundle: (url) => {
+        fetchedUrls.push(url)
         const code = bundles.get(url)
         return code === undefined ? Promise.reject(new Error(`missing built bundle ${url}`)) : Promise.resolve(code)
       },
-      executeBundle: (code) => { (0, eval)(code) },
+      executeBundle: (code, url) => {
+        executedUrls.push(url)
+        ;(0, eval)(code)
+      },
+      staticPlugins: {
+        [staticId]: {
+          name: 'static-probe',
+          apply: () => { staticActivations += 1 },
+        },
+      },
     })
     void entry.run()
     unmount = () => { entry.dispose() }
@@ -104,6 +125,9 @@ it('boots the built plugin graph and renders a fixture session end to end', asyn
   // The sidebar renders from the boot graph: every inject layer activated.
   const tree = await screen.findByRole('tree', { name: 'Sessions' }, { timeout: 10_000 })
   await within(tree).findByText('4 sessions')
+  expect(staticActivations).toBe(1)
+  expect(fetchedUrls).not.toContain(staticUrl)
+  expect(executedUrls).not.toContain(staticUrl)
 
   // The resident approval fixture proves the assembled workspace plugin
   // distinguishes a blocked running session from an ordinarily busy one.

@@ -57,8 +57,8 @@ export type BootOptions = BootSeams & {
    * (embedder webviews whose CSP or origin cannot fetch bundles from the
    * server). Keys are manifest row ids; each registers through the module
    * system's statics table, so import resolves without any fetch/execute
-   * round and `prefetch` short-circuits. The shell-own app-shell and modules
-   * ids stay kernel-owned and must not appear here.
+   * round and `prefetch` short-circuits. Unknown rows and the kernel-owned
+   * app-shell/modules ids are rejected before boot creates any runtime state.
    */
   staticPlugins?: Record<string, unknown>
 }
@@ -105,13 +105,22 @@ export class AppWebEntry {
    * Run the boot chain to settlement. Boot-chain failures resolve (not
    * reject): the loading page stays up and renders the failure report (the
    * fail-loud surface the kernel owns). Rejects only when the boot manifest
-   * is missing or malformed — there is nothing to boot against.
+   * or static plugin table is malformed — there is nothing to boot against.
    * @returns resolves once the UI settled or the failure report rendered.
    */
   async run(): Promise<void> {
     this.manifest = parseBootManifest((globalThis as DshWindow).__DSH_BOOT__)
 
     const { staticPlugins, ...seams } = this.options ?? {}
+    const graphIds = new Set(this.manifest.plugins.map(row => row.id))
+    for (const id of Object.keys(staticPlugins ?? {})) {
+      if (id === MODULES_ID || id === APP_SHELL_ID) {
+        throw new Error(`web boot: static plugin "${id}" is kernel-owned`)
+      }
+      if (!graphIds.has(id)) {
+        throw new Error(`web boot: static plugin "${id}" is not a boot-manifest row`)
+      }
+    }
     this.modules = new ClientModuleSystem({
       modules: this.manifest.modules, staticModules: getStaticModules(), ...seams,
     })
