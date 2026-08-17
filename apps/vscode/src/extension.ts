@@ -2,19 +2,20 @@
  * VS Code activation entry for the DeepSeek Harness rich-UI panel: one
  * managed `dsh web` per window, one webview panel hosting the full dsh
  * client stack, and the postMessage↔fetch bridge between them. Editor-side
- * integrations (native approvals, diff, context injection) attach here as
- * they land; the panel itself is pure GUI hosting.
+ * integrations for native approvals, questions, and context injection are
+ * coordinated from this entry; the panel itself is pure GUI hosting.
  */
 
 import * as vscode from 'vscode'
 import type { BridgeRequestMessage } from '@deepseek-ai/dsh-client-connection/client'
-import type { AskUserQuestionAnswer, AskUserQuestionItem } from '@deepseek-ai/dsh-user-interaction/types'
 import { ActiveSessionTracker } from './active-session.ts'
 import { ApiBridge } from './bridge.ts'
 import { IdeContextFeed } from './context-feed.ts'
 import { LoopbackApiClient } from './host-client.ts'
 import type { EditorState, IdeDiagnostic } from './ide-context.ts'
-import { NativeInteractions, type ApprovalPrompt, type NativeUi } from './interactions.ts'
+import { NativeInteractions } from './interactions.ts'
+import { RuntimeLifecycle } from './lifecycle.ts'
+import { createNativeUi } from './native-ui.ts'
 import { panelHtml, WEBVIEW_DIST } from './panel.ts'
 import { ServerRuntime } from './runtime.ts'
 
@@ -23,6 +24,8 @@ let tracker: ActiveSessionTracker | undefined
 let feed: IdeContextFeed | undefined
 /** Editor-event subscriptions owned by the context feed; cleared on teardown. */
 let feedSubscriptions: vscode.Disposable[] = []
+/** Last valid editor reading, retained while the webview owns window focus. */
+let retainedEditorState: EditorState = { diagnostics: [] }
 
 /** Lines of file text sampled around the cursor when there is no selection. */
 const CURSOR_WINDOW_LINES = 24
@@ -39,7 +42,7 @@ function panelAssets(webview: vscode.Webview, extensionUri: vscode.Uri): Paramet
   }
 }
 
-let runtime: ServerRuntime | undefined
+let lifecycle: RuntimeLifecycle | undefined
 let panel: vscode.WebviewPanel | undefined
 
 /** Working directory for the managed server: the window's first workspace folder. */
@@ -47,61 +50,17 @@ function workspaceCwd(): string | undefined {
   return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
 }
 
-/** Render a cached tool call as a one-line "what this will do" hint for an approval. */
-function approvalDetail(prompt: ApprovalPrompt): string {
-  const call = prompt.call
-  const what = call === undefined ? prompt.toolName : call.title
-  return prompt.reason === undefined ? what : `${what}\n\n${prompt.reason}`
+/** Current managed-server origin; every consumer resolves it per operation. */
+function currentOrigin(): URL | undefined {
+  return lifecycle?.origin()
 }
 
-/** The vscode-backed native prompt surfaces (non-modal notifications + QuickPick). */
-function nativeUi(): NativeUi {
-  return {
-    confirmApproval: async (prompt) => {
-      // Non-modal: a resolved-elsewhere frame simply supersedes it, and a late
-      // click answers a no-longer-pending request (harmless not-pending receipt).
-      const choice = await vscode.window.showInformationMessage(
-        `DeepSeek Harness wants to run ${prompt.toolName}`,
-        { detail: approvalDetail(prompt), modal: false },
-        'Allow', 'Reject',
-      )
-      return choice === 'Allow' ? 'allowed-once' : choice === 'Reject' ? 'rejected' : 'dismissed'
-    },
-    askQuestions: async items => askQuestionsNatively(items),
-  }
-}
-
-/** Drive one ask() batch through sequential QuickPicks; undefined leaves it for the webview. */
-async function askQuestionsNatively(items: AskUserQuestionItem[]): Promise<AskUserQuestionAnswer | undefined> {
-  const answers: AskUserQuestionAnswer['answers'] = []
-  for (const item of items) {
-    const options = item.options ?? []
-    if (options.length === 0) {
-      // A free-text question: an input box carries the custom answer.
-      const custom = await vscode.window.showInputBox({
-        prompt: item.question,
-        ...item.detail === undefined ? {} : { placeHolder: item.detail },
-      })
-      if (custom === undefined) return undefined
-      answers.push({ id: item.id, selected: [], custom })
-      continue
-    }
-    const picked = await vscode.window.showQuickPick(
-      options.map(option => option.label),
-      { title: item.question, canPickMany: item.multiSelect ?? false, ...item.detail === undefined ? {} : { placeHolder: item.detail } },
-    )
-    if (picked === undefined) return undefined
-    answers.push({ id: item.id, selected: Array.isArray(picked) ? picked : [picked] })
-  }
-  return { answers }
-}
-
-function ensureInteractions(server: ServerRuntime, output: vscode.OutputChannel): void {
+function ensureInteractions(output: vscode.OutputChannel): void {
   if (interactions !== undefined) return
-  const client = new LoopbackApiClient(() => server.url)
+  const client = new LoopbackApiClient(currentOrigin)
   const native = new NativeInteractions({
     client,
-    ui: nativeUi(),
+    ui: createNativeUi(vscode.window),
     log: (line) => { output.appendLine(`[native] ${line}`) },
   })
   interactions = native
@@ -146,25 +105,58 @@ function sampleActiveEditor(): EditorState {
   }
 }
 
-function ensureContextFeed(server: ServerRuntime, output: vscode.OutputChannel): void {
+/** Refresh the retained reading when VS Code currently exposes an editor. */
+function retainActiveEditor(): void {
+  const sampled = sampleActiveEditor()
+  if (sampled.path !== undefined) {
+    retainedEditorState = sampled
+  } else if (panel?.active !== true) {
+    retainedEditorState = { diagnostics: [] }
+  }
+}
+
+/** Read the current editor, or the last valid reading while the panel has focus. */
+function readEditorState(): EditorState {
+  retainActiveEditor()
+  return retainedEditorState
+}
+
+function ensureContextFeed(output: vscode.OutputChannel): void {
   if (feed !== undefined) return
-  const client = new LoopbackApiClient(() => server.url)
-  const sessions = new ActiveSessionTracker({ client, log: (line) => { output.appendLine(`[active-session] ${line}`) } })
-  tracker = sessions
-  void sessions.run()
+  const client = new LoopbackApiClient(currentOrigin)
   const contextFeed = new IdeContextFeed({
     client,
-    readEditorState: sampleActiveEditor,
-    activeSession: () => sessions.active(),
+    readEditorState,
+    activeSession: () => tracker?.active(),
     limits: SAMPLE_LIMITS,
     log: (line) => { output.appendLine(`[ide-context] ${line}`) },
   })
   feed = contextFeed
+  const sessions = new ActiveSessionTracker({
+    client,
+    log: (line) => { output.appendLine(`[active-session] ${line}`) },
+    onActiveChanged: (previous, current) => {
+      if (current === undefined && previous !== undefined) contextFeed.forget(previous)
+      if (current !== undefined) {
+        void contextFeed.sync().catch((error: unknown) => {
+          output.appendLine(`[ide-context] immediate sample failed: ${error instanceof Error ? error.message : String(error)}`)
+        })
+      }
+    },
+  })
+  tracker = sessions
+  void sessions.run()
   // Editor movements nudge the debounced feed; the debounce collapses bursts.
   feedSubscriptions = [
-    vscode.window.onDidChangeActiveTextEditor(() => { contextFeed.nudge() }),
-    vscode.window.onDidChangeTextEditorSelection(() => { contextFeed.nudge() }),
-    vscode.languages.onDidChangeDiagnostics(() => { contextFeed.nudge() }),
+    vscode.window.onDidChangeActiveTextEditor(() => { retainActiveEditor(); contextFeed.nudge() }),
+    vscode.window.onDidChangeTextEditorSelection(() => { retainActiveEditor(); contextFeed.nudge() }),
+    vscode.workspace.onDidChangeTextDocument((event) => {
+      if (event.document === vscode.window.activeTextEditor?.document) {
+        retainActiveEditor()
+        contextFeed.nudge()
+      }
+    }),
+    vscode.languages.onDidChangeDiagnostics(() => { retainActiveEditor(); contextFeed.nudge() }),
   ]
 }
 
@@ -178,33 +170,52 @@ function disposeContextFeed(): void {
   tracker = undefined
 }
 
-function ensureRuntime(context: vscode.ExtensionContext, output: vscode.OutputChannel): ServerRuntime {
-  const cwd = workspaceCwd()
-  runtime ??= new ServerRuntime({
-    appDir: context.extensionUri.fsPath,
-    ...cwd === undefined ? {} : { cwd },
-    env: process.env,
-    log: (line) => { output.appendLine(line) },
-    onExit: () => {
-      void vscode.window.showWarningMessage('dsh web exited; the panel will reconnect when it is started again.')
+/** Tear down both native consumers before their server generation. */
+function disposeNativeLayer(): void {
+  interactions?.dispose()
+  interactions = undefined
+  disposeContextFeed()
+}
+
+/** Build the one runtime-generation owner used by panel and restart commands. */
+function ensureLifecycle(context: vscode.ExtensionContext, output: vscode.OutputChannel): RuntimeLifecycle {
+  lifecycle ??= new RuntimeLifecycle({
+    createRuntime: () => {
+      const cwd = workspaceCwd()
+      return new ServerRuntime({
+        appDir: context.extensionUri.fsPath,
+        ...cwd === undefined ? {} : { cwd },
+        env: process.env,
+        log: (line) => { output.appendLine(line) },
+        onExit: () => {
+          void vscode.window.showWarningMessage('dsh web exited; the panel will reconnect when it is started again.')
+        },
+      })
+    },
+    startNative: () => {
+      ensureInteractions(output)
+      ensureContextFeed(output)
+    },
+    stopNative: disposeNativeLayer,
+    onStartFailure: (error) => {
+      const message = error instanceof Error ? error.message : String(error)
+      output.appendLine(`dsh web failed to start: ${message}`)
+      void vscode.window.showErrorMessage(`DeepSeek Harness: dsh web failed to start — ${message}`)
     },
   })
-  return runtime
+  return lifecycle
 }
 
 function openPanel(context: vscode.ExtensionContext, output: vscode.OutputChannel): void {
+  // Capture the editor before revealing/creating the webview moves focus away
+  // from it; a session-added frame can then inject this reading immediately.
+  retainActiveEditor()
+  const owner = ensureLifecycle(context, output)
+  owner.start()
   if (panel !== undefined) {
     panel.reveal()
     return
   }
-  const server = ensureRuntime(context, output)
-  server.start().catch((error: unknown) => {
-    const message = error instanceof Error ? error.message : String(error)
-    output.appendLine(`dsh web failed to start: ${message}`)
-    void vscode.window.showErrorMessage(`DeepSeek Harness: dsh web failed to start — ${message}`)
-  })
-  ensureInteractions(server, output)
-  ensureContextFeed(server, output)
 
   const created = vscode.window.createWebviewPanel(
     'dshPanel',
@@ -220,7 +231,7 @@ function openPanel(context: vscode.ExtensionContext, output: vscode.OutputChanne
   )
   panel = created
   const bridge = new ApiBridge({
-    origin: () => server.url,
+    origin: owner.origin,
     post: (message) => { void created.webview.postMessage(message) },
   })
   created.webview.html = panelHtml(panelAssets(created.webview, context.extensionUri))
@@ -244,27 +255,18 @@ export function activate(context: vscode.ExtensionContext): void {
     output,
     vscode.commands.registerCommand('dsh.openPanel', () => { openPanel(context, output) }),
     vscode.commands.registerCommand('dsh.restartServer', async () => {
-      interactions?.dispose()
-      interactions = undefined
-      disposeContextFeed()
-      await runtime?.dispose()
-      runtime = undefined
-      openPanel(context, output)
+      await ensureLifecycle(context, output).restart()
+      panel?.reveal()
     }),
     { dispose: () => {
-      interactions?.dispose()
-      disposeContextFeed()
-      void runtime?.dispose()
+      void lifecycle?.dispose()
     } },
   )
 }
 
 /** Await server teardown when the extension host deactivates. */
 export async function deactivate(): Promise<void> {
-  interactions?.dispose()
-  interactions = undefined
-  disposeContextFeed()
-  const current = runtime
-  runtime = undefined
+  const current = lifecycle
+  lifecycle = undefined
   await current?.dispose()
 }

@@ -58,6 +58,17 @@ export class IdeContextFeed {
     }, this.options.debounceMs ?? 400)
   }
 
+  /**
+   * Sample immediately after the target session changes. This cancels a
+   * pending editor debounce so the current reading is admitted before the
+   * user's first prompt in that session can be assembled.
+   */
+  async sync(): Promise<void> {
+    this.pending?.cancel()
+    this.pending = undefined
+    await this.flush()
+  }
+
   private async flush(): Promise<void> {
     const sessionId = this.options.activeSession()
     if (sessionId === undefined) return

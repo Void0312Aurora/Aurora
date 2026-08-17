@@ -16,6 +16,8 @@ export interface ActiveSessionOptions {
   client: Pick<IApiClient, 'events'>
   /** Diagnostic line sink. */
   log: (line: string) => void
+  /** Called synchronously after the active session id changes. */
+  onActiveChanged?: (previous: string | undefined, current: string | undefined) => void
   /** Backoff before reopening a dropped stream; test seam. Defaults to 1000ms. */
   reconnectMs?: number
 }
@@ -35,6 +37,14 @@ export class ActiveSessionTracker {
   /** The current active session id, or undefined when none is known. */
   active(): string | undefined {
     return this.activeId
+  }
+
+  /** Publish an active-id change once, after updating the readable value. */
+  private setActive(next: string | undefined): void {
+    const previous = this.activeId
+    if (previous === next) return
+    this.activeId = next
+    this.options.onActiveChanged?.(previous, next)
   }
 
   /** Run the host-stream consume/reconnect loop until {@link dispose}. */
@@ -61,15 +71,15 @@ export class ActiveSessionTracker {
     switch (frame.type) {
       case 'host/session-status':
         // A session going running is the strongest "user is here" signal.
-        if (frame.running) this.activeId = frame.sessionId
+        if (frame.running) this.setActive(frame.sessionId)
         break
       case 'host/session-added':
         // Adopt the first session seen so a fresh single-session window has a
         // target before any turn runs; a later running flip refines it.
-        this.activeId ??= frame.sessionId
+        if (this.activeId === undefined) this.setActive(frame.sessionId)
         break
       case 'host/session-removed':
-        if (this.activeId === frame.sessionId) this.activeId = undefined
+        if (this.activeId === frame.sessionId) this.setActive(undefined)
         break
       default:
         // Workspace, settings, model, and error frames do not move the cursor.

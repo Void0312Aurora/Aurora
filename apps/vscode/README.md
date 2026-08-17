@@ -24,16 +24,16 @@ through the shared [`@deepseek-ai/dsh-web-launcher`](../../packages/util/web-lau
 
 ## Native interactions
 
-Beside the webview, the extension host opens its own mux stream (a plain loopback wire client — the extension host is not a browser, so it passes the `/api` trust fence directly) and surfaces the agent's **approval** and **question** requests as editor-native prompts: a notification with Allow/Reject for approvals, a QuickPick or input box for questions. An approval prompt is enriched with what the call will do, taken from a cached `tool/call` view. Because the wire is multi-client, this runs alongside the webview's in-panel prompts: whichever surface answers first wins, and the other's late answer is a harmless no-op. A prompt still open when the request resolves elsewhere closes itself.
+Beside the webview, the extension host opens its own mux stream (a plain loopback wire client — the extension host is not a browser, so it passes the `/api` trust fence directly) and surfaces the agent's **approval** and **question** requests as cancellable editor-native prompts: a QuickPick with Allow/Reject for approvals, and a QuickPick or input box for questions. An approval prompt is enriched with what the call will do from a cached `tool/call` view scoped by session, call id, and tool name. Because the wire is multi-client, this runs alongside the webview's in-panel prompts: whichever surface answers first wins, and a prompt still open when the request resolves elsewhere closes without sending a late answer.
 
 ## Editor context injection
 
-The extension feeds the model your editor context so a prompt can refer to "this file" without pasting. On editor changes (active file, selection, diagnostics) a debounced sampler builds a bounded reading — the active file and range, the selection or a cursor window, and error/warning diagnostics — and injects it into the active session over `session.injectContext`, the no-wakeup wire method (it stages for the session's next step and never starts a turn on its own). A reading whose signature matches the last one sent is suppressed, so idle cursor jitter injects nothing. The target session is tracked from the host stream (the most recently running session, else the first one seen); precise "the session the user is viewing" selection awaits a webview→host signal.
+The extension feeds the model your editor context so a prompt can refer to "this file" without pasting. On editor changes (active file, text, selection, diagnostics) a debounced sampler builds a bounded reading — the active file and range, the selection or a cursor window, and error/warning diagnostics — and injects it into the active session over `session.injectContext`, the no-wakeup wire method (it stages for the session's next step and never starts a turn on its own). A reading whose signature matches the last one sent is suppressed. When a session becomes active, the sampler injects immediately; it retains the last valid editor reading while the panel owns focus, so opening the panel does not lose the pre-existing file. The target session is tracked from the host stream (the most recently running session, else the first one seen); precise "the session the user is viewing" selection awaits a webview→host signal.
 
 ## Commands
 
 - **DeepSeek Harness: Open Panel** — start the server (if needed) and reveal the GUI panel beside the editor.
-- **DeepSeek Harness: Restart Server** — tree-kill and relaunch the managed server, then reopen the panel.
+- **DeepSeek Harness: Restart Server** — tree-kill and relaunch the managed server while retaining the panel; its bridge and native clients resolve the replacement origin dynamically.
 
 ## Windows
 
@@ -47,30 +47,14 @@ pnpm --filter @deepseek-ai/dsh-vscode run build:host  # extension host only
 pnpm --filter @deepseek-ai/dsh-vscode run build:webview
 ```
 
-The host build emits one self-contained `dist/extension.js` (workspace runtime imports inlined; only the VS Code API stays external). The webview build emits `dist/webview/webview.js` + `webview.css`, served through `asWebviewUri`.
-
-## Package (self-contained vsix)
-
-```sh
-pnpm --filter @deepseek-ai/dsh-vscode run deploy:closure   # materialize the dsh web server closure into deploy/
-DSH_VSIX_TARGET=win32-x64 pnpm --filter @deepseek-ai/dsh-vscode run package
-```
-
-`package` runs the full repo build, materializes `deploy/` (the `dsh-vscode-closure` dependency-only deploy root — the same self-contained `dsh web` bundle the desktop shell ships), builds the extension, and runs `vsce package --no-dependencies` for one platform target. The vsix carries `dist/`, `deploy/`, and `media/` only (see [.vscodeignore](.vscodeignore)); no `node_modules`.
-
-The packaged extension needs no Node, no `dsh`, and no checkout: the launcher's embedded-closure branch runs the bundled CLI under **VS Code's own Electron as Node** (`ELECTRON_RUN_AS_NODE=1` with `--expose-internals`, exactly the desktop shell's mechanism, with `process.execPath` being the extension host's Electron). The closure's native addons (node-pty, koffi) are N-API and need no rebuild.
-
-Because the closure carries platform-native addons, the vsix is **per-platform** (`vsce package --target <target>`); a CI matrix packs one per `win32-x64`, `linux-x64`, `darwin-x64`, `darwin-arm64`, etc. A dev checkout without `deploy/` falls through to the checkout's built CLI or `dsh` on PATH, so `pnpm --filter @deepseek-ai/dsh-vscode run build` + an Extension Development Host works without packaging.
+The host build emits one self-contained `dist/extension.js` (workspace runtime imports inlined; only the VS Code API and Node built-ins stay external). The webview build emits `dist/webview/webview.js` + `webview.css`, served through `asWebviewUri`.
 
 ## Tests
 
-`tests/` covers the pure extension-host logic keyless: the launch/readiness/teardown lifecycle over an injected spawn (`runtime.spec.ts`), the postMessage↔fetch relay (`bridge.spec.ts`), the panel HTML/CSP (`panel.spec.ts`), and the static roster's parity with the shipped web config (`roster.spec.ts`). The webview boot and the assembled panel are exercised end-to-end by the extension's own `@vscode/test-electron` lane (landing with the editor-integration phases).
+`tests/` covers the extension-host logic keyless: process transactions (`runtime.spec.ts`), restart/origin rebinding (`lifecycle.spec.ts`), the postMessage↔fetch relay (`bridge.spec.ts`), cancellable native controls (`native-ui.spec.ts`), context targeting, panel HTML/CSP, and static-roster parity. `pnpm run test:vscode:electron` launches the built `dist/extension.js` in an isolated Extension Development Host, opens the assembled panel against a deterministic local server, verifies that an already-open editor is injected, answers a native approval, restarts the server, and compares the user-visible outcome snapshot.
 
 ## Known Limitations and Deferred Work
 
-- **Native diff-editor and jump-to-location have foundations but no trigger yet** — [`src/locations.ts`](src/locations.ts) resolves a tool view's model-facing paths into absolute editor targets and reconstructs whole-file diff panes (reading disk for an edit's left pane), but opening a native `vscode.diff` or revealing a location needs a client-side "open in editor" signal from a tool card, which is a client-plugin change deferred to a dedicated UI phase.
 - **Context injection targets a heuristic session** — the active session is tracked host-side (last running, else first seen); when several sessions are attached, injection may target a different one than the panel is showing until a webview→host active-session signal exists.
 - **Native approval prompts coexist with the in-panel ones** — both surfaces show every approval/question; v1 does not suppress either. A per-window toggle is deferred to when the extension grows a settings surface.
-- **Self-contained packaging assumes VS Code's Node is in the harness engine range** — the embedded closure runs under VS Code's Electron-as-Node, which must satisfy the harness `node ^22.19 || >=24` range. A VS Code build shipping an out-of-range Node needs a PATH-based vsix (no `deploy/`, relying on an installed `dsh`) instead; confirming the range for the targeted VS Code versions is a release gate.
-- **The vsix is signed/published separately** — `package` produces an unsigned vsix per platform; marketplace signing and publish (`vsce publish`) are a release step, and `keytar`/`vsce-sign` native builds are denied for local packaging.
 - **One panel per window** — the extension hosts a single GUI panel; multiple simultaneous panels are not supported.

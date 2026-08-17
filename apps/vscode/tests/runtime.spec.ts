@@ -96,6 +96,34 @@ describe('ServerRuntime', () => {
     expect(spawn).toHaveBeenCalledTimes(2)
   })
 
+  it('kills a failed live startup generation before a retry can replace it', async () => {
+    const child = new FakeChild()
+    Object.defineProperty(child, 'stdout', { value: null })
+    const order: string[] = []
+    const { runtime, spawn } = runtimeWith(child, {
+      killTree: async (pid) => { order.push(`kill:${String(pid)}`) },
+    })
+    spawn.mockImplementation(() => {
+      order.push('spawn')
+      return child
+    })
+
+    const failing = runtime.start()
+    await expect(failing).rejects.toThrow(/without its stdout\/stderr pipes/)
+    expect(order).toEqual(['spawn', 'kill:4321'])
+
+    const child2 = new FakeChild()
+    child2.pid = 5432
+    spawn.mockImplementation(() => {
+      order.push('spawn')
+      return child2
+    })
+    const retry = runtime.start()
+    child2.ready(6001)
+    expect((await retry).href).toBe('http://127.0.0.1:6001/')
+    expect(order).toEqual(['spawn', 'kill:4321', 'spawn'])
+  })
+
   it('fires onExit when a started server exits on its own', async () => {
     const child = new FakeChild()
     const exits: Array<[number | null, NodeJS.Signals | null]> = []
