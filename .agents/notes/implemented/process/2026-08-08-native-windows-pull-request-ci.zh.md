@@ -14,7 +14,7 @@ Status: implemented
 
 [ci.yml](../../../../.github/workflows/ci.yml) 中必需的 `windows` 作业仍是在 `ubuntu-latest` 上运行的 `windows node 24 / wine blocking`。它保留经过校验和验证的 Windows Node、Wine apt 与 pnpm 缓存、仅限工作区快照的 hoisted 安装，以及运行工作区构建与生产网站的[共享 Wine 门禁脚本](../../../../scripts/wine-windows-gates.sh)。Node 分发文件传输采用有界重试；nodejs.org 的大文件传输停滞时，由支持范围请求的传输镜像续传相同字节，但版本和 SHA-256 权威仍属于 nodejs.org，归档通过该校验前绝不会投入使用。稳定的 `windows` 作业 ID 仍是 `all checks passed` 的依赖项。[已归档的 Wine 实验](../../archived/process/2026-07-27-wine-windows-gates-experiment.md)保留其实测取舍，而本文负责当前双通道拓扑。
 
-每个拉取请求还会在组织自有的 `dsh-windows-2025-16core` 运行器上启动一个常规且独立的 `windows-native` 作业，名称为 `windows node 24 / native complete`。该作业为工作区符号链接启用开发人员模式，通过 `pnpm/action-setup` 提供仓库固定版本的 pnpm，在不传输 store 归档的情况下执行不可变安装，并在原生 PowerShell 下运行 `pnpm run check:ci:windows-complete`。门禁卡住时，60 分钟超时会为其设定上限，同时不把实测性能目标当作正确性截止时间。
+每个拉取请求还会启动一个名为 `windows node 24 / native complete` 的独立 `windows-native` 作业。上游拓扑使用组织自有的 `dsh-windows-2025-16core` 运行器；Aurora 默认将该选择切换为标准 `windows-2025`，同时保留相同的 failover 开关，具体记录在[Aurora 拉取请求可移植 CI](2026-08-20-aurora-portable-pull-request-ci.md)中。该作业为工作区符号链接启用开发人员模式，通过 `pnpm/action-setup` 提供仓库固定版本的 pnpm，在不传输 store 归档的情况下执行不可变安装，并在原生 PowerShell 下运行 `pnpm run check:ci:windows-complete`。门禁卡住时，60 分钟超时会为其设定上限，同时不把实测性能目标当作正确性截止时间。
 
 原生作业被刻意排除在 `all-checks-passed.needs` 之外，且不使用 `continue-on-error`：聚合流程既不等待它，也不会因它改变结论；该作业则保留自身未被掩盖的结果。工作区构建、生产网站和逐文件 100% 覆盖率检查失败会使原生作业失败。更广泛的静态检查、文档、包和构建产物可移植性清单仍作为观测项报告。重复的 lint 与快照强制检查仍由 Linux 负责，原生 Windows 则独立强制执行受支持源码覆盖率。
 
@@ -54,4 +54,4 @@ Wine 保留必需聚合流程现有的关键路径和作业身份。`all checks 
 
 尽管如此，每个拉取请求都会获得真实 NT 内核、NTFS、PowerShell、Windows 进程、原生插件和受支持源码覆盖率信号。原生作业会重复设置流程与两项阻断构建，在标准镜像上明显更慢；但它也会暴露兼容性通道掩盖的路径、watcher、生命周期与 fixture 缺陷。
 
-维护者必须保留两种有意设计的执行拓扑：Wine 快照使用 Linux 安装加 hoisted 布局来触达 win32 二进制文件，而原生作业在组织自有的 16 核 Windows 运行器上使用不可变工作区。任一作业独有的失败都必须依据该边界分类，不得削弱或静默跳过。
+维护者必须保留两种有意设计的执行拓扑：Wine 快照使用 Linux 安装加 hoisted 布局来触达 win32 二进制文件，而原生作业在上游组织自有的 16 核 Windows 运行器或 Aurora 的标准 `windows-2025` 覆盖上使用不可变工作区。任一作业独有的失败都必须依据该边界分类，不得削弱或静默跳过。
