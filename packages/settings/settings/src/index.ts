@@ -1,22 +1,20 @@
 /**
- * User-settings seam (`ctx.settings`). Providers store one raw document of
+ * Service Definition for the user-settings capability seam (`ctx.settings`). Providers store one raw document of
  * per-namespace sections; plugins register a namespace schema and read the
  * resolved value, which layers schema defaults, the registrant's composition
  * `base`, and the user document section, in that order.
  * @module @deepseek-ai/dsh-settings
  */
 
-import { Context, Service } from 'cordis'
-import type z from 'schemastery'
-import type { Branded } from '@deepseek-ai/dsh-brand'
+import { Context, Service } from '@deepseek-ai/cordis'
+import type z from '@deepseek-ai/schemastery'
 import { redactSecrets } from './redact.ts'
 import type { RedactedSecret } from './redact.ts'
+import type { SettingsNamespace, SettingsUpdateSource } from './types.ts'
 
 export { redactSecrets } from './redact.ts'
 export type { RedactedSecret, RedactedValue } from './redact.ts'
-
-/** Nominal id of one registered settings namespace. */
-export type SettingsNamespace = Branded<'SettingsNamespace'>
+export type { SettingsNamespace, SettingsUpdateSource } from './types.ts'
 
 const NAMESPACE_PATTERN = /^[a-z][a-z0-9-]*$/
 
@@ -35,21 +33,38 @@ export function settingsNamespace(value: string): SettingsNamespace {
 /** When a namespace's changes take effect for its owner. */
 export type SettingsApplies = 'live' | 'restart'
 
-/** Origin of one committed settings change. */
-export type SettingsUpdateSource = 'update' | 'provider'
-
 /** Registration options beyond the namespace schema. */
 export interface SettingsRegisterOptions<T> {
   /** Composition-layer values resolved below the user layer (entry-config subset). */
   base?: Partial<T>
   /** Owner's effect timing, surfaced to configuration UIs; defaults to `live`. */
   applies?: SettingsApplies
+  /**
+   * Reject a resolved section the owner could not act on, for constraints its
+   * schema cannot express — a cross-field requirement, or one field's validity
+   * depending on another's. Throwing here refuses the *write* that produced the
+   * value, so a caller learns at `update`/`replace`/`mutate` instead of storing
+   * something that would silently disable the owner.
+   *
+   * Kept separate from the schema because the schema is also what a
+   * configuration surface renders and what an absent section resolves through;
+   * folding a cross-field check into it would change both.
+   *
+   * Once the owner is registered, a stored section that fails this keeps the
+   * namespace's last good value and warns, exactly as a schema failure does,
+   * so an externally edited document cannot strand a running owner. At
+   * registration there is no last good value yet, so a stored section that
+   * already fails rejects the registration itself — again exactly as a schema
+   * failure does.
+   * @param value - the resolved section, schema-valid by construction.
+   */
+  validate?: (value: T) => void
 }
 
 /** One registered namespace as surfaced to configuration UIs. */
 export interface SettingsDescriptor {
   // TODO(settings-namespace-vocabulary): Rename `ns` to `namespace` across the
-  // public seam, provider contract, implementations, tests, and consumers.
+  // public API, provider contract, implementations, tests, and consumers.
   /** The registered namespace. */
   ns: SettingsNamespace
   /** Serialized schemastery schema (`schema.toJSON()`). */
@@ -74,7 +89,7 @@ export interface SettingsDescriptor {
   secrets?: RedactedSecret[]
 }
 
-/** Options for {@link Settings.describe}. */
+/** Options for {@link SettingsProvider.describe}. */
 export interface SettingsDescribeOptions {
   /**
    * Strip `role('secret')` fields from `value`/`base`/`user` and enumerate
@@ -100,63 +115,31 @@ export interface SettingsScope<T> {
   watch(callback: (next: T, prev: T) => void | Promise<void>): () => void
   /**
    * Merge a partial patch into this namespace's user layer and persist it.
-   * @param patch - plain-object patch over the user section; JSON-shaped data
+   * @param patch - plain-object patch over the user section; JSON-compatible data
    * only (non-JSON values reject with their path before anything persists).
    */
   update(patch: object): Promise<void>
   /**
    * Replace this namespace's user section wholesale; absent keys re-inherit
    * the composition `base` and schema defaults (`replace({})` resets all).
-   * @param section - the complete next user section; JSON-shaped data only,
+   * @param section - the complete next user section; JSON-compatible data only,
    * as for {@link update}.
    */
   replace(section: object): Promise<void>
 }
 
-declare module 'cordis' {
+declare module '@deepseek-ai/cordis' {
   interface Context {
-    settings: Settings
-  }
-
-  interface Events {
-    /**
-     * Committed change to one registered namespace's resolved value. Emitted
-     * after the provider persisted (for `update`) or published (`provider`)
-     * the change; never emitted when the resolved value is deep-equal.
-     * Listener failures are contained and logged — a sync throw and an async
-     * rejection alike — except `INVARIANT`-coded failures, which rethrow
-     * after every listener ran; that rethrow reaches the emitter only from
-     * synchronous listeners, so invariant checks on this event must not be
-     * async functions.
-     * @param ns - the namespace whose resolved value changed.
-     * @param next - the new resolved value.
-     * @param prev - the previous resolved value.
-     * @param source - whether the change entered through `update()` or the provider.
-     * @mode emit
-     */
-    'settings/updated'(ns: SettingsNamespace, next: unknown, prev: unknown, source: SettingsUpdateSource): void
-
-    /**
-     * One registered namespace's RAW user section changed, whether or not the
-     * resolved value did. `settings/updated` is the consumer-facing event and
-     * stays deep-equal-gated; this one exists for configuration surfaces,
-     * which must learn that a field went from inherited to overridden (same
-     * resolved value, different meaning) and that their held revision is
-     * stale. Listener containment matches `settings/updated`.
-     * @param ns - the namespace whose stored section changed.
-     * @param revision - the namespace's new revision.
-     * @mode emit
-     */
-    'settings/document-updated'(ns: SettingsNamespace, revision: number): void
+    settings: SettingsProvider
   }
 }
 
 /**
- * Deep equality over JSON-shaped data (objects, arrays, primitives) — the
- * seam's single change-detection predicate, exported so the invariant
+ * Deep equality over JSON-compatible data (objects, arrays, primitives) — the
+ * Service Definition's single change-detection predicate, exported so the invariant
  * companion checks exactly the implementation's relation.
- * @param a - one JSON-shaped value.
- * @param b - the other JSON-shaped value.
+ * @param a - one JSON-compatible value.
+ * @param b - the other JSON-compatible value.
  * @returns whether the two values are structurally equal.
  */
 export function deepEqualJson(a: unknown, b: unknown): boolean {
@@ -175,7 +158,7 @@ export function deepEqualJson(a: unknown, b: unknown): boolean {
 
 /**
  * A write refused because the namespace moved since the caller read it. The
- * seam's serialized write queue orders writes; it cannot tell a fresh writer
+ * Service Definition's serialized write queue orders writes; it cannot tell a fresh writer
  * from one holding a stale snapshot, which is what this reports.
  */
 export class SettingsConflictError extends Error {
@@ -244,7 +227,7 @@ function applyPathOp(section: Record<string, unknown>, op: SettingsPathOp): Reco
   return { ...section, [head]: applyPathOp(child, { ...op, path: rest }) }
 }
 
-/** Human label for a value rejected by the JSON-shape boundary (numbers reject inline). */
+/** Human label for a value that lossless JSON cannot represent (numbers reject inline). */
 function describeRejected(value: unknown): string {
   if (value === undefined) return 'undefined'
   if (typeof value === 'object' && value !== null) {
@@ -256,16 +239,16 @@ function describeRejected(value: unknown): string {
 }
 
 /**
- * Detach one write input in a single walk that doubles as the durable-boundary
- * shape check: only JSON data (plain objects, arrays, strings, finite numbers,
+ * Detach and validate one write input in a single walk before persistence:
+ * only JSON data (plain objects, arrays, strings, finite numbers,
  * booleans, `null`) may reach a provider document. `structuredClone` alone
  * would admit Dates, Maps, BigInts, and cycles that YAML/JSON storage then
  * silently distorts on the reload round-trip. `undefined` entries in objects
  * are skipped — the same sparse-patch semantics as {@link mergeLayers} — while
  * an `undefined` array entry is rejected rather than coerced.
  * @param root - plain-object write input (caller-checked).
- * @param reject - builds the boundary error from a value label and its `$`-rooted path.
- * @returns the detached JSON-shaped clone.
+ * @param reject - builds the validation error from a value label and its `$`-rooted path.
+ * @returns the detached JSON-compatible clone.
  */
 function cloneJsonShaped(
   root: Record<string, unknown>,
@@ -281,7 +264,7 @@ function cloneJsonShaped(
     if (Array.isArray(value)) {
       if (visiting.has(value)) throw reject('a circular reference', path)
       visiting.add(value)
-      const entries = value.map((entry, index) => { return clone(entry, `${path}[${index}]`) })
+      const entries = value.map((entry, index) => clone(entry, `${path}[${index}]`))
       // Un-mark on exit so one object referenced twice without a cycle passes.
       visiting.delete(value)
       return entries
@@ -343,6 +326,8 @@ interface SettingsRegistration {
   schema: z<unknown>
   base: unknown
   applies: SettingsApplies
+  /** Owner-supplied check for constraints the schema cannot express. */
+  validate?: (value: unknown) => void
   resolved: unknown
   /**
    * Monotonic counter over this namespace's RAW user section — bumped by any
@@ -362,7 +347,7 @@ interface SettingsRegistration {
  * the base class owns namespace registration, resolution, validation, change
  * detection, and the `settings/updated` commit event.
  */
-export abstract class Settings extends Service {
+export abstract class SettingsProvider extends Service {
   private readonly registrations = new Map<SettingsNamespace, SettingsRegistration>()
   /** Latest published raw document; empty until the provider's first publish. */
   private document: Record<string, unknown> = {}
@@ -404,6 +389,27 @@ export abstract class Settings extends Service {
   abstract readonly writable: boolean
 
   /**
+   * Absolute path of the provider's user-editable document, when its storage
+   * is one local file. Configuration surfaces use this only as availability
+   * metadata; the guarded open operation resolves the path again Host-side.
+   * Non-file providers leave it undefined and expose no open-document affordance.
+   * @returns the absolute local document path, or undefined for non-file storage.
+   */
+  get documentPath(): string | undefined {
+    return undefined
+  }
+
+  /**
+   * Prepare the provider's user-editable document for a native editor. File
+   * providers may materialize an absent document before returning its path;
+   * non-file providers return undefined.
+   * @returns the absolute local document path, or undefined for non-file storage.
+   */
+  prepareDocument(): Promise<string | undefined> {
+    return Promise.resolve(this.documentPath)
+  }
+
+  /**
    * Read the provider's current raw document (namespace to raw section).
    * @returns the detached raw document.
    */
@@ -435,7 +441,10 @@ export abstract class Settings extends Service {
       schema: schema as z<unknown>,
       base: options?.base,
       applies: options?.applies ?? 'live',
-      resolved: deepFreeze(this.resolve(schema, options?.base, this.section(ns))),
+      ...options?.validate === undefined
+        ? {}
+        : { validate: options.validate as (value: unknown) => void },
+      resolved: deepFreeze(this.resolve(schema, options?.base, this.section(ns), options?.validate)),
       revision: 0,
       watchers: new Set(),
     }
@@ -594,9 +603,9 @@ export abstract class Settings extends Service {
     }
     // Snapshot at call time: the queue must never read a caller-owned object
     // the caller may keep mutating while the write waits its turn. The same
-    // walk is the JSON-shape boundary check (see cloneJsonShaped).
+    // walk rejects values that JSON cannot preserve (see cloneJsonShaped).
     const snapshot = cloneJsonShaped(payload, (label, path) =>
-      new TypeError(`settings ${verb} for "${ns}" must be JSON-shaped data (found ${label} at ${path})`))
+      new TypeError(`settings ${verb} for "${ns}" must contain only JSON-compatible data (found ${label} at ${path})`))
     const previous = this.writeQueues.get(ns) ?? Promise.resolve()
     // Chain past a failed predecessor: one rejected write must not poison the
     // namespace queue for every later caller.
@@ -620,8 +629,8 @@ export abstract class Settings extends Service {
         ? mergeLayers(current, snapshot) as Record<string, unknown>
         : mode === 'replace'
           ? snapshot
-          : (snapshot['ops'] as Array<SettingsPathOp>).reduce(applyPathOp, current)
-      const next = deepFreeze(this.resolve(registration.schema, registration.base, section))
+          : (snapshot['ops'] as SettingsPathOp[]).reduce(applyPathOp, current)
+      const next = deepFreeze(this.resolve(registration.schema, registration.base, section, registration.validate))
       await this.persist(ns, section)
       // The write reached storage either way; the cache must say so. Commit
       // only when this registration is still the namespace owner — a fiber
@@ -663,7 +672,7 @@ export abstract class Settings extends Service {
     for (const registration of this.registrations.values()) {
       let next: unknown
       try {
-        next = deepFreeze(this.resolve(registration.schema, registration.base, this.section(registration.ns)))
+        next = deepFreeze(this.resolve(registration.schema, registration.base, this.section(registration.ns), registration.validate))
       } catch (error) {
         this.ctx.logger.warn('settings: keeping last good "%s" after invalid stored section', registration.ns)
         this.ctx.logger.warn(error)
@@ -685,10 +694,19 @@ export abstract class Settings extends Service {
   }
 
   /** Resolve one namespace value: schema defaults, then `base`, then the user layer. */
-  private resolve<T>(schema: z<T>, base: unknown, section: Record<string, unknown> | undefined): T {
+  private resolve<T>(
+    schema: z<T>,
+    base: unknown,
+    section: Record<string, unknown> | undefined,
+    validate?: (value: T) => void,
+  ): T {
     // The merged candidate is untyped by construction; the schema call is the
     // runtime validation that admits it into T.
-    return schema(mergeLayers(base, section) as never)
+    const value = schema(mergeLayers(base, section) as never)
+    // The owner's own check runs on the admitted value, so it sees defaults
+    // and the composition base exactly as the owner will.
+    validate?.(value)
+    return value
   }
 
   /**
@@ -821,6 +839,12 @@ export interface SettingsSectionHooks<T> {
    * memoized resolutions — after an attach, a detach, or a committed change.
    */
   onChange(): void
+  /**
+   * Reject a resolved section this consumer could not act on, for constraints
+   * its schema cannot express. See {@link SettingsRegisterOptions.validate}.
+   * @param value - the resolved section, schema-valid by construction.
+   */
+  validate?: (value: T) => void
 }
 
 /**
@@ -844,7 +868,10 @@ export function installSettingsSection<T>(
   hooks: SettingsSectionHooks<T>,
 ): void {
   ctx.inject(['settings'], (sctx) => {
-    const scope = sctx.settings.register(ns, schema, { base: entry })
+    const scope = sctx.settings.register(ns, schema, {
+      base: entry,
+      ...hooks.validate === undefined ? {} : { validate: hooks.validate },
+    })
     hooks.setSource(() => scope.get())
     sctx.effect(() => () => {
       // This disposer runs for two different reasons. A settings provider
@@ -869,4 +896,4 @@ export function installSettingsSection<T>(
   })
 }
 
-export default Settings
+export default SettingsProvider

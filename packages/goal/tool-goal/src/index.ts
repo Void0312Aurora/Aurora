@@ -4,11 +4,11 @@
  * @module @deepseek-ai/dsh-tool-goal
  */
 
-import type { Context } from 'cordis'
-import z from 'schemastery'
+import type { Context } from '@deepseek-ai/cordis'
+import z from '@deepseek-ai/schemastery'
 import { GoalId } from '@deepseek-ai/dsh-goal'
 import type { GoalRef, GoalView } from '@deepseek-ai/dsh-goal'
-import { createUserMessage, HarnessError } from '@deepseek-ai/dsh-llm'
+import { boundContextSummary, createUserMessage, HarnessError } from '@deepseek-ai/dsh-llm'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { GenericCallView } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-system-prompt'
@@ -258,7 +258,7 @@ export function apply(ctx: Context, config: Config): void {
       const execution = goalToolExecution(ctx, exec)
       const ref = goalRef(args.goal_id, args.revision)
       const replacements = {
-        ...!hasText(args.objective) ? {} : { objective: args.objective },
+        ...hasText(args.objective) ? { objective: args.objective } : {},
         ...hasRoundCap(args.max_goal_rounds) ? { maxGoalRounds: args.max_goal_rounds } : {},
       }
       if (args.action === 'edit') {
@@ -315,7 +315,12 @@ export function apply(ctx: Context, config: Config): void {
           content: args.action === 'complete'
             ? renderWrapupContext(goal.objective)
             : renderWrapupContext(goal.objective, args.blocked_reason as string),
-          source: { kind: 'plugin', plugin: 'tool-goal' },
+          source: {
+            kind: 'plugin',
+            plugin: 'tool-goal',
+            form: 'notice',
+            summary: boundContextSummary(`${args.action as string}: ${goal.objective}`),
+          },
         }))
       }
       return Promise.resolve(goalValue(goal))

@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
-import { Context } from 'cordis'
-import Loader from '@cordisjs/plugin-loader'
-import AgentRegistry, {} from '@deepseek-ai/dsh-agent'
+import { Context } from '@deepseek-ai/cordis'
+import Loader from '@deepseek-ai/cordis-plugin-loader'
+import AgentRegistry, { Inbox } from '@deepseek-ai/dsh-agent'
 import type { Agent, AgentStatus } from '@deepseek-ai/dsh-agent'
-import CommandService from '@deepseek-ai/dsh-commands'
+import CommandRuntime from '@deepseek-ai/dsh-commands'
 import GoalService from '@deepseek-ai/dsh-goal'
 import type { GoalRef } from '@deepseek-ai/dsh-goal'
-import SessionStore, { Session, SessionId, type UserMessage } from '@deepseek-ai/dsh-session'
+import SessionStore, { Session, SessionId } from '@deepseek-ai/dsh-session'
 import * as commandGoal from '@deepseek-ai/dsh-command-goal'
 
 interface Harness {
@@ -16,34 +16,25 @@ interface Harness {
   readonly plugin: Awaited<ReturnType<Context['plugin']>>
 }
 
-/** Append one idle injection using the public Agent contract (idle inject wraps in a one-shot injection turn, per turn enclosure). */
-function appendInjection(session: Session, input: UserMessage): void {
-  const lastStart = session.events.findLast(event => event.type === 'turn/start')
-  const turn = (lastStart?.data.turn ?? 0) + 1
-  session.append('turn/start', { turn, trigger: { kind: 'injection', source: input.source } })
-  session.append('user/message', input, { surfaceOp: 'append' })
-  session.append('turn/end', { turn, reason: { kind: 'completed' } })
-}
-
 /** Build a live idle agent accepted by the exact-identity goal service. */
 function stubAgent(ctx: Context, id: string): { agent: Agent; session: Session } {
   // Store-created: the command executor durably logs lifecycle events on it.
   const session = ctx.sessions.create(SessionId(id))
+  const inbox = new Inbox(session, { inserted: () => {}, discarded: () => {}, claimed: () => {} })
   let status: AgentStatus = 'idle'
   const agent: Agent = {
     id: session.id,
     options: {},
     session,
+    inbox,
     ctx: new Context(),
     get status() { return status },
-    get acceptsNextStep() { return status === 'running' },
     send: () => {},
-    updateInbox: () => 'not-found',
     followup: () => {},
-    steer: () => ({ outcome: Promise.resolve({ status: 'rejected' as const }) }),
-    inject(input) { appendInjection(session, input) },
-    reserveTurnAdmission: () => undefined,
+    steer: () => {},
+    inject(input) { inbox.append('next-step', input) },
     cancel() { status = 'idle' },
+    runMaintenance: task => task(new AbortController().signal),
     whenIdle() { return Promise.resolve() },
   }
   return { agent, session }
@@ -53,7 +44,7 @@ function stubAgent(ctx: Context, id: string): { agent: Agent; session: Session }
 async function harness(): Promise<Harness> {
   const ctx = new Context()
   await ctx.plugin(SessionStore)
-  await ctx.plugin(CommandService)
+  await ctx.plugin(CommandRuntime)
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(GoalService)
   const plugin = await ctx.plugin(commandGoal)
@@ -72,13 +63,13 @@ function domainEvents(session: Session): readonly Session['events'][number][] {
     const before = session.events[event.seq - 1]
     const after = session.events[event.seq + 1]
     if (before?.type === 'turn/start') lifecycle.add(before.seq)
-    if (after?.type === 'turn/end') { lifecycle.add(after.seq) }
+    if (after?.type === 'turn/end') lifecycle.add(after.seq)
   }
   return session.events.filter(event => !lifecycle.has(event.seq))
 }
 
 /** Execute `/goal` through the same registry boundary as a UI adapter. */
-async function run(test: Harness, suffix = ''): Promise<NonNullable<Awaited<ReturnType<CommandService['execute']>>>['result']> {
+async function run(test: Harness, suffix = ''): Promise<NonNullable<Awaited<ReturnType<CommandRuntime['execute']>>>['result']> {
   const execution = await test.ctx.commands.execute(
     test.agent,
     `/goal${suffix}`,
@@ -133,7 +124,7 @@ describe('/goal human command', () => {
     expect(created.text).toContain('Rounds: 0/256')
     expect(created.text).toContain('Activation: armed')
     expect(test.ctx.goals.get(test.agent)?.objective).toBe('finish the release')
-    expect(domainEvents(test.session).map(event => event.type)).toEqual(['turn/start', 'user/message', 'turn/end'])
+    expect(domainEvents(test.session).map(event => event.type)).toEqual(['goal/change'])
 
     const count = domainEvents(test.session).length
     await expect(run(test, ' replacement')).resolves.toEqual({

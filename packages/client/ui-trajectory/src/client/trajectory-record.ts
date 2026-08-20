@@ -37,14 +37,18 @@ export interface TrajectorySourceBlock {
 export interface TrajectoryCellProps extends HTMLAttributes<HTMLDivElement> {
   /** 1-based record index shown as `#N`. */
   index: number
+  /** Projection-stable identity when no single source event owns the record lifecycle. */
+  recordId?: string
   kind: TrajectoryCellKind
-  /** Single-line summary; CSS ellipsis when it overflows. */
+  /** Non-Markdown summary or prefix; CSS ellipsis when it overflows. */
   text: string
+  /** Raw Markdown source converted into the single-line summary at its consumer. */
+  previewMarkdown?: string
   /** Whether this user record opens a new model turn. */
   opensTurn?: boolean
   /** Source session-event seq for cross-record navigation. */
   sourceSeq?: number
-  /** Producer provenance from a user-role message or context injection. */
+  /** Producer role and name from a user-role message or context injection. */
   messageSource?: unknown
   /** Producer-owned model-hidden metadata carried beside the message source. */
   /** A separator-only anchor for an auxiliary request with no visible record. */
@@ -69,6 +73,8 @@ export interface TrajectoryCellProps extends HTMLAttributes<HTMLDivElement> {
   assistantMetrics?: AssistantMetricDetail
   /** Tool-only result summary paired with the call in the same record. */
   result?: string
+  /** Raw Markdown source converted into the tool-result summary at its consumer. */
+  resultPreviewMarkdown?: string
   /** Tool call id used to link message source blocks to tool records. */
   callId?: string
   /** Tool-only result failure state. */
@@ -92,13 +98,33 @@ export interface TrajectoryCellProps extends HTMLAttributes<HTMLDivElement> {
 }
 
 /**
- * Format own-duration for the trailing time column.
+ * Resolve the identity that survives prepending older projected records.
+ * @param cell - Projected trajectory record.
+ * @returns Stable identity from the owning event or tool call, with a fixture fallback.
+ */
+export function trajectoryRecordId(cell: TrajectoryCellProps): string {
+  if (cell.recordId !== undefined) return cell.recordId
+  if (cell.callId !== undefined) return `${cell.kind}\u0000call\u0000${cell.callId}`
+  if (cell.sourceSeq !== undefined) return `${cell.kind}\u0000seq\u0000${cell.sourceSeq}`
+  return `${cell.kind}\u0000index\u0000${cell.index}`
+}
+
+/**
+ * Format a duration in milliseconds with thousands separators.
+ * @param milliseconds - Duration in milliseconds, or `null` when absent.
+ * @returns `—` when unknown, otherwise an integer-millisecond label.
+ */
+export function formatDurationMillis(milliseconds: number | null): string {
+  if (milliseconds === null || !Number.isFinite(milliseconds)) return '—'
+  const integer = String(Math.round(milliseconds))
+  return `${integer.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} ms`
+}
+
+/**
+ * Format an elapsed duration given in seconds as a millisecond label.
  * @param seconds - Duration seconds, or `null` when absent.
- * @returns `—` when unknown, otherwise a seconds label.
+ * @returns `—` when unknown, otherwise an integer-millisecond label.
  */
 export function formatElapsedSeconds(seconds: number | null): string {
-  if (seconds === null || !Number.isFinite(seconds)) return '—'
-  const rounded = Math.round(seconds * 10) / 10
-  if (Number.isInteger(rounded)) return `${rounded} s`
-  return `${rounded.toFixed(1)} s`
+  return formatDurationMillis(seconds === null ? null : seconds * 1000)
 }

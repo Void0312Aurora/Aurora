@@ -5,7 +5,7 @@ import { mkdir, open } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 
 /** Current derived-index schema version. Incompatible versions reset in place. */
-export const SESSION_QUERY_SQLITE_SCHEMA_VERSION = 7
+export const SESSION_QUERY_SQLITE_SCHEMA_VERSION = 8
 
 /** SQLite application id protecting unrelated databases from derived resets. */
 export const SESSION_QUERY_SQLITE_APPLICATION_ID = 0x44534851
@@ -44,7 +44,7 @@ async function createDatabaseFile(path: string): Promise<void> {
  * @returns initialized database handle owned by the search service.
  */
 export async function openSearchDatabase(path: string, journalMode: JournalMode): Promise<DatabaseSync> {
-  const actual = path !== ':memory:' ? resolve(path) : path
+  const actual = path === ':memory:' ? path : resolve(path)
   if (actual !== ':memory:') {
     await mkdir(dirname(actual), { recursive: true, mode: 0o700 })
     await createDatabaseFile(actual)
@@ -118,6 +118,7 @@ function ensurePersistentSchema(db: DatabaseSync): void {
       parent_session TEXT,
       seed_length    INTEGER,
       delegation_depth INTEGER,
+      agent_preset  TEXT,
       revision       TEXT NOT NULL,
       generation     INTEGER NOT NULL
     ) STRICT
@@ -147,6 +148,7 @@ function ensureTemporarySchema(db: DatabaseSync): void {
       parent_session TEXT,
       seed_length    INTEGER,
       delegation_depth INTEGER,
+      agent_preset  TEXT,
       fingerprint    TEXT NOT NULL,
       persisted      INTEGER NOT NULL CHECK (persisted IN (0, 1)),
       generation     INTEGER NOT NULL

@@ -326,7 +326,7 @@ function JsonTreeNode({
     <>
       <span
         ref={expanderRef}
-        className={clsx(css.expander, !expanded ? css.expandIcon : css.collapseIcon)}
+        className={clsx(css.expander, expanded ? css.collapseIcon : css.expandIcon)}
         data-json-expander
         role="button"
         aria-label={expanded ? labels.collapseNode : labels.expandNode}
@@ -374,7 +374,7 @@ function formattedPath(path: JsonPath): string {
 function copyText(target: CopyTarget, mode: 'json' | 'path' | 'prettyJson' | 'value'): string {
   if (mode === 'path') return formattedPath(target.path)
   if (mode === 'prettyJson') return JSON.stringify(target.value, null, 2)
-  if (mode === 'json') { return JSON.stringify(target.value) }
+  if (mode === 'json') return JSON.stringify(target.value)
   if (typeof target.value === 'string') return target.value
   if (typeof target.value === 'undefined') return 'undefined'
   if (typeof target.value === 'bigint') return target.value.toString()

@@ -32,7 +32,7 @@ describe('packChunkRuns', () => {
     const events = deltaRun('text-delta', 5)
     const packed = packChunkRuns(events)
     expect(packed).toHaveLength(1)
-    const row: ChunkRow = packed[0] as ChunkRow
+    const row = packed[0] as ChunkRow
     expect(row.type).toBe('text-chunks')
     expect(row.seq0).toBe(0)
     expect(row.time0).toBe(1000)
@@ -46,7 +46,7 @@ describe('packChunkRuns', () => {
       chunkEvent(seq, 1000 + seq, { type: 'tool-call-delta', index: 1, id: CallId('c1'), name: 'write', argumentsDelta: `a${seq}` }))
     const packed = packChunkRuns([...reasoning, ...toolCall])
     expect(packed.map(r => (r as ChunkRow).type)).toStrictEqual(['reasoning-chunks', 'tool-call-chunks'])
-    const row: ChunkRow & { type: 'tool-call-chunks' } = packed[1] as ChunkRow & { type: 'tool-call-chunks' }
+    const row = packed[1] as ChunkRow & { type: 'tool-call-chunks' }
     expect(row.data).toMatchObject({ id: 'c1', name: 'write', args: ['a4', 'a5', 'a6'] })
     expect(decodeAll(packed)).toStrictEqual([...reasoning, ...toolCall])
   })

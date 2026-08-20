@@ -2,12 +2,12 @@
  * Provider-owned request-retry policy configuration and resolution.
  *
  * Adapters expose one resolved policy per registered provider route; the
- * optional dsh-llm-retry plugin executes it on the agent's failed-step seam.
+ * optional dsh-llm-retry plugin executes it on the agent's failed-step extension point.
  *
  * @module @deepseek-ai/dsh-llm/retry-policy
  */
 
-import z from 'schemastery'
+import z from '@deepseek-ai/schemastery'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import { EMPTY_RESPONSE_CODE } from './error.ts'
 
@@ -129,7 +129,9 @@ function resolveBackoff(config: BackoffConfig | undefined, path: string): Resolv
   if (initialDelayMs > maxDelayMs) {
     throw new Error(`${path}.initialDelayMs must be less than or equal to maxDelayMs`)
   }
-  if (!Number.isFinite(jitterRatio) || jitterRatio < 0 || jitterRatio > 1) throw new Error(`${path}.jitterRatio must be between 0 and 1`)
+  if (!Number.isFinite(jitterRatio) || jitterRatio < 0 || jitterRatio > 1) {
+    throw new Error(`${path}.jitterRatio must be between 0 and 1`)
+  }
 
   return Object.freeze({ initialDelayMs, maxDelayMs, jitterRatio })
 }

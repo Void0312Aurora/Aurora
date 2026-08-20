@@ -19,6 +19,7 @@ import type {
 } from '@deepseek-ai/dsh-llm'
 import type { CredentialRef } from '@deepseek-ai/dsh-credentials'
 import { idleWatchdog, timeoutOf } from '@deepseek-ai/dsh-timeout'
+import type { AnonymousUserId } from '@deepseek-ai/dsh-anonymous-user-id'
 import { serializeRequest } from './serialize.ts'
 import type { RequestDefaults } from './serialize.ts'
 import { parseSse } from './sse.ts'
@@ -35,6 +36,8 @@ export interface DeepSeekCatalogModel {
   description?: string
   /** Known combined request/response context capacity; omitted when deployment metadata is unavailable. */
   contextWindow?: number
+  /** Per-request output cap for this model; omission falls back to the profile's {@link DeepSeekConnectionOptions.maxTokens}. */
+  maxTokens?: number
 }
 
 /**
@@ -47,12 +50,11 @@ export interface DeepSeekConnectionOptions {
   /** Endpoint base; `/chat/completions` is appended. */
   baseURL: string
   /**
-   * Literal API key of this same resolution, when the configuration carried
-   * one. Travelling with the endpoint is the point: a request can never pair
-   * one generation's URL with another generation's secret.
+   * Credential reference of this same resolution, resolved per request.
+   * Travelling with the endpoint is the point: a request can never pair one
+   * generation's URL with another generation's secret. Configuration carries
+   * only this name — a literal key is not a configuration value.
    */
-  apiKey?: string
-  /** Credential reference of this same resolution, resolved per request when no literal key exists. */
   apiKeyEnv: CredentialRef
   /** Request defaults applied to every call (thinking mode, effort). */
   defaults: RequestDefaults
@@ -68,7 +70,7 @@ export interface DeepSeekConnectionOptions {
   retryPolicy: ResolvedRetryPolicy
 }
 
-/** Constructor options for {@link DeepSeekAdapter}: the two resolution seams the plugin owns. */
+/** Constructor options for {@link DeepSeekAdapter}: the operation-local resolution hooks the plugin owns. */
 export interface DeepSeekAdapterOptions {
   /** Current validated connection facts; called once per operation. */
   options: () => DeepSeekConnectionOptions
@@ -79,6 +81,8 @@ export interface DeepSeekAdapterOptions {
    * `MISSING_CREDENTIAL` when no key is available anywhere.
    */
   resolveApiKey: (connection: DeepSeekConnectionOptions) => Promise<string>
+  /** Resolve the harness-home anonymous id shared with telemetry and feedback. */
+  resolveUserId: () => AnonymousUserId
 }
 
 /** Default maximum idle interval while an adapter stream read is outstanding. */
@@ -106,11 +110,12 @@ function modelInfo(provider: string, model: DeepSeekCatalogModel): LlmModelInfo 
     id: model.id,
     name: model.name ?? model.id,
     ...model.description === undefined ? {} : { description: model.description },
+    inputModalities: ['text'],
   }
 }
 
 function providerRetryAfterMs(value: string | null): number | undefined {
-  if (value === null) { return undefined }
+  if (value === null) return undefined
   if (/^\d+$/.test(value)) {
     const delay = Number(value) * 1_000
     return Number.isFinite(delay) && delay > 0 ? delay : undefined
@@ -177,11 +182,15 @@ export class DeepSeekAdapter extends LlmAdapter {
     const contextWindow = configured?.contextWindow
       ?? connection.defaultContextWindow
     return Promise.resolve({
+      // The chat-completions wire route is text-only regardless of catalog
+      // membership, so the uncatalogued fallback declares the same negative
+      // capability — "unknown" here would let the host accept and persist
+      // images the serializer must then reject.
       ...configured === undefined
-        ? { provider, id: model, name: model }
+        ? { provider, id: model, name: model, inputModalities: ['text' as const] }
         : modelInfo(provider, configured),
       context: { contextWindow },
-      defaultMaxTokens: connection.maxTokens,
+      defaultMaxTokens: configured?.maxTokens ?? connection.maxTokens,
       ...connection.defaults.thinking === 'disabled'
         ? {
           reasoning: {
@@ -210,12 +219,20 @@ export class DeepSeekAdapter extends LlmAdapter {
     // sent to it can never come from different configuration generations.
     const connection = this.config.options()
     const apiKey = await this.config.resolveApiKey(connection)
+    const userId = this.config.resolveUserId()
     const consumer = new AbortController()
     const upstream = options.signal === undefined
       ? consumer.signal
       : AbortSignal.any([options.signal, consumer.signal])
     using watchdog = idleWatchdog(upstream, connection.streamIdleTimeoutMs, STREAM_IDLE_TIMEOUT_CODE)
-    const iterator = this.request(options, watchdog.signal, connection, apiKey)[Symbol.asyncIterator]()
+    const iterator = this.request(
+      options,
+      watchdog.signal,
+      connection,
+      apiKey,
+      userId,
+      () => { watchdog.pulse() },
+    )[Symbol.asyncIterator]()
     let exhausted = false
     try {
       while (true) {
@@ -256,6 +273,8 @@ export class DeepSeekAdapter extends LlmAdapter {
     signal: AbortSignal,
     connection: DeepSeekConnectionOptions,
     apiKey: string,
+    userId: AnonymousUserId,
+    onComment: () => void,
   ): AsyncIterable<StreamChunk> {
     const body = serializeRequest(options, connection.defaults)
     // Prepared outside the try so the TRANSPORT label below covers exactly the
@@ -266,6 +285,7 @@ export class DeepSeekAdapter extends LlmAdapter {
       'content-type': 'application/json',
       'accept': 'text/event-stream',
       ...attributionHeaders(),
+      'x-deepseek-harness-user-id': String(userId),
       ...options.sessionId !== undefined
         ? { 'x-deepseek-harness-session-id': String(options.sessionId) }
         : {},
@@ -290,7 +310,7 @@ export class DeepSeekAdapter extends LlmAdapter {
       // fetch wraps every transport failure (DNS, refused connection, TLS,
       // proxy) in a bare `TypeError: fetch failed` whose actionable detail
       // lives on `cause`. Wrapping with the endpoint and chaining the cause
-      // lets `errorChain` render the full diagnosis at every reporting seam.
+      // lets `errorChain` render the full diagnosis at every reporting boundary.
       throw new LlmError(
         `DeepSeek API request to ${connection.baseURL} failed`,
         'TRANSPORT',
@@ -321,6 +341,6 @@ export class DeepSeekAdapter extends LlmAdapter {
       throw new LlmError('DeepSeek API returned no response body', 'EMPTY_RESPONSE')
     }
 
-    yield* translate(parseSse(response.body))
+    yield* translate(parseSse(response.body, onComment))
   }
 }

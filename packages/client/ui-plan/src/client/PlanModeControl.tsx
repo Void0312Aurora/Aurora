@@ -30,7 +30,7 @@ export function PlanChip({ useProjection, locked, exitPlanMode, t }: PlanChipPro
   }, [])
 
   if (plan === undefined) return null
-  const target = !plan.pending ? plan.active : !plan.active
+  const target = plan.pending ? !plan.active : plan.active
   if (!target) return null
 
   const off = (): void => {

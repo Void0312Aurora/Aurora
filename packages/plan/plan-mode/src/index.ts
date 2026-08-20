@@ -1,19 +1,21 @@
 /**
  * Plan mode is logged per-agent collaboration state: while active, a
- * deployment-owned guidance section shapes each model request, and
+ * deployment-owned guidance section is included in each model request, and
  * `exit_plan_mode` presents the completed plan for user review, while the
- * `/plan off` command lets a user leave directly. Plan mode is independent of
- * sandbox mode and approval policy; those enforcement axes do not read or
- * write plan state.
+ * `/plan off` command lets a user leave directly. Sandbox mode and approval
+ * policy enforce restrictions independently and do not read or write plan
+ * state.
  *
  * The state in force is folded from the session log (`plan/mode`, last one
  * wins), so resume and fork restore it without a live mirror. User selections
- * are held as pending intent until an in-turn request boundary because every
- * session event is turn-enclosed. The service flushes at `agent/step` before
- * the affected request assembly, including retry turns.
+ * remain pending until the next accepted in-turn pre-step. The service includes
+ * the selected state in the proposed step assembly, then appends `plan/mode`
+ * from `agent/pre-step` only when the step is accepted. Same-step request
+ * retries reuse their assembly.
  *
- * The exit tool remains registered while plan mode is inactive so crossing a
- * boundary changes only the prompt section, not the request tool catalog.
+ * The exit tool remains registered while plan mode is inactive, so entering
+ * or leaving plan mode changes only the prompt section, not the request tool
+ * catalog.
  *
  * Agent Note:
  * - .agents/notes/implemented/simplification/2026-07-22-plan-specific-collaboration-state.md
@@ -21,15 +23,15 @@
  * @module @deepseek-ai/dsh-plan-mode
  */
 
-import { Context, Service } from 'cordis'
+import { Context, Service } from '@deepseek-ai/cordis'
 import { z as zod } from 'zod'
 import type { ZodType } from 'zod'
-import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
+import type { Session, SessionEvent, UserMessage } from '@deepseek-ai/dsh-session'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-system-prompt'
-import { UserInteractionError } from '@deepseek-ai/dsh-user-interaction'
+import { UserQuestionError } from '@deepseek-ai/dsh-user-questions'
 // Type-only edge: resolves `ctx.commands` for the optional command child.
 import type {} from '@deepseek-ai/dsh-commands'
 // Type-only: resolves ctx.sessionProjections for the optional unit child.
@@ -41,7 +43,7 @@ import type { PlanProjection } from './types.ts'
 // declarations still receive the SessionProjectionMap merge.
 export type * from './types.ts'
 
-declare module '@deepseek-ai/dsh-session' {
+declare module '@deepseek-ai/dsh-session/types' {
   interface SessionEventMap {
     /**
      * Whether plan mode is in force from this point on: log-only, non-surface,
@@ -52,9 +54,9 @@ declare module '@deepseek-ai/dsh-session' {
   }
 }
 
-declare module 'cordis' {
+declare module '@deepseek-ai/cordis' {
   interface Context {
-    planMode: PlanModeService
+    planMode: PlanModeController
   }
 }
 
@@ -96,7 +98,7 @@ function firstHeading(plan: string): string | undefined {
 
 /**
  * Validate deployment-owned plan guidance. Missing, blank, non-string, or
- * unknown fields fail at plugin load rather than silently shaping nothing.
+ * unknown fields fail at plugin load rather than being ignored.
  *
  * @param config Raw plugin config.
  * @returns A detached validated config.
@@ -175,18 +177,18 @@ function planModeAtLastHeader(events: readonly SessionEvent[]): boolean | undefi
 }
 
 /**
- * `ctx.planMode`: owns logged plan state, boundary application and narration,
+ * `ctx.planMode`: owns logged plan state, applies and narrates selected state at step start,
  * the `plan:policy` section, the `/plan` command, and the stable exit tool.
  * UIs observe committed flips through `session/event`; there is no live mirror.
  */
-export class PlanModeService extends Service {
+export class PlanModeController extends Service {
   static inject = ['tools', 'systemPrompt']
 
   /** Validated deployment-owned guidance. */
   private readonly section: string
 
   /**
-   * Latest selection per session awaiting an in-turn request-boundary flush.
+   * Latest selection per session awaiting the next accepted in-turn pre-step.
    * `narrate` is true for user selections and false for the exit tool, whose
    * result already narrates the transition.
    */
@@ -196,37 +198,46 @@ export class PlanModeService extends Service {
     super(ctx, 'planMode')
     this.section = resolveConfig(config).section
     let disposed = false
-
-    // The boundary flush uses the loop's `agent/step` interception seam, not
-    // post-commit `session/event` observation. `agent/step` runs inside the
-    // open turn before every request derivation (including turn 1 step 1), so
-    // it is the sole flush point: prompt admission happens pre-turn, where a
-    // `plan/mode` append would land outside any open turn. Failures are
-    // contained so policy cannot block a turn; a failed append remains
-    // pending for a later boundary.
-    ctx.on('agent/step', (agent) => {
-      if (disposed) return
+    // Pre-step is outside Session.append publication, so it can append the
+    // log-only mode event inside an open turn without re-entering the session.
+    // A failed append remains pending for a later accepted in-turn pre-step,
+    // and policy cannot block the step.
+    ctx.on('agent/pre-step', async (
+      { agent, signal },
+      next,
+    ): Promise<PreStepDecision> => {
+      const decision = await next()
+      const pending = this.pendingIntents.get(agent.session)
+      if (decision.kind === 'reject' || signal.aborted || pending === undefined) return decision
+      const narration = this.narration(agent.session, pending.active)
       try {
-        this.onBoundary(agent)
+        this.onBoundary(agent.session)
       } catch (error) {
-        ctx.logger.warn('dsh-plan-mode: boundary flush failed: %o', error)
+        ctx.logger.warn('dsh-plan-mode: failed to append selected plan mode at step start: %o', error)
+        return decision
       }
-    }, { prepend: true })
-    ctx.effect(() => () => { disposed = true }, 'dsh-plan-mode: close boundary lifetime')
+      return !pending.narrate || narration === undefined
+        ? decision
+        : { ...decision, messages: [...decision.messages, narration] }
+    })
+    ctx.effect(() => () => { disposed = true }, 'dsh-plan-mode: close service lifetime')
 
     ctx.systemPrompt.section({
       name: 'plan:policy',
       order: 50,
-      text: context => context.agent !== undefined && foldPlanMode(context.agent.session.events)
-        ? this.section
-        : '',
+      text: (context) => {
+        if (context.agent === undefined) return ''
+        const pending = this.pendingIntents.get(context.agent.session)
+        return (pending?.active ?? foldPlanMode(context.agent.session.events)) ? this.section : ''
+      },
     })
 
     // The plan projection unit (session-projection RFC): a pure double-event
     // fold serving clients the whole {active, pending} value. `command/run`
     // records the user's logged /plan selection (the handler calls `set()`
-    // before any failing path, so log and run-plane cannot fork); `plan/mode`
-    // is the boundary commit that resolves it. Pending is thereby a pure
+    // before any failing path, so a failed handler cannot leave the recorded
+    // command without its plan selection); `plan/mode` records that selection
+    // and clears it. Pending is thereby a pure
     // replay quantity: host restarts, other tabs, and cold reads all recover
     // it from the log alone. The unit child activates only when a projection
     // registry is composed (headless assemblies stay unaffected).
@@ -237,6 +248,7 @@ export class PlanModeService extends Service {
         init: () => ({ active: false, wanted: null }),
         apply: (state, event) => {
           if (event.type === 'command/run' && event.data.name === 'plan') {
+            if (event.data.args === undefined) return state
             const wanted = event.data.args.trim() !== 'off'
             return wanted === state.wanted ? state : { active: state.active, wanted }
           }
@@ -270,8 +282,9 @@ export class PlanModeService extends Service {
               case 'cancelled':
                 return { kind: 'success', text: 'Plan mode entry cancelled.' }
               case 'noop':
-                // Repeat the queued wording while an exit still awaits its
-                // boundary; only a truly inactive session reads idempotent.
+                // Repeat the queued wording while an exit still awaits the
+                // next accepted pre-step; only a truly inactive session reads
+                // idempotent.
                 return foldPlanMode(agent.session.events)
                   ? { kind: 'success', text: 'Leaving plan mode (applies from the next step).' }
                   : { kind: 'success', text: 'Plan mode is already inactive.' }
@@ -314,9 +327,9 @@ export class PlanModeService extends Service {
         if (!/^#\s+\S/.test(args.plan.trim())) {
           throw new Error(`${EXIT_PLAN_MODE} requires a non-empty markdown plan starting with a # heading`)
         }
-        const interaction = ctx.get('userInteraction')
+        const interaction = ctx.get('userQuestions')
         if (interaction === undefined) {
-          throw new Error('no user-interaction channel is available to review the plan; ask the user to switch the session mode instead')
+          throw new Error('no user-questions channel is available to review the plan; ask the user to switch the session mode instead')
         }
         const answer = await interaction.ask({
           questions: [{
@@ -341,14 +354,14 @@ export class PlanModeService extends Service {
           // generic channel message names ask_user_question, which the model
           // never called. An abort (turn cancel, provider teardown) keeps its
           // own message — there is no user to wait for.
-          if (cause instanceof UserInteractionError && cause.code === 'ASK_CANCELLED') {
+          if (cause instanceof UserQuestionError && cause.code === 'ASK_CANCELLED') {
             throw new Error('The user dismissed the plan review to speak instead; '
               + 'stay in plan mode, stop here, and wait for their message.')
           }
           throw cause
         })
-        // A review may outlive this plugin fiber. Without boundary listeners,
-        // an approved result could never land, so fail and keep planning.
+        // A review may outlive this plugin fiber. Without its pre-step listener,
+        // an approved selection could never be appended, so fail and keep planning.
         if (disposed) {
           throw new Error('the plan-mode service was reloaded while the plan was under review; present the plan again')
         }
@@ -361,7 +374,8 @@ export class PlanModeService extends Service {
             : `The user chose to keep planning; their feedback: ${feedback}`)
         }
         // Keep plan guidance for the rest of this assistant tool batch. The
-        // silent intent flushes after the step, before the next assembly.
+        // silent selection is appended at the next accepted in-turn pre-step,
+        // before its request assembly.
         this.pendingIntents.set(agent.session, { active: false, narrate: false })
         return { approved: true }
       },
@@ -380,7 +394,8 @@ export class PlanModeService extends Service {
   }
 
   /**
-   * Read the logged plan state and any selected state awaiting a boundary.
+   * Read the logged plan state and any selected state awaiting the next
+   * accepted in-turn pre-step.
    *
    * @param agent The agent to read.
    * @returns Current logged state plus a pending selection, when present.
@@ -392,20 +407,20 @@ export class PlanModeService extends Service {
   }
 
   /**
-   * Select whether plan mode should be active. Between turns the change
-   * commits immediately — no request boundary would arrive until the next
-   * prompt, so a queued intent would hang (the open-turn fold is the idle
-   * signal: agent status stays `running` through post-turn checkpointing,
-   * where a boundary equally never comes). During an open turn the
-   * selection is held as pending intent for the next in-turn request
-   * boundary. Repeated selection of the current or already-pending state is
-   * a no-op.
+   * Select whether plan mode should be active. Between turns the method
+   * appends the change immediately because no in-turn pre-step will run until
+   * another prompt starts a turn. The open-turn fold is the idle signal:
+   * agent status stays `running` through post-turn checkpointing, when no
+   * further in-turn pre-step runs. During an open turn the selection remains
+   * pending until the next accepted in-turn pre-step. Repeated selection of
+   * the current or already-pending state is a no-op.
    *
    * @param agent The agent to switch.
    * @param active Whether plan mode should be active.
    * @returns what happened: `committed` (logged now), `queued` (awaiting the
-   * next boundary), `cancelled` (an opposite pending selection was cleared;
-   * the logged state already matches), or `noop` (already in that state).
+   * next accepted in-turn pre-step), `cancelled` (an opposite pending selection
+   * was cleared; the logged state already matches), or `noop` (already in that
+   * state).
    */
   set(agent: Agent, active: boolean): 'committed' | 'queued' | 'cancelled' | 'noop' {
     const session = agent.session
@@ -424,13 +439,13 @@ export class PlanModeService extends Service {
     }
     session.append('plan/mode', { active })
     this.pendingIntents.delete(session)
-    this.narrate(session, active)
+    const narration = this.narration(session, active)
+    if (narration !== undefined) agent.inject(narration)
     return 'committed'
   }
 
-  /** Flush one pending selection before the next request assembly. */
-  private onBoundary(agent: Agent): void {
-    const session = agent.session
+  /** Append one pending selection before the next request assembly. */
+  private onBoundary(session: Session): void {
     const pending = this.pendingIntents.get(session)
     if (pending === undefined) return
     const target = pending.active
@@ -439,24 +454,24 @@ export class PlanModeService extends Service {
       return
     }
     session.append('plan/mode', { active: target })
-    // Delete only after append succeeds so a later boundary can retry a failed
-    // durable write.
+    // Delete only after append succeeds so a later accepted in-turn pre-step
+    // can retry a failed durable write.
     this.pendingIntents.delete(session)
-    if (pending.narrate) this.narrate(session, target)
   }
 
-  /** Tell the model about a user switch when the last logged header described the other mode. */
-  private narrate(session: Session, target: boolean): void {
+  /** Build a user-switch notice when the last logged header described the other mode. */
+  private narration(session: Session, target: boolean): UserMessage | undefined {
     const told = planModeAtLastHeader(session.events)
     if (told === undefined || told === target) return
     const text = target
       ? 'The user switched this session to plan mode.'
       : 'The user switched this session back to the default mode.'
-    session.append('user/message', createUserMessage({
+    return createUserMessage({
       content: [{ type: 'text', text }],
-      source: { kind: 'plugin', plugin: 'plan-mode' },
-    }), { surfaceOp: 'append' })
+      // The narration is already one sentence, so it is its own summary.
+      source: { kind: 'plugin', plugin: 'plan-mode', form: 'notice', summary: text },
+    })
   }
 }
 
-export default PlanModeService
+export default PlanModeController

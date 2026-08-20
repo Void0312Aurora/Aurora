@@ -1,45 +1,44 @@
 import { describe, expect, it } from 'vitest'
-import { checkSupportRuntimeDependencyEdges, type WorkspaceManifest } from './check-workspace-constraints.ts'
+import { checkWorkspace } from './check-workspace-constraints.ts'
 
-function subject(dir: string, manifest: WorkspaceManifest['manifest']): WorkspaceManifest {
-  return { dir, manifest }
-}
-
-describe('support runtime dependency boundary', () => {
-  const support = subject('packages/support/test-helper', { name: '@deepseek-ai/dsh-test-helper' })
-
-  it.each(['dependencies', 'optionalDependencies', 'peerDependencies'] as const)(
-    'rejects product %s edges into support',
-    (field) => {
-      const consumer = subject('packages/core/consumer', {
-        name: '@deepseek-ai/dsh-consumer',
-        [field]: { '@deepseek-ai/dsh-test-helper': 'workspace:^' },
-      })
-
-      expect(checkSupportRuntimeDependencyEdges([support, consumer])).toEqual([
-        `packages/core/consumer/package.json: ${field} must not target support package @deepseek-ai/dsh-test-helper`,
-      ])
-    },
-  )
-
-  it('allows the explicit invariants peer and development-only dependencies', () => {
-    const invariants = subject('packages/support/invariants', { name: '@deepseek-ai/dsh-invariants' })
-    const consumer = subject('apps/desktop', {
-      dependencies: { '@deepseek-ai/dsh-test-helper': 'workspace:^' },
-      devDependencies: { '@deepseek-ai/dsh-test-helper': 'workspace:^' },
-      peerDependencies: { '@deepseek-ai/dsh-invariants': 'workspace:^' },
-    })
-
-    expect(checkSupportRuntimeDependencyEdges([support, invariants, consumer])).toEqual([
-      'apps/desktop/package.json: dependencies must not target support package @deepseek-ai/dsh-test-helper',
-    ])
+describe('workspace package policy', () => {
+  it.each([
+    ['apps/desktop', '@deepseek-ai/dsh-desktop'],
+    ['apps/vscode', 'dsh-vscode'],
+  ])('treats %s as an installer-owned private product', (dir, name) => {
+    expect(checkWorkspace({
+      dir,
+      manifest: {
+        name,
+        private: true,
+        version: '0.1.0-rc.5',
+      },
+    })).toEqual([])
   })
 
-  it('allows support infrastructure to compose other support packages', () => {
-    const consumer = subject('packages/support/consumer', {
-      dependencies: { '@deepseek-ai/dsh-test-helper': 'workspace:^' },
-    })
-
-    expect(checkSupportRuntimeDependencyEdges([support, consumer])).toEqual([])
+  it('requires publish metadata for the public process utility', () => {
+    expect(checkWorkspace({
+      dir: 'packages/util/process-tree',
+      manifest: {
+        name: '@deepseek-ai/dsh-process-tree',
+        version: '0.1.0-rc.5',
+        type: 'module',
+        main: 'lib/index.js',
+        types: 'lib/types/index.d.ts',
+        files: ['lib/index.js', 'lib/invariant.js', 'lib/types/**/*.d.ts'],
+        publishConfig: { access: 'public' },
+        repository: {
+          type: 'git',
+          url: 'git+https://github.com/deepseek-ai/deepseek-harness.git',
+          directory: 'packages/util/process-tree',
+        },
+        peerDependencies: { '@deepseek-ai/cordis': 'workspace:^' },
+        devDependencies: { '@deepseek-ai/cordis': 'workspace:^' },
+        exports: {
+          '.': { types: './lib/types/index.d.ts', default: './lib/index.js' },
+          './invariant': { types: './lib/types/invariant.d.ts', default: './lib/invariant.js' },
+        },
+      },
+    })).toEqual([])
   })
 })

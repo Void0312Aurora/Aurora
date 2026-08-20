@@ -2,15 +2,15 @@
 
 [English](05-config.md) | 中文
 
-每个 `cordis.yml` 配置项都可以携带 `config` 块，插件则声明一个 schema，在运行 `apply` 前验证该块。错误配置会导致加载失败，并给出准确的错误：插件绝不会在配置不完整时启动。
+`cordis.yml` 中的每个 Cordis 配置项都可以携带 `config` 块，插件则声明一个 schema，在运行 `apply` 前验证该块。错误配置会导致加载失败，并给出准确的错误：插件绝不会在配置不完整时启动。
 
 ## 可配置插件
 
 创建 `config-demo.ts`，并将其放在 `tmp/cordis-tutorial` 中：
 
 ```ts
-import type { Context } from 'cordis'
-import Schema from 'schemastery'
+import type { Context } from '@deepseek-ai/cordis'
+import Schema from '@deepseek-ai/schemastery'
 
 export const name = 'config-demo'
 
@@ -65,20 +65,20 @@ ValidationError: invalid config:
   - $.targets expected array but got not-an-array (at targets)
 ```
 
-插件的 fiber 进入 FAILED 状态，本教程的启动器打印错误后以状态码 1 退出。如果某个插件的 schema 有效配置命名了不可用的资源或提供方，该插件也应当在能解析该引用时立即拒绝。
+插件的 fiber 进入 FAILED 状态，本教程的启动器打印错误后以状态码 1 退出。如果某个插件的配置通过了 schema 验证，但其中指定的资源或提供方不可用，该插件也应当在能解析该引用时立即拒绝。
 
 ## 计算得到的配置值
 
-本仓库使用的 loader 支持 `!!js` 标签，用于必须在加载时计算的配置值，例如从环境中读取 API key：
+本仓库使用的 loader 支持 `!!js` 标签，用于必须在加载时计算的配置值：
 
 ```yaml
-- name: '@deepseek-ai/dsh-llm-deepseek'
+- name: './config-demo.ts'
   config:
-    apiKey: !!js process.env.DEEPSEEK_API_KEY
+    greeting: !!js process.env.DEMO_GREETING ?? 'Hello'
 ```
 
-`!!js` **仅在 `config` 内有效**。配置项元数据（`name`、`id`、`disabled`、`inject` 等）是静态的；`disabled: !!js ...` 会生成一个真值表达式对象，始终禁用该配置项。详见 [loader 配置](../cordis-primer.md#loader-configuration)。
+`!!js` 仅在 `config` 与条目 `disabled` 字段内有效。`disabled: !!js ...` 在每次挂载决策时基于 loader 上下文求值（本仓库的扩展），可以按平台或环境门控一行；其余元数据（`name`、`id`、`inject` 等）保持静态，其中的表达式是普通真值数据。详见 [loader 配置](../cordis-primer.md#loader-configuration)。
 
-下一章：[组合与 HMR](06-composition-and-hmr.md)：将 `cordis.yml` 视为应用。
+下一章：[组合与 HMR（热模块替换）](06-composition-and-hmr.md)：将 `cordis.yml` 视为应用。
 
-[![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-harness/deepseek-harness)
+[![](https://img.shields.io/badge/powered_by-dsh-4D6BFE?style=flat-square&logo=deepseek&logoColor=white)](https://github.com/deepseek-ai/deepseek-harness)

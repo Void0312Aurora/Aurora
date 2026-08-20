@@ -1,324 +1,191 @@
 /**
- * Commander adapter for the `dsh` command-line entry: the one place argv is
- * parsed and routed to a mode. `bin.ts` switches on the returned discriminant
- * and dynamic-imports that mode's module. One program: the default (no
- * subcommand) is the TUI/headless surface with option-only flags;
- * `meta`, `upgrade`, and `web` are real subcommands; the experimental ones
- * (`meta`, `upgrade`) run only under the `--experimental` flag or
- * `DSH_EXPERIMENTAL=1`. Commander owns
- * `--help`/`--version` and parse
- * errors — it prints and exits at the point of failure (a domain failure routes through
- * `command.error`), so this returns only a resolved mode.
+ * Commander adapter for the `dsh` command line.
+ *
+ * The launcher parses only what it owns — which profile to boot, which extra
+ * patch overlays to apply, and the config dumps — and hands **everything after
+ * its own flags** to the booted tree verbatim, where injected app plugins parse
+ * their own flag families and print their own `--help` (see
+ * `@deepseek-ai/dsh-cmdline`). Launcher flags therefore come first: the first
+ * token this parser does not recognize starts the inner arguments, so
+ * `dsh --profile tui --resume abc` boots the tui profile with `--resume abc`,
+ * and `dsh --profile web -h` prints the web app's help, not this one's.
+ *
+ * `web` is a hardcoded alias for `--profile web`; `plugin` manages a profile's
+ * plugin dependencies by forwarding to pnpm.
  * @module @deepseek-ai/dsh/args
  */
 
 import { Command, CommanderError } from 'commander'
 
-/**
- * Interactive TUI: the default mode. `--config` applies an overlay over the
- * shipped composition in place of the personal one, `--config-replace` boots a
- * file as the whole tree instead, and `--resume <id>` rehydrates a session.
- */
-interface TuiInvocation {
-  mode: 'tui'
-  config?: string
-  configReplace?: string
-  resume?: string
+/** Boot a named profile and hand it the invocation's inner arguments. */
+interface ProfileInvocation {
+  mode: 'profile'
+  profile: string
+  /** Extra patch-list overlays applied after the profile's own layer, in argv order. */
+  patches: string[]
+  /** Everything after the launcher's own flags, verbatim, for injected app plugins. */
+  args: string[]
 }
 
-/**
- * Print the composed config tree and exit, without booting: `--dump-config`
- * composes the shipped base, the surface overlay, and the `--config` or
- * personal overlay — exactly the layers that surface would boot;
- * `--dump-default-config` stops at the surface overlay (the shipped tree, no
- * user layer).
- */
+/** Print a composed profile tree and exit without booting. */
 interface DumpConfigInvocation {
   mode: 'dump-config'
-  surface: 'tui' | 'web'
-  /** Omit the `--config`/personal layer and print only the shipped composition. */
+  profile: string
+  /** Omit the profile's user layer and --patch overlays; print bundle layers only. */
   defaultOnly: boolean
-  /** The `--config` overlay to compose instead of the personal one. */
-  config?: string
+  patches: string[]
 }
 
-/** Headless one-shot: `dsh -p "task"`. */
-interface HeadlessInvocation {
-  mode: 'headless'
-  prompt: string
+/** Manage a profile's plugins: forward `args` to pnpm inside the profile directory. */
+interface PluginInvocation {
+  mode: 'plugin'
+  profile: string
+  /** Raw pnpm arguments, verbatim. */
+  args: string[]
 }
 
-/** Interactive fresh TUI over this harness checkout; accepts no default-surface options, only the experimental gate. */
-interface MetaInvocation {
-  mode: 'meta'
-}
+/** The resolved `dsh` invocation. Help, version, and errors exit inside {@link parseDshArgs}. */
+export type DshInvocation = ProfileInvocation | DumpConfigInvocation | PluginInvocation
 
-/**
- * Guided fresh-session entry: `dsh upgrade` seeds the first turn
- * with the `dsh-upgrade` skill. It always mints a
- * fresh session in the invoking directory and takes no options beyond the
- * experimental gate — `--resume`, `--config`, and `-p` are rejected as
- * mistyped, so there is nothing to carry.
- */
-interface SkillSessionInvocation {
-  mode: 'upgrade'
-}
-
-/**
- * Browser UI: `dsh web`. `host`/`port` are present only when the flag was
- * passed — pass-through overrides with no CLI default and no CLI validation:
- * the `dsh-host-webserver` schema (`host` a loopback/all-interfaces literal,
- * `port` a natural ≤ 65535) is the single source of both the default (the
- * shipped Web overlay value stands when a flag is absent) and validity (a bad
- * value fails loud at boot). `port` is `Number`-coerced only because the schema
- * wants a number, not a string. `dev` mounts the client HMR driver;
- * `workspaceRoot` is the parent directory for name-created workspaces.
- */
-interface WebInvocation {
-  mode: 'web'
-  /** Overlay of loader patches applied over the shipped web composition. */
-  config?: string
-  host?: string
-  port?: number
-  dev: boolean
-  workspaceRoot?: string
-  /** Extra authorities for the /api browser-trust fence (`host` or `host:port`); LAN IP literals are derived, not listed here. */
-  trustedHosts?: string[]
-}
-
-/** The resolved `dsh` invocation: exactly one mode. `--help`/`--version`/errors exit inside {@link parseDshArgs}. */
-export type DshInvocation =
-  | TuiInvocation
-  | DumpConfigInvocation
-  | HeadlessInvocation
-  | MetaInvocation
-  | SkillSessionInvocation
-  | WebInvocation
-
-/** Raw web-subcommand options straight from Commander. */
-interface WebOptions {
-  config?: string
-  host?: string
-  port?: string
-  dev?: boolean
-  workspaceRoot?: string
-  trustedHost?: string[]
+/** Launcher flags shared by the default command and the `web` alias. */
+interface BootOptions {
+  patch?: string[]
   dumpConfig?: boolean
   dumpDefaultConfig?: boolean
 }
 
 /**
- * Resolve the two dump flags for one surface, or return `undefined` when
- * neither was passed. Both flags together are contradictory (one includes the
- * user layer, the other excludes it) and fail loud through `error`.
+ * Repeatable single-value collector: `--patch a.yml --patch b.yml`. Never
+ * variadic — a variadic `--patch` would swallow the inner arguments.
  */
-function resolveDump(
-  surface: 'tui' | 'web',
-  options: { config?: string; dumpConfig?: boolean; dumpDefaultConfig?: boolean },
-  error: (message: string) => never,
-): DumpConfigInvocation | undefined {
-  if (options.dumpConfig !== true && options.dumpDefaultConfig !== true) return undefined
+const collect = (value: string, previous: string[] = []): string[] => [...previous, value]
+
+/** The launcher's own help text; each app prints its own. */
+const HELP_EXAMPLES = `
+Examples:
+  dsh --profile web                          boot the web profile (same as: dsh web)
+  dsh --profile headless "run the tests"     answer one task, print the result, and exit
+  dsh --profile tui --patch ./extra.yml      boot a custom profile with one extra overlay
+  dsh --profile tui --resume <session>       arguments after the launcher flags reach the app
+  dsh --profile web --help                   the web app's own flags and help
+  dsh plugin --profile tui add <package>     install a plugin into the tui profile
+`
+
+/**
+ * Resolve a boot or dump invocation from the launcher flags and the leftover
+ * inner arguments.
+ * @param program - the command whose options were parsed (the root, or the `web` alias).
+ * @param profile - the profile these flags boot.
+ * @param options - the launcher flags commander collected.
+ * @param args - the leftover arguments, in argv order.
+ * @returns the resolved invocation.
+ */
+function resolveBoot(program: Command, profile: string, options: BootOptions, args: string[]): DshInvocation {
+  const patches = options.patch ?? []
+  if (patches.includes('')) program.error('error: --patch needs a path')
+  if (options.dumpConfig !== true && options.dumpDefaultConfig !== true) {
+    return { mode: 'profile', profile, patches, args }
+  }
   if (options.dumpConfig === true && options.dumpDefaultConfig === true) {
-    error('error: --dump-config and --dump-default-config are mutually exclusive')
+    program.error('error: --dump-config and --dump-default-config are mutually exclusive')
+  }
+  // The dump is boot-free: it never runs app command-line providers, so it
+  // cannot show what those flags would decide, and printing a tree that differs
+  // from the same invocation's boot would mislead.
+  if (args.length > 0) {
+    program.error(`error: config dumps take no app arguments, got ${args.map(argument => JSON.stringify(argument)).join(' ')}`)
   }
   const defaultOnly = options.dumpDefaultConfig === true
-  if (defaultOnly && options.config !== undefined) {
-    error('error: --dump-default-config prints the shipped tree and takes no --config')
+  if (defaultOnly && patches.length > 0) {
+    program.error('error: --dump-default-config prints the bundle layers and takes no --patch')
   }
-  return {
-    mode: 'dump-config',
-    surface,
-    defaultOnly,
-    ...options.config !== undefined && { config: options.config },
-  }
+  return { mode: 'dump-config', profile, defaultOnly, patches }
 }
 
 /**
- * Narrow the raw `web` options into a {@link WebInvocation}. No host/port
- * validation: both flow to the webserver schema, which is the sole gate. `port`
- * is coerced to a number (the schema rejects a string) but not range-checked
- * here — `NaN`/out-of-range fail loud at the schema on boot.
+ * Resolve argv into one invocation, or print and exit for help, version, or an
+ * error.
+ * @param argv - arguments after the Node binary and script.
+ * @param version - version string printed by `--version`.
+ * @returns the resolved invocation.
  */
-function resolveWeb(options: WebOptions): WebInvocation {
-  return {
-    mode: 'web',
-    ...options.config !== undefined && { config: options.config },
-    ...options.host !== undefined && { host: options.host },
-    ...options.port !== undefined && { port: Number(options.port) },
-    dev: options.dev === true,
-    ...options.workspaceRoot !== undefined && { workspaceRoot: options.workspaceRoot },
-    ...options.trustedHost !== undefined && { trustedHosts: options.trustedHost },
-  }
-}
-
-/**
- * Resolve the raw argv into a {@link DshInvocation}, or print and exit for
- * `--help`/`--version`/a parse error. The default (no subcommand) is the
- * TUI/headless surface; `web` is a subcommand.
- * @param argv - the arguments after the node binary and script (`process.argv.slice(2)`).
- * @param version - the version string `--version` prints; read from this app's package.json.
- * @param experimentalEnv - whether the environment opts into experimental
- * subcommands (`DSH_EXPERIMENTAL=1`); the caller reads the process boundary.
- * @returns the resolved invocation (only reached on a valid, non-help invocation).
- */
-export function parseDshArgs(argv: readonly string[], version: string, experimentalEnv: boolean): DshInvocation {
+export function parseDshArgs(argv: readonly string[], version: string): DshInvocation {
   let resolved: DshInvocation | undefined
-  const program = new Command()
+  // Annotated, not inferred: the actions below call back into `program`, and an
+  // inferred type would be circular through its own chain.
+  const program: Command = new Command()
+  program
     .name('dsh')
     .version(version, '-V, --version', 'output the version number')
-    .description('dsh: DeepSeek Harness — an interactive coding agent for your terminal.\nRun `dsh` with no arguments to start a session in the current directory.')
-    // The default surface takes no positional task, so `dsh "task"` fails
-    // commander's arity check with no hint; these examples are where a first
-    // reader learns the entry points and that a one-shot task rides `-p`.
-    .addHelpText('after', `
-Examples:
-  dsh                     start an interactive session in this directory
-  dsh -p "run the tests"  answer one task, print the result, and exit
-  dsh --resume <id>       continue a past session
-`)
+    .description('dsh: boot a DeepSeek Harness profile — an ordered stack of plugin-bundle patch layers under your own overrides.')
+    .addHelpText('after', HELP_EXAMPLES)
     .exitOverride()
-    // Stop parent options at a subcommand boundary so `web --config` belongs to
-    // Web while `--config ... web` remains a leaked default-surface option.
+    // The launcher's flags come first and end at the first token it does not
+    // know; everything from there on belongs to the booted app, including
+    // its -h. `dsh -h` with no profile still prints this help, below.
+    .helpOption(false)
+    .allowUnknownOption()
+    .passThroughOptions()
     .enablePositionalOptions()
-    // Default surface: option-only (no positional), so `web` can be a real
-    // subcommand without a positional collision.
-    .option('-p, --prompt <task>', 'answer this task without the interactive UI, then exit')
-    .option('--resume <id>', 'continue a past session by id')
-    .option('--config <path>', 'apply this overlay of loader patches instead of the personal one')
-    .option('--config-replace <path>', 'boot this file as the entire tree, ignoring the shipped and personal configuration')
-    .option('--dump-config', 'print the composed config tree (base + surface + --config/personal overlay) and exit')
-    .option('--dump-default-config', 'print the shipped config tree (base + surface overlay, no user layer) and exit')
-    .action((options: {
-      config?: string
-      configReplace?: string
-      prompt?: string
-      resume?: string
-      dumpConfig?: boolean
-      dumpDefaultConfig?: boolean
-    }) => {
-      const dump = resolveDump('tui', options, message => program.error(message))
-      if (dump !== undefined) {
-        // The dump prints composition; a boot-only flag alongside it would be
-        // silently ignored, so reject the mix loud.
-        if (options.prompt !== undefined || options.resume !== undefined || options.configReplace !== undefined) {
-          program.error('error: --dump-config/--dump-default-config take none of -p/--prompt, --resume, or --config-replace')
-        }
-        resolved = dump
-        return
+    .argument('[args...]', 'arguments for the booted profile\'s app (see: dsh --profile <name> --help)')
+    .option('--profile <name>', 'the profile under $DSH_HOME/profiles to boot')
+    .option('--patch <path>', 'extra patch-list overlay applied after the profile layer (repeatable)', collect)
+    .option('--dump-config', 'print the composed profile tree and exit')
+    .option('--dump-default-config', 'print the profile tree without its user layer or --patch overlays and exit')
+    .action((args: string[], options: BootOptions & { profile?: string }) => {
+      // With the app owning -h, the launcher's own help is what a bare
+      // `dsh -h` (no profile to hand it to) must print.
+      if (options.profile === undefined) {
+        if (args.some(argument => argument === '-h' || argument === '--help')) program.help()
+        program.error('error: --profile <name> is required')
       }
-      if (options.prompt !== undefined) {
-        // A headless prompt owns the invocation; an empty task has nothing to
-        // run, and --config/--resume are TUI inputs that must not silently
-        // vanish from a headless run.
-        if (options.prompt === '') program.error('error: --prompt needs a task')
-        if (options.config !== undefined || options.configReplace !== undefined || options.resume !== undefined) {
-          program.error('error: --prompt takes no --config, --config-replace, or --resume')
-        }
-        resolved = { mode: 'headless', prompt: options.prompt }
-        return
-      }
-      // An empty --resume= id would silently start a fresh session downstream
-      // (agent-loop treats '' as no-resume), so a mistyped resume must fail loud.
-      if (options.resume === '') program.error('error: --resume needs a session id')
-      // The two config flags are mutually exclusive: one layers over the shipped
-      // tree, the other discards it, so accepting both would silently drop one.
-      if (options.config !== undefined && options.configReplace !== undefined) {
-        program.error('error: --config and --config-replace are mutually exclusive')
-      }
-      resolved = {
-        mode: 'tui',
-        ...options.config !== undefined && { config: options.config },
-        ...options.configReplace !== undefined && { configReplace: options.configReplace },
-        ...options.resume !== undefined && { resume: options.resume },
-      }
+      const profile = options.profile
+      if (profile === '') program.error('error: --profile needs a name')
+      resolved = resolveBoot(program, profile, options, args)
     })
 
-  // Commander parses the parent (default-surface) options on either side of a
-  // subcommand into `program.opts()`. For a subcommand that shares none of them,
-  // a leaked config/prompt/resume option is a mistyped invocation that must fail
-  // loud rather than silently run and drop the input.
+  /** Reject parent options supplied before a subcommand. */
   const rejectParentOptions = (command: string): void => {
-    const parent = program.opts<{
-      config?: string
-      configReplace?: string
-      prompt?: string
-      resume?: string
-      dumpConfig?: boolean
-      dumpDefaultConfig?: boolean
-    }>()
-    if (parent.config !== undefined || parent.configReplace !== undefined
-      || parent.prompt !== undefined || parent.resume !== undefined
+    const parent = program.opts<BootOptions & { profile?: string }>()
+    if (parent.profile !== undefined || parent.patch !== undefined
       || parent.dumpConfig !== undefined || parent.dumpDefaultConfig !== undefined) {
-      program.error(`error: ${command} takes none of --config, --config-replace, -p/--prompt, --resume, --dump-config, or --dump-default-config`)
+      program.error(`error: ${command} takes none of parent --profile, --patch, --dump-config, or --dump-default-config`)
     }
   }
 
-  // `meta` and `upgrade` are experimental: each runs only under its own
-  // `--experimental` flag or an environment-wide `DSH_EXPERIMENTAL=1` opt-in,
-  // and fails loud otherwise so the gate is never silently skipped.
-  const requireExperimental = (command: string, flag: boolean | undefined): void => {
-    if (flag !== true && !experimentalEnv) {
-      program.error(`error: ${command} is experimental; pass --experimental or set DSH_EXPERIMENTAL=1`)
-    }
-  }
-
-  // Registration order is the rendered help order, so daily use comes first
-  // and the harness-development surfaces (`web --dev`, `meta`)
-  // come last. `upgrade` is a guided fresh-session entry: beyond the
-  // experimental gate it takes no options and always mints a fresh session,
-  // so nothing is left to carry.
-  program
-    .command('upgrade')
-    .description('update this dsh installation to the latest version (experimental)')
-    .option('--experimental', 'acknowledge this subcommand is experimental')
-    .action((options: { experimental?: boolean }) => {
-      rejectParentOptions('upgrade')
-      requireExperimental('upgrade', options.experimental)
-      resolved = { mode: 'upgrade' }
-    })
-
-  // Host and port name no default: the CLI passes neither through when the flag
-  // is absent, so the shipped Web overlay value stands and restating it here
-  // would duplicate a fact this file does not own.
-  const web = program.command('web').description('serve the browser UI on the configured host and port')
+  const web = program.command('web').description('boot the web profile (alias of --profile web); the web app\'s own flags follow')
   web
-    .option('--config <path>', 'apply this overlay of loader patches over the shipped configuration')
-    .option('--host <host>', 'bind host; pass 0.0.0.0 to reach it from another machine')
-    .option('--port <port>', 'listen port; pass 0 to let the OS pick a free one')
-    .option('--dev', 'mount the client-plugin HMR receiver (run pnpm run dev:web separately to rebuild bundles)')
-    .option('--workspace-root <path>', 'parent directory for workspaces created from the browser UI')
-    .option('--trusted-host <authority...>', 'extra authority the /api browser-trust fence accepts (host or host:port; repeatable)')
-    .option('--dump-config', 'print the composed config tree (base + web + --config/personal overlay) and exit')
-    .option('--dump-default-config', 'print the shipped config tree (base + web overlay, no user layer) and exit')
-    .action((options: WebOptions) => {
+    .helpOption(false)
+    .allowUnknownOption()
+    .passThroughOptions()
+    .enablePositionalOptions()
+    .argument('[args...]', 'arguments for the web app (see: dsh web --help)')
+    .option('--patch <path>', 'extra patch-list overlay applied after the profile layer (repeatable)', collect)
+    .option('--dump-config', 'print the composed web-profile tree (with the user layer and any --patch) and exit')
+    .option('--dump-default-config', 'print the web profile\'s bundle layers (no user layer) and exit')
+    .action((args: string[], options: BootOptions) => {
       rejectParentOptions('web')
-      const dump = resolveDump('web', options, message => program.error(message))
-      if (dump !== undefined) {
-        resolved = dump
-        return
-      }
-      resolved = resolveWeb(options)
+      resolved = resolveBoot(web, 'web', options, args)
     })
 
-  program
-    .command('meta')
-    .description('work on the dsh source that runs this command, from any directory (experimental)')
-    .option('--experimental', 'acknowledge this subcommand is experimental')
-    .action((options: { experimental?: boolean }) => {
-      rejectParentOptions('meta')
-      requireExperimental('meta', options.experimental)
-      resolved = { mode: 'meta' }
+  const plugin = program.command('plugin').description('manage a profile\'s plugins by forwarding the remaining arguments to pnpm in the profile directory')
+  plugin
+    .requiredOption('--profile <name>', 'the profile whose plugins to manage (initialized on first use)')
+    .allowUnknownOption()
+    .argument('[args...]', 'pnpm arguments, forwarded verbatim (add <pkg>, remove <pkg>, why <pkg>, ...)')
+    .action((args: string[], options: { profile: string }) => {
+      rejectParentOptions('plugin')
+      if (options.profile === '') program.error('error: --profile needs a name')
+      if (args.length === 0) program.error('error: plugin needs pnpm arguments to forward (e.g. add <package>)')
+      resolved = { mode: 'plugin', profile: options.profile, args }
     })
 
   try {
     program.parse(argv, { from: 'user' })
   } catch (error) {
-    // Commander printed help/version/the error under `exitOverride`; exit with
-    // the code it chose (0 for help/version, 1 for a parse or domain error).
-    /* v8 ignore next -- Commander only throws CommanderError from parse/error under exitOverride */
     return process.exit(error instanceof CommanderError ? error.exitCode : 1)
   }
-  /* v8 ignore next -- the default action or a subcommand action always resolves, or parse throws above */
-  if (resolved === undefined) { throw new Error('dsh: no invocation resolved') }
+  /* v8 ignore next -- an action resolves or Commander throws */
+  if (resolved === undefined) throw new Error('dsh: no invocation resolved')
   return resolved
 }

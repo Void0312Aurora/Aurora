@@ -1,18 +1,18 @@
 /**
  * Web shell boot kernel — the face consumed by the apps/web entry. Everything
  * here is machinery that cannot itself be a loader entry, and none of it
- * value-imports a plugin package (web2 shell self-sufficiency rule: the
+ * value-imports a plugin package (shell self-sufficiency rule: the
  * loading page must work while — especially when — plugins fail). The one
- * sanctioned exception is the modules package (design §4.7 bootstrap
+ * sanctioned exception is the modules package (bootstrap
  * identity): the module system cannot arrive through itself, so its class
  * and its client-half wrapper are shell-bundled and the kernel adopts its
  * plugin entry once cordis is up.
  *
  * AppWebEntry.run(), module face first, then plugin face: parse
- * `window.__DSH_BOOT__` into the two-view BootManifest (wire boundary, D16)
+ * `window.__DSH_BOOT__` into the two-view BootManifest (wire boundary)
  * → build the module system over the module-view rows → render the loading
  * page → prefetch every `immediately` row in parallel with mounting the
- * vendored cordis Loader (internal-seam injection BEFORE any entry exists —
+ * vendored cordis Loader (`internal` contract injection BEFORE any entry exists —
  * the bare-import fallback in tree.import must never run in a browser) →
  * await the prefetch tier, THEN adopt the modules entry and create one
  * loader entry per plugin-view row plus the shell-own app-shell assembly
@@ -24,7 +24,7 @@
  * synchronous cross-package require edges (e.g. locale → runtime/client) that
  * fiber inject waiting cannot protect — a bundle's factory must be
  * registered before any dependent entry materializes. Per-row prefetch
- * failures still resolve silently (the create-side import refetches and
+ * failures still resolve silently (the create-side import reloads and
  * owns the loud failure), so the barrier never turns one bad bundle into a
  * boot-wide fail-fast.
  *
@@ -32,8 +32,8 @@
  * decisions (the app-shell assembly is itself a graph entry, the only
  * shell-own module registered with the module system).
  */
-import { Context } from 'cordis'
-import Loader from '@cordisjs/plugin-loader'
+import { Context } from '@deepseek-ai/cordis'
+import Loader from '@deepseek-ai/cordis-plugin-loader'
 import { createRoot, type Root } from 'react-dom/client'
 import * as ModulesClient from '@deepseek-ai/dsh-client-modules/client'
 import {
@@ -47,8 +47,14 @@ import { getStaticModules } from './seed.ts'
 import { STATE_LABELS, createLoaderStatusStore, createSignal } from './loader-status.ts'
 import './base.css'
 
-/** Module transport seams the shell passes through (jsdom tests replace the <script> path). */
-export type BootSeams = Pick<ClientModuleSystemOptions, 'fetchBundle' | 'executeBundle'>
+/** Module transport hook the shell passes through (jsdom tests replace the <script> path). */
+export type BootSeams = Pick<ClientModuleSystemOptions, 'loadBundle'>
+
+/** Boot options supplied by a hosting shell, including statically bundled plugin rows. */
+export type BootOptions = BootSeams & {
+  /** Graph-row plugin implementations bundled by an embedder webview. */
+  staticPlugins?: Record<string, unknown>
+}
 
 /**
  * The modules package's own graph row id. The kernel adopts that entry
@@ -67,7 +73,7 @@ const MODULES_ID = '@deepseek-ai/dsh-client-modules'
  */
 export class AppWebEntry {
   private readonly el: HTMLElement
-  private readonly seams: BootSeams | undefined
+  private readonly options: BootOptions | undefined
   private readonly status = createLoaderStatusStore()
   private readonly settled = createSignal(false)
   private readonly error = createSignal<string | undefined>(undefined)
@@ -80,11 +86,11 @@ export class AppWebEntry {
   /**
    * Hold the mount point; all work happens in {@link run}.
    * @param el - mount point (the app's #root).
-   * @param seams - optional module transport overrides (test environments).
+   * @param options - Optional module transport overrides and static plugin rows.
    */
-  constructor(el: HTMLElement, seams?: BootSeams) {
+  constructor(el: HTMLElement, options?: BootOptions) {
     this.el = el
-    this.seams = seams
+    this.options = options
   }
 
   /**
@@ -97,18 +103,22 @@ export class AppWebEntry {
   async run(): Promise<void> {
     this.manifest = parseBootManifest((globalThis as DshWindow).__DSH_BOOT__)
 
+    const { staticPlugins, ...seams } = this.options ?? {}
     this.modules = new ClientModuleSystem({
-      modules: this.manifest.modules, staticModules: getStaticModules(), ...this.seams,
+      modules: this.manifest.modules, staticModules: getStaticModules(), ...seams,
     })
     // The app-shell assembly is the only shell-own module: every other graph
-    // row is a plugin bundle arriving through fetch (web2 single package form).
+    // row is a plugin bundle arriving through fetch.
     this.modules.registerStatic(APP_SHELL_ID, AppShell)
-    // Adoption handoff, supply side (design §4.7): register the modules
+    // Adoption handoff, supply side: register the modules
     // package's own client half under its bare package name (= graph row id
     // = entry name — a suffixed key would miss the statics branch and
     // trigger a real fetch), and put the instance on the kernel slot the
     // wrapper's apply reads to provide ctx.modules.
     this.modules.registerStatic(MODULES_ID, ModulesClient)
+    for (const [id, module] of Object.entries(staticPlugins ?? {})) {
+      this.modules.registerStatic(id, module)
+    }
     ;(globalThis as DshWindow).__DSH_MODULES__ = this.modules
 
     this.root = createRoot(this.el)
@@ -152,12 +162,12 @@ export class AppWebEntry {
     await Promise.all(this.manifest.plugins
       .filter(row => row.immediately)
       .map(row => this.modules.prefetch(row.id).catch(() => {
-        // Import refetches and reports this loudly per entry; swallowing
+        // Import reloads and reports this loudly per entry; swallowing
         // here keeps one failing prefetch from masking the others.
       })))
   }
 
-  /** Plugin face: mount the Loader, inject the internal seam, adopt modules, create the graph entries, settle, sweep. */
+  /** Plugin face: mount the Loader, inject the `internal` contract, adopt modules, create the graph entries, settle, sweep. */
   private async runPluginBoot(prefetching: Promise<void>): Promise<void> {
     const ctx = this.ctx
     await ctx.plugin(Loader)
@@ -172,7 +182,7 @@ export class AppWebEntry {
     // fiber (child plugin fibers share the same entry).
     ctx.on('internal/status', (fiber) => {
       const entry = fiber.entry
-      if (entry === undefined || entry.fiber === undefined) { return }
+      if (entry === undefined || entry.fiber === undefined) return
       this.status.set(entry.options.name, STATE_LABELS[entry.fiber.state])
     })
 
@@ -189,7 +199,7 @@ export class AppWebEntry {
     const rows = [MODULES_ID, ...this.manifest.plugins.map(row => row.id).filter(id => id !== MODULES_ID), APP_SHELL_ID]
     // Entry creation order carries no semantics (fiber inject waiting owns
     // activation order); creating concurrently lets non-prefetched bundle
-    // fetches parallelize. The app-shell assembly entry is appended by the
+    // loads parallelize. The app-shell assembly entry is appended by the
     // kernel: it is shell-own code (host graph rows are all plugin bundles),
     // and mounting the assembly is not a composition decision — it rides the
     // same entry lifecycle so the sweep and status cover it uniformly.
@@ -215,7 +225,7 @@ export class AppWebEntry {
    */
   private assertEntriesActive(): void {
     const ctx = this.ctx
-    const failures: Array<string> = []
+    const failures: string[] = []
     for (const entry of ctx.loader.entries()) {
       const name = entry.options.name
       if (entry.fiber === undefined) {

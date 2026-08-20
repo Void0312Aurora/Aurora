@@ -16,7 +16,7 @@ import type { HostObservable, SnapshotSelectorHook } from '@deepseek-ai/dsh-clie
  * @returns the selector hook.
  */
 export function bindSnapshotSelector<T>(w: HostObservable<T>): SnapshotSelectorHook<T> {
-  const subscribe = (fn: () => void) => { return w.subscribe(fn) }
+  const subscribe = (fn: () => void) => w.subscribe(fn)
   const getSnapshot = () => w.getSnapshot()
   return function useSelector<S>(sel: (s: T) => S, eq?: (a: S, b: S) => boolean): S {
     return useSyncExternalStoreWithSelector(subscribe, getSnapshot, undefined, sel, eq)

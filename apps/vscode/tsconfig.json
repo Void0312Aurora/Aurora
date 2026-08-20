@@ -1,0 +1,66 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "lib/types",
+    "jsx": "react-jsx",
+    "lib": [
+      "ES2024",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "types": [
+      "node",
+      "vscode"
+    ]
+  },
+  "include": [
+    "src",
+    "webview",
+    "tests"
+  ],
+  "references": [
+    { "path": "../../packages/typert/registry" },
+    { "path": "../../packages/api/gateway/tsconfig.client.json" },
+    { "path": "../../packages/session-query/session-log-export" },
+    { "path": "../../packages/api/remotes/tsconfig.client.json" },
+    { "path": "../../packages/extensions/cordis-client-runner" },
+    { "path": "../../packages/extensions/ui-cordis" },
+    { "path": "../../packages/util/process-tree" },
+    { "path": "../../packages/util/web-launcher" },
+    { "path": "../../packages/client/connection/tsconfig.host.json" },
+    { "path": "../../packages/client/connection/tsconfig.client.json" },
+    { "path": "../../packages/client/modules" },
+    { "path": "../../packages/client/web" },
+    { "path": "../../packages/client/runtime" },
+    { "path": "../../packages/client/locale" },
+    { "path": "../../packages/client/ui-slots" },
+    { "path": "../../packages/client/ui-primitives" },
+    { "path": "../../packages/client/ui-theme" },
+    { "path": "../../packages/client/ui-layout" },
+    { "path": "../../packages/client/ui-sidebar" },
+    { "path": "../../packages/client/ui-settings" },
+    { "path": "../../packages/client/ui-settings-general" },
+    { "path": "../../packages/client/ui-settings-models" },
+    { "path": "../../packages/client/ui-settings-plugin-inventory" },
+    { "path": "../../packages/client/ui-conversation" },
+    { "path": "../../packages/client/ui-tool" },
+    { "path": "../../packages/client/ui-workflow-run" },
+    { "path": "../../packages/client/ui-deliverables" },
+    { "path": "../../packages/client/ui-workspace" },
+    { "path": "../../packages/client/ui-input-trigger" },
+    { "path": "../../packages/client/ui-commands" },
+    { "path": "../../packages/client/ui-skill" },
+    { "path": "../../packages/client/ui-subagent" },
+    { "path": "../../packages/client/ui-jobs" },
+    { "path": "../../packages/client/ui-goal" },
+    { "path": "../../packages/client/ui-message-feedback" },
+    { "path": "../../packages/client/ui-model-selection" },
+    { "path": "../../packages/client/ui-permission-presets" },
+    { "path": "../../packages/client/ui-agent-preset" },
+    { "path": "../../packages/client/ui-settings-plugins" },
+    { "path": "../../packages/client/ui-plan" },
+    { "path": "../../packages/client/ui-user-questions" },
+    { "path": "../../packages/client/ui-trajectory" }
+  ]
+}

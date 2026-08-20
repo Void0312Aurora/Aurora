@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Context } from 'cordis'
+import { Context } from '@deepseek-ai/cordis'
 import { runInNewContext } from 'node:vm'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -175,7 +175,7 @@ describe('AgentRegistry initiator scope', () => {
     await Promise.resolve()
 
     expect(() => service.withInitiator(initiator, () => 1)).toThrow('agent initiator scope is disposed')
-    expect(() => service.withoutInitiator(() => { return 1 })).toThrow('agent initiator scope is disposed')
+    expect(() => service.withoutInitiator(() => 1)).toThrow('agent initiator scope is disposed')
     expect(disposed).toBe(false)
     expect(ctx.get('agents')).toBeUndefined()
     release.resolve(true)

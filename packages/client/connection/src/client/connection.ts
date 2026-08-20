@@ -1,7 +1,8 @@
-import type { IApiClient, HostFrame, MuxFrame, RpcRequest } from './api.ts'
+import { API_PROTOCOL_VERSION } from './api.ts'
+import type { HostDescription, IApiClient, HostFrame, MuxFrame, RpcRequest } from './api.ts'
 
-/** Reconnect/backoff tunables (deployment-varying — no hardcoded tunables; web-cordis §B.1 lists
- *  these as the future `ctx.connection` plugin Config). All fields optional; defaults below. */
+/** Reconnect/backoff tunables (deployment-varying — no hardcoded tunables; these become the
+ *  future `ctx.connection` plugin's Config). All fields optional; defaults below. */
 export interface ConnectionConfig {
   /** First-retry backoff cap in ms (jittered: actual delay is cap/2..cap). */
   backoffBaseMs?: number
@@ -10,9 +11,9 @@ export interface ConnectionConfig {
   /** Upper bound for the backoff cap in ms. */
   backoffMaxMs?: number
   /** Cap on waiting for both streams' onOpen before onConnected, in ms. The strict handshake
-   *  (audit C2) waits for mux+host stream establishment plus describe; a carrier that never
+   *  waits for mux+host stream establishment plus describe; a carrier that never
    *  fires onOpen (misbehaving proxy) must not wedge the connection forever — on timeout the
-   *  generation proceeds as connected and the live-gap repair path (audit S3) covers stragglers. */
+   *  generation proceeds as connected and the live-gap repair path covers stragglers. */
   streamOpenTimeoutMs?: number
 }
 
@@ -35,7 +36,7 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
   })
 }
 
-/** Coarse connection state for the UI (audit C1): 'connected' after each generation's handshake,
+/** Coarse connection state for the UI: 'connected' after each generation's handshake,
  *  'reconnecting' the moment the generation fails (covers the whole backoff+retry span). */
 export type ConnectionState = 'connected' | 'reconnecting'
 
@@ -45,7 +46,7 @@ export interface ConnectionSinks {
   onMuxEnvelope?: (envelope: RpcRequest<MuxFrame>) => void
   onHostEnvelope?: (envelope: RpcRequest<HostFrame>) => void
   /** After each connection generation is established (both streams open + describe succeeded), first connect included. */
-  onConnected?: () => void
+  onConnected?: (description: HostDescription) => void
   /** Coarse state transitions (deduplicated: fires only on change). The initial pre-connect
    *  span reports nothing — the UI treats "no state yet" as connecting, not as an outage. */
   onStateChange?: (state: ConnectionState) => void
@@ -99,47 +100,66 @@ export class ConnectionController {
     return this.running
   }
 
+  /** Re-read both mutable liveness guards after a potentially reentrant sink. */
+  private isGenerationActive(controller: AbortController): boolean {
+    return this.isRunning() && !controller.signal.aborted
+  }
+
   private async loop(): Promise<void> {
     while (this.running) {
       const gen = ++this.generation
       const ac = new AbortController()
       this.current = ac
 
-      /* v8 ignore next -- initializer placeholder: the Promise executor
-       * below runs synchronously and replaces it before anyone can call it. */
-      let muxOpened = (): void => {}
-      /* v8 ignore next -- same placeholder pattern as muxOpened. */
-      let hostOpened = (): void => {}
-      const streamsOpen = Promise.all([
-        new Promise<void>((resolve) => { muxOpened = resolve }),
-        new Promise<void>((resolve) => { hostOpened = resolve }),
-      ])
-
-      const failed = new Promise<void>((resolve) => {
-        const settle = (): void => {
-          if (gen === this.generation && !ac.signal.aborted) ac.abort()
-          resolve()
-        }
-        void this.pumpStream(this.api.events.mux({}, ac.signal, muxOpened), this.sinks.onMuxEnvelope, settle)
-        void this.pumpStream(this.api.events.host({}, ac.signal, hostOpened), this.sinks.onHostEnvelope, settle)
-      })
+      // No stream is opened until host.describe has proved that the
+      // independently released client and host speak the same API protocol.
+      // This prevents an incompatible host from sending frames that the
+      // client could consume before it notices the version mismatch.
+      let failed = Promise.resolve()
 
       try {
-        // Strict readiness handshake (audit C2): describe proves unary reachability, onOpen
-        // proves each SSE transport is established (response headers in, before any frame) —
-        // only then may onConnected fire, so the resync it triggers cannot outrun the
-        // subscribed baseline. The timeout guards against a carrier that never fires onOpen
-        // (see ConnectionConfig.streamOpenTimeoutMs).
-        const timeout = new AbortController()
-        await Promise.all([
-          this.api.host.describe({}),
-          Promise.race([streamsOpen, sleep(this.config.streamOpenTimeoutMs, timeout.signal)]),
+        const description = await this.api.host.describe({}, ac.signal)
+        const descriptionResult = description.result
+        if (!descriptionResult.ok) {
+          throw new Error(`host.describe failed: ${descriptionResult.error.code}: ${descriptionResult.error.message}`)
+        }
+        if (descriptionResult.value.protocolVersion !== API_PROTOCOL_VERSION) {
+          throw new Error(`host protocolVersion ${String(descriptionResult.value.protocolVersion)} != client ${String(API_PROTOCOL_VERSION)}`)
+        }
+        if (ac.signal.aborted) throw new Error('generation aborted during protocol handshake')
+
+        /* v8 ignore next -- initializer placeholder: the Promise executor
+         * below runs synchronously and replaces it before anyone can call it. */
+        let muxOpened = (): void => {}
+        /* v8 ignore next -- same placeholder pattern as muxOpened. */
+        let hostOpened = (): void => {}
+        const streamsOpen = Promise.all([
+          new Promise<void>((resolve) => { muxOpened = resolve }),
+          new Promise<void>((resolve) => { hostOpened = resolve }),
         ])
+        failed = new Promise<void>((resolve) => {
+          const settle = (): void => {
+            if (gen === this.generation && !ac.signal.aborted) ac.abort()
+            resolve()
+          }
+          void this.pumpStream(this.api.events.mux({}, ac.signal, muxOpened), this.sinks.onMuxEnvelope, settle)
+          void this.pumpStream(this.api.events.host({}, ac.signal, hostOpened), this.sinks.onHostEnvelope, settle)
+        })
+
+        // Strict readiness handshake: onOpen proves each physical stream is
+        // established before onConnected; the timeout guards a carrier that
+        // never fires onOpen (see ConnectionConfig.streamOpenTimeoutMs).
+        const timeout = new AbortController()
+        await Promise.race([streamsOpen, sleep(this.config.streamOpenTimeoutMs, timeout.signal)])
         timeout.abort()
-        if (ac.signal.aborted) throw new Error('generation aborted during readiness handshake')
+        if (!this.isGenerationActive(ac)) throw new Error('generation aborted during readiness handshake')
         this.attempt = 0
         this.emitState('connected')
-        this.callSink(this.sinks.onConnected)
+        // A state sink may synchronously stop this controller. Do not publish
+        // a description for a generation that no longer exists afterward.
+        if (this.isGenerationActive(ac)) {
+          this.callSink(() => { this.sinks.onConnected?.(descriptionResult.value) })
+        }
       } catch {
         // Transport failure: treat as generation failure, fall through to the shared backoff.
         if (!ac.signal.aborted) ac.abort()
@@ -179,8 +199,7 @@ export class ConnectionController {
   }
 
   /** Sink exception isolation: a business-layer throw is logged only, never affecting pump or reconnect semantics. */
-  private callSink(fn: (() => void) | undefined): void {
-    if (fn === undefined) return
+  private callSink(fn: () => void): void {
     try {
       fn()
     } catch (error) {

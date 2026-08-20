@@ -1,9 +1,9 @@
 /** Current-surface projection and byte-bounded rendering. */
 
-import { isCompactCheckpointSource } from '@deepseek-ai/dsh-compact'
+import { isCompactCheckpointSource } from '@deepseek-ai/dsh-compaction'
 import type { SessionSurfaceSnapshot } from '@deepseek-ai/dsh-session-query'
 import { assertNever } from '@deepseek-ai/dsh-llm'
-import { TextRetainer } from '@deepseek-ai/dsh-retention'
+import { TextRetainer } from '@deepseek-ai/dsh-output-retention'
 import { stringifyTagSafeJson } from './serialization.ts'
 import type { ReferencedConversationItem } from './types.ts'
 
@@ -42,12 +42,6 @@ function projectSessionConversation(snapshot: SessionSurfaceSnapshot): Projected
         if (!checkpoint && event.data.source.kind !== 'user') break
         const text = textContent(event.data.content)
         if (text !== '') conversation.push({ role: 'user', text, checkpoint, originalText: text, omittedBytes: 0 })
-        break
-      }
-      case 'steering/message': {
-        if (event.data.message.source.kind !== 'user') break
-        const text = textContent(event.data.message.content)
-        if (text !== '') conversation.push({ role: 'user', text, checkpoint: false, originalText: text, omittedBytes: 0 })
         break
       }
       case 'assistant/message': {
@@ -92,7 +86,7 @@ export function retainReferencedSession(
 
   while (size() > maxBytes) {
     const newestIndex = retained.length - 1
-    const dropIndex = retained.findIndex((item, index) => { return !item.checkpoint && index !== newestIndex })
+    const dropIndex = retained.findIndex((item, index) => !item.checkpoint && index !== newestIndex)
     if (dropIndex < 0) break
     const removed = retained.splice(dropIndex, 1)[0]
     /* v8 ignore next 3 -- dropIndex came from this exact array and is non-negative. */

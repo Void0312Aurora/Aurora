@@ -169,7 +169,9 @@ export async function* translate(payloads: AsyncIterable<string>): AsyncGenerato
         }
       }
 
-      if (typeof choice.finish_reason === 'string') pendingFinish = mapFinishReason(choice.finish_reason)
+      if (typeof choice.finish_reason === 'string') {
+        pendingFinish = mapFinishReason(choice.finish_reason)
+      }
     }
 
     // Usage may arrive attached to the finish chunk or as a trailing

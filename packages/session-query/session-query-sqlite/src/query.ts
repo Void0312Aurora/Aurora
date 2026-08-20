@@ -191,7 +191,7 @@ export function buildSessionWhere(filters: readonly SessionResultFilter[]): SqlW
  * @returns parameterized SQL fragment and ordered bindings.
  */
 export function buildEventWhere(filters: readonly SessionEventMetadataFilter[]): SqlWhere {
-  const clauses: Array<string> = []
+  const clauses: string[] = []
   const params: Array<string | number> = []
   for (const filter of filters) {
     switch (filter.kind) {
@@ -471,7 +471,7 @@ function unknownAvailability(value: never): never {
 function unknownFilter(filter: never): never {
   const kind = (filter as { kind?: unknown }).kind
   throw new SessionQueryError(
-    `session filter contains unknown kind ${typeof kind !== 'string' ? '(missing)' : `"${kind}"`}`,
+    `session filter contains unknown kind ${typeof kind === 'string' ? `"${kind}"` : '(missing)'}`,
     'SESSION_QUERY_INVALID_FILTER',
   )
 }

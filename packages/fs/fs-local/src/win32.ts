@@ -44,7 +44,7 @@ const ERROR_ACCESS_DENIED = 5
 let bindings: Win32Bindings | undefined
 
 async function win32(): Promise<Win32Bindings> {
-  if (bindings !== undefined) { return bindings }
+  if (bindings !== undefined) return bindings
   const koffi = (await import('koffi')).default
   const advapi32 = koffi.load('advapi32.dll')
   const kernel32 = koffi.load('kernel32.dll')

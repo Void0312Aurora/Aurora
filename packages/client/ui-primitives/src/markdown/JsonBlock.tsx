@@ -19,7 +19,7 @@ export function JsonBlock({ label, payload, defaultOpen = false, truncatedLabel 
 }) {
   const [open, setOpen] = useState(defaultOpen)
   const body = useMemo(() => {
-    if (!open) { return '' }
+    if (!open) return ''
     let s: string
     try {
       // lib typing hides stringify's undefined arm (undefined/function/symbol payloads).

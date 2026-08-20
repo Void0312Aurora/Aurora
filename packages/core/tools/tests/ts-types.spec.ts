@@ -5,7 +5,7 @@ import { parameterSchemaSpecToJsonSchema } from '@deepseek-ai/dsh-tools'
 
 describe('jsonSchemaToTs', () => {
   it('maps every unified schema construct', () => {
-    const cases: Array<[unknown, string]> = [
+    const cases: [unknown, string][] = [
       [{ type: 'string' }, 'string'],
       [{ type: 'number' }, 'number'],
       [{ type: 'integer' }, 'number'],
@@ -146,6 +146,15 @@ describe('renderToolsSdk', () => {
     expect(text).toContain('rejects with `ToolCallError`')
     expect(text).toContain('MAY overlap under `Promise.all`')
     expect(text).toContain('lossless JSON')
+  })
+
+  it('names both required call arguments, not just the program', () => {
+    // The schema requires `code` AND `description`; instructions that mention
+    // only the program let a model emit `{code}` alone and fail INVALID_ARGS.
+    const text = renderToolsSdk([bash])
+    expect(text).toContain('`code`')
+    expect(text).toContain('`description`')
+    expect(text).toContain('two required arguments')
   })
 
   it('is deterministic: same tool set, byte-identical text regardless of input order', () => {

@@ -55,7 +55,7 @@ export interface ExaSearchProviderOptions {
  */
 export function mapExaResult(result: ExaResult): WebSearchSource | undefined {
   const snippet = result.highlights?.find(highlight => highlight.trim().length > 0)
-  if (snippet === undefined) { return undefined }
+  if (snippet === undefined) return undefined
   return {
     url: result.url,
     ...result.title != null && result.title.length > 0 ? { title: result.title } : {},
@@ -75,7 +75,7 @@ export function mapExaResponse(response: ExaSearchResponse): WebSearchResult {
   const sources = (response.results ?? [])
     .map(mapExaResult)
     .filter((source): source is WebSearchSource => source !== undefined)
-  // Exa returns no generated answer, so `content` is omitted. The seam owns the
+  // Exa returns no generated answer, so `content` is omitted. The web service owns the
   // final `maxResults` truncation, so this provider reports `truncated: false`.
   return { sources, truncated: false }
 }

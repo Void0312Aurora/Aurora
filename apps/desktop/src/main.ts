@@ -6,11 +6,11 @@
  * child and exits.
  */
 
-import { spawn, type ChildProcess } from 'node:child_process'
+import { spawn as nodeSpawn, type ChildProcess } from 'node:child_process'
 import { join } from 'node:path'
 import { killProcessTree } from '@deepseek-ai/dsh-process-tree'
+import { resolveWebLaunch, spawnWebLaunch, waitForHttpOk, waitForReadyLine, childExited } from '@deepseek-ai/dsh-web-launcher'
 import { app, BrowserWindow, dialog, Menu, nativeImage, shell, Tray } from './electron-api.ts'
-import { resolveWebLaunch, waitForHttpOk, waitForReadyLine, childExited } from './launcher.ts'
 
 const APP_ID = 'ai.deepseek.dsh-desktop'
 const WINDOW_TITLE = 'DSH Desktop'
@@ -31,6 +31,9 @@ let tray: Tray | undefined
 let server: ChildProcess | undefined
 let serverUrl: URL | undefined
 let quitting = false
+// Set by the first fatal() so a single root cause cannot show two modal error
+// boxes or run teardown twice.
+let failing = false
 // A focus request (second launch, tray click) that arrived while the server
 // was still booting and no window existed yet; honored once boot completes.
 let pendingFocus = false
@@ -192,8 +195,19 @@ async function exposeLifecycleTestControl(): Promise<void> {
   process.stdout.write(`DSH_DESKTOP_READY ${String(serverPid)}\n`)
 }
 
+/**
+ * Report an unrecoverable boot failure and tear down. Idempotent: a single
+ * root cause reaches this twice — a spawn failure fires `child.on('error')`
+ * *and* ends the child's stdout, which rejects the readiness wait — and
+ * `dialog.showErrorBox` is modal, so a second call would make the user
+ * dismiss a second box and start a second teardown. The first error wins;
+ * later ones only log.
+ * @param error - the failure to report.
+ */
 function fatal(error: Error): void {
   console.error(`[dsh-desktop] ${error.message}`)
+  if (failing) return
+  failing = true
   dialog.showErrorBox(WINDOW_TITLE, error.message)
   // app.exit() skips before-quit; kill the server tree and wait for the
   // dispatch to land so a boot failure cannot leave an orphaned `dsh web`
@@ -226,16 +240,7 @@ async function boot(): Promise<void> {
     console.warn(`[dsh-desktop] Windows has no harness confinement backend; using ${launch.env.DSH_PERMISSION_MODE} permission mode (approval prompts are disabled). Set DSH_PERMISSION_MODE to override.`)
   }
   console.log(`[dsh-desktop] launching dsh web (${launch.source}): ${launch.command} ${launch.args.join(' ')}`)
-  const child = spawn(launch.command, launch.args, {
-    cwd: launch.cwd,
-    env: { ...process.env, ...launch.env },
-    stdio: ['ignore', 'pipe', 'pipe'],
-    windowsHide: true,
-    // POSIX: detaching makes the child a process-group leader so both killTree
-    // and the reaper can signal the whole tree with a negated PID; Windows
-    // stays attached and tree-kills with taskkill /T instead.
-    detached: process.platform !== 'win32',
-  })
+  const child = spawnWebLaunch(launch, { env: process.env })
   server = child
   let ready = false
   let stderrTail = ''
@@ -269,7 +274,7 @@ async function boot(): Promise<void> {
   // must live outside Electron's process group: a terminal Ctrl+C signals the
   // group, and taking the reaper with it would kill the hard-kill cleanup
   // exactly when it is needed (detached + unref below).
-  spawn(process.execPath, [join(runDir(), 'lib', 'types', 'reaper.js'), String(process.pid), String(child.pid ?? 0)], {
+  nodeSpawn(process.execPath, [join(runDir(), 'lib', 'types', 'reaper.js'), String(process.pid), String(child.pid ?? 0)], {
     env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
     stdio: 'ignore',
     windowsHide: true,
@@ -306,7 +311,13 @@ async function boot(): Promise<void> {
   } catch (error) {
     fatal(error instanceof Error ? new Error(`${error.message}\n${stderrTail}`) : new Error(String(error)))
   }
-  if (url === undefined) return
+  // Bail on `ready`, not on `url`: `url` is assigned by the readiness line, so
+  // it survives a later failure in the same try — a failed HTTP poll or an
+  // adopted-stranger rejection would otherwise fall through here and build a
+  // window and tray on top of a server `fatal()` is concurrently killing
+  // (`fatal()` defers `app.exit` behind killTree whenever a server child
+  // exists, so the process is still alive at this point).
+  if (!ready || url === undefined) return
   Menu.setApplicationMenu(null)
   createWindow(url)
   createTray()
@@ -335,6 +346,18 @@ if (!app.requestSingleInstanceLock()) {
   app.setAppUserModelId(APP_ID)
   app.whenReady().then(boot).catch(fatal)
   app.on('before-quit', (event) => {
+    // Re-entrant: `before-quit` fires once per app.quit(), and more than one
+    // path can request it (tray Quit clicked twice, or a tray Quit racing the
+    // unexpected-exit dialog's quit). Without this guard each request would
+    // dispatch its own killTree and its own app.exit(0), so the second kill
+    // would target a pid the first already reaped — and after the OS recycles
+    // it, some unrelated process instead.
+    if (quitting) {
+      // Still preventDefault while the first teardown is in flight, otherwise
+      // this second event exits Electron before that killTree completes.
+      if (server?.pid !== undefined) event.preventDefault()
+      return
+    }
     quitting = true
     if (server?.pid !== undefined) {
       // Prevent immediate exit and await the process-tree completion boundary

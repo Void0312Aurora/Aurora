@@ -231,7 +231,7 @@ describe('the enforced raw JSON Schema subset', () => {
   })
 
   it('accepts lossless annotation containers from another JavaScript realm', () => {
-    const schema: unknown = runInNewContext(`({
+    const schema = runInNewContext(`({
       type: 'object',
       properties: { value: { type: 'string', enum: ['x'] } },
       required: ['value'],

@@ -1,6 +1,6 @@
 /** In-memory ACP transport fixture over the real agent factory and loop. */
 
-import { Context } from 'cordis'
+import { Context } from '@deepseek-ai/cordis'
 import {
   ClientSideConnection,
   ndJsonStream,
@@ -61,7 +61,7 @@ class MockAdapter extends LlmAdapter {
 export function textResponse(text: string): StreamChunk[] {
   return [
     { type: 'block-start', index: 0, blockType: 'text' },
-    ...Array.from(text, (char): StreamChunk => { return ({ type: 'text-delta', index: 0, text: char }) }),
+    ...Array.from(text, (char): StreamChunk => ({ type: 'text-delta', index: 0, text: char })),
     { type: 'block-end', index: 0, block: { type: 'text', text } },
     { type: 'usage', usage: { inputTokens: 5, outputTokens: text.length } },
     { type: 'finish', reason: { kind: 'stop' } },

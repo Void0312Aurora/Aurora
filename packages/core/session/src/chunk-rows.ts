@@ -152,7 +152,7 @@ function continues(prev: DeltaEvent, next: DeltaEvent, kind: DeltaKind): boolean
 
 /** Build the row for a completed run (`run.length >= MIN_RUN`, uniform per {@link continues}). */
 function buildRow(kind: DeltaKind, run: readonly DeltaEvent[]): ChunkRow {
-  const first: DeltaEvent = run[0] as DeltaEvent
+  const first = run[0] as DeltaEvent
   const base = {
     turn: first.data.turn,
     step: first.data.step,
@@ -282,7 +282,7 @@ function validateRow(value: Record<string, unknown>, tag: ChunkRow['type']): Chu
     malformed(tag, 'member seqs must stay safe integers')
   }
   let time = value.time0 as number
-  for (const gap of data.dt as Array<number>) {
+  for (const gap of data.dt as number[]) {
     time += gap
     if (!Number.isSafeInteger(time)) malformed(tag, 'member times must stay safe integers')
   }
@@ -331,8 +331,7 @@ function expandRow(row: ChunkRow): SessionEvent[] {
  * Decode one parsed JSONL line value into the session event(s) it stores.
  * Chunk-row-tagged values validate and expand (a malformed row throws — it is
  * corrupt storage, and treating it as an event would silently drop a whole
- * run); every other value passes through as a single event, unvalidated,
- * exactly as readers treated event lines before packing existed.
+ * run); every other value passes through as a single event, unvalidated.
  *
  * @param value - one line's `JSON.parse` result.
  * @returns the stored events, in log order.

@@ -1,5 +1,5 @@
 // Web e2e scenario: the resident question composer. The shipped composition
-// already exposes ask_user_question (the ui-question row's node half mounts
+// already exposes ask_user_question (the ui-user-questions row's node half mounts
 // the tool), so a recorded turn where the model asks blocks mid-turn on the
 // real userInteraction seam: the composer renders in the browser, the test
 // answers through it, and the turn completes with the answer in the log.
@@ -23,6 +23,7 @@ import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './suppor
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/question-composer', import.meta.url))
 const FIXTURE = join(SNAPSHOT_DIR, 'session.jsonl')
 const UI_EXPECTED = join(SNAPSHOT_DIR, 'ui.expected.md')
+const SIDEBAR_EXPECTED = join(SNAPSHOT_DIR, 'sidebar.expected.md')
 const COMPOSED_EXPECTED = join(SNAPSHOT_DIR, 'composed.expected.md')
 // Final golden: the answered transcript — the question resolved into its tool
 // round trip and the final reply, the state the composer goldens cannot see.
@@ -30,7 +31,7 @@ const ANSWERED_EXPECTED = join(SNAPSHOT_DIR, 'answered.expected.md')
 const MODE = webSnapshotMode()
 
 // The options carry long descriptions on purpose: the squeeze assertion below
-// needs option copy that WRAPS, which is the only shape that reproduces a
+// needs option copy that WRAPS, which is the only text layout that reproduces a
 // collapsed row painting its copy outside its own box.
 const PROMPT = 'Use the ask_user_question tool to ask me exactly one multi-select question with id "color", question "Which color do you prefer?", header "Pick one", and two options: label "Blue" with description "A cool recessive hue that reads as calm and trustworthy in long reading sessions and dense dashboards.", and label "Green" with description "A restful mid-spectrum hue with the highest perceived brightness, easiest on the eye over long sessions." Set multi_select to true. After I answer, reply with the single word DONE and stop.'
 
@@ -76,11 +77,17 @@ describe('web e2e: resident question composer round trip', () => {
     await composer.waitFor({ timeout: MODE === 'record' ? 120_000 : 30_000 })
     await expect.poll(() => composer.getByText('Which color do you prefer?').count(), { timeout: 10_000 }).toBeGreaterThan(0)
 
+    const selectedRow = page.locator('[role="treeitem"][aria-selected="true"]')
+    await expect.poll(() => selectedRow.locator('[data-state="warning"]').count(), { timeout: 10_000 }).toBe(1)
+    await expect.poll(() => selectedRow.getByText('Waiting for answer', { exact: true }).count(), { timeout: 10_000 }).toBe(1)
+
     if (MODE !== 'record') {
       // This golden owns the stable question surface; the answered-state
       // golden below owns the resulting transcript.
       const snapshot = await captureStableAria(page, '[data-question-key]', scaffold.workspaceCwd)
       await compareOrRefreshGolden(UI_EXPECTED, snapshot, MODE)
+      const sidebar = await captureStableAria(page, '[role="treeitem"][aria-selected="true"]', scaffold.workspaceCwd)
+      await compareOrRefreshGolden(SIDEBAR_EXPECTED, sidebar, MODE)
     }
 
     // Squeezed card: the option rows are the capped card's scroll content, so
@@ -109,7 +116,7 @@ describe('web e2e: resident question composer round trip', () => {
           return {
             rows: rows.length,
             spill: Math.max(...spill),
-            // Wrapped copy is the shape that overflows a collapsed row, and a
+            // Wrapped option text is what overflows a collapsed row, and a
             // scrolling list proves the seat is genuinely capped. Without both,
             // the spill assertion would hold vacuously.
             wrappedRows: rows.filter(row => row.getBoundingClientRect().height > 42).length,
@@ -155,6 +162,7 @@ describe('web e2e: resident question composer round trip', () => {
     await expect.poll(() => page.getByText('DONE', { exact: true }).count(), { timeout: 15_000 }).toBeGreaterThanOrEqual(1)
     // Composer gone; regular input restored.
     expect(await page.locator('[data-question-key]').count()).toBe(0)
+    expect(await selectedRow.locator('[data-state="warning"]').count()).toBe(0)
     await expect.poll(() => page.locator('textarea').first().isEnabled(), { timeout: 10_000 }).toBe(true)
     // Golden of the answered transcript: the ask_user_question round trip
     // rendered as history (question tool row + DONE), composer takeover gone.
@@ -168,6 +176,7 @@ describe('web e2e: resident question composer round trip', () => {
     await assertFixtureInventory(SNAPSHOT_DIR, [
       'session.jsonl',
       'ui.expected.md',
+      'sidebar.expected.md',
       'composed.expected.md',
       'answered.expected.md',
     ])

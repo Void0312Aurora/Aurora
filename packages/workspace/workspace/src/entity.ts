@@ -163,7 +163,7 @@ export class WorkspaceEntity implements Workspace {
       }
       if (beforeSessionId === sessionId) return record
       const without = record.sessionIds.filter(id => id !== sessionId)
-      const at = beforeSessionId !== undefined ? without.indexOf(beforeSessionId) : without.length
+      const at = beforeSessionId === undefined ? without.length : without.indexOf(beforeSessionId)
       const sessionIds = [...without.slice(0, at), sessionId, ...without.slice(at)]
       return sessionIds.every((id, index) => id === record.sessionIds[index])
         ? record

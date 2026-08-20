@@ -8,9 +8,9 @@
  * @module @deepseek-ai/dsh-spill-local
  */
 
-import { Context } from 'cordis'
+import { Context } from '@deepseek-ai/cordis'
 import { resolve } from 'node:path'
-import z from 'schemastery'
+import z from '@deepseek-ai/schemastery'
 import { SpillLocator, SpillStore } from '@deepseek-ai/dsh-spill'
 import type { SaveTextSpill, SpillRef } from '@deepseek-ai/dsh-spill'
 import { privateRoot, saveTextFile } from './store.ts'
@@ -44,7 +44,7 @@ export class LocalSpillStore extends SpillStore {
 
   constructor(ctx: Context, config: Config) {
     super(ctx)
-    this.root = config.root === undefined ? privateRoot() : resolve(config.root)
+    this.root = config.root !== undefined ? resolve(config.root) : privateRoot()
   }
 
   async saveText(input: SaveTextSpill): Promise<SpillRef> {

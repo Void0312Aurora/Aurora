@@ -29,7 +29,7 @@ export function CodeBlock({ code, lang, className, copyLabel = '复制', copiedL
   // text while its language's grammar imported picks up highlighting. The
   // snapshot value is opaque; only its change across renders drives the memo.
   const loaded = useSyncExternalStore(subscribeGrammarLoaded, grammarLoadCount, grammarLoadCount)
-  const html = useMemo(() => { return highlightToHtml(trimmed, lang) }, [trimmed, lang, loaded])
+  const html = useMemo(() => highlightToHtml(trimmed, lang), [trimmed, lang, loaded])
   const rootRef = useRef<HTMLDivElement>(null)
   const [copied, setCopied] = useState(false)
 

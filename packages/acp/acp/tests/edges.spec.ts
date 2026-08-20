@@ -28,7 +28,7 @@ describe('ACP automation output boundary', () => {
       name: 'echo',
       description: 'Return a deterministic result.',
       parameters: {},
-      execute: () => { return Promise.resolve([{ type: 'text', text: 'tool result' }]) },
+      execute: () => Promise.resolve([{ type: 'text', text: 'tool result' }]),
     }))
     await harness.client.initialize({ protocolVersion: PROTOCOL_VERSION, clientCapabilities: {} })
     const { sessionId } = await harness.client.newSession({ cwd: process.cwd(), mcpServers: [] })

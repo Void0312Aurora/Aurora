@@ -13,14 +13,14 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { PropsRenderSlots, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
-import { computeColumns } from './columns.ts'
+import { computeColumns, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_DEFAULT } from './columns.ts'
 import type { createLayoutStore } from './stores.ts'
 import css from './AppFrame.module.css'
 
 /** Full composed props: runtime share + child-slot render share + store share. */
 export type AppFrameProps =
   & PropsRuntime<'root'>
-  & PropsRenderSlots<'sidebar' | 'conversation' | 'details'>
+  & PropsRenderSlots<'sidebar' | 'conversation' | 'details' | 'shell.overlay'>
   & PropsStore<ReturnType<typeof createLayoutStore>>
 
 /** Center column grid item (session-body building block). */
@@ -96,7 +96,7 @@ export function AppFrame({
     return current !== undefined && s.byId[current]?.blank === false ? current : undefined
   })
   const frameRef = useRef<HTMLDivElement | null>(null)
-  const [viewport, setViewport] = useState(() => { return window.innerWidth })
+  const [viewport, setViewport] = useState(() => window.innerWidth)
 
   const lastSession = useRef(detailsSession)
   useLayoutEffect(() => {
@@ -127,7 +127,19 @@ export function AppFrame({
     }
   }, [])
 
-  const cols = computeColumns(viewport, panels.sidebar, detailsSession === undefined ? 0 : panels.details)
+  // Narrow viewports auto-collapse the sidebar; the store mirror keeps
+  // toggleSidebar's semantics right (narrow toggles flip the manual
+  // re-expand override, stores.ts). Collapsed is decided here, so the
+  // solver stays breakpoint-free: a narrow re-expand passes the preference
+  // (or the default when the wide preference is closed) and the center
+  // absorbs the squeeze.
+  const narrow = viewport < SIDEBAR_AUTO_COLLAPSE
+  useEffect(() => { actions.setNarrow(narrow) }, [actions, narrow])
+  const sidebarCollapsed = narrow ? !panels.narrowExpanded : panels.sidebar === 0
+  const sidebarPreference = sidebarCollapsed
+    ? 0
+    : panels.sidebar === 0 ? SIDEBAR_DEFAULT : panels.sidebar
+  const cols = computeColumns(viewport, sidebarPreference, detailsSession === undefined ? 0 : panels.details)
   const colsRef = useRef(cols)
   colsRef.current = cols
 
@@ -154,7 +166,7 @@ export function AppFrame({
       ref={frameRef}
       className={css.frame}
       style={{ gridTemplateColumns: `${cols.sidebar}px minmax(0, 1fr) ${cols.details}px` }}
-      data-sidebar-collapsed={panels.sidebar === 0 || undefined}
+      data-sidebar-collapsed={sidebarCollapsed || undefined}
       data-details-collapsed={cols.details === 0 || undefined}
       data-dragging={dragging || undefined}
     >
@@ -162,23 +174,27 @@ export function AppFrame({
         {/* Render-site slot call with live concession output: a closed
             sidebar keeps the mounted slot at the compact-rail width, and the
             component sees its rendered state as owner params decided here
-            (collapsed follows the preference, not the resolved width). */}
+            (collapsed follows the resolved rail, so a derived auto-collapse
+            renders the rail UI too). */}
         {renderSlot('sidebar', {
-          collapsed: panels.sidebar === 0,
+          collapsed: sidebarCollapsed,
           width: cols.sidebar,
         })}
       </div>
       <>
         {/* Both column occupants stay at fixed tree positions from first
-            paint — no loading gate (user ruling: the bare status line looked
-            worse than the shell's own pending rendering). The conversation
+            paint — no loading gate: a bare status line reads worse than
+            the shell's own pending rendering. The conversation
             is session-maybe; the strict details entry naturally renders
             empty while no session is current. */}
         <CenterColumn>{renderSlot('conversation', {})}</CenterColumn>
         <DetailsColumn>{renderSlot('details', {})}</DetailsColumn>
       </>
+      <div className={css.overlayLayer} data-shell-overlay>
+        {renderSlot('shell.overlay', {})}
+      </div>
       {/* The collapsed rail is fixed-width: no resize handle while closed. */}
-      {panels.sidebar > 0 && <DragHandle side="sidebar" left={cols.sidebar} onStart={onSidebarStart} onDrag={onSidebarDrag} onEnd={onDragEnd} />}
+      {!sidebarCollapsed && <DragHandle side="sidebar" left={cols.sidebar} onStart={onSidebarStart} onDrag={onSidebarDrag} onEnd={onDragEnd} />}
       {cols.details > 0 && <DragHandle side="details" left={viewport - cols.details} onStart={onDetailsStart} onDrag={onDetailsDrag} onEnd={onDragEnd} />}
     </div>
   )

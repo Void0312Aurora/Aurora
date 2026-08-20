@@ -68,7 +68,7 @@ export function summarizeStderr(stderr: string, maxChars: number): string | unde
 }
 
 /**
- * Append a `hook/invoked` provenance event to `session`.
+ * Append a `hook/invoked` event naming the handler and hook point to `session`.
  * @param session - the session whose open turn records the event.
  * @param invocation - the invocation identity; an absent `matcher` is omitted from the payload.
  */
@@ -98,7 +98,7 @@ export function appendHookResult(session: Session, record: HookResultRecord): vo
     handlerId: record.handlerId,
     decision: output.decision ?? (output.continue === false ? 'stop' : 'pass'),
     ...output.exitCode !== undefined ? { exitCode: output.exitCode } : {},
-    ...stderrSummary === undefined ? {} : { stderrSummary },
+    ...stderrSummary !== undefined ? { stderrSummary } : {},
     durationMs: record.durationMs,
   })
 }

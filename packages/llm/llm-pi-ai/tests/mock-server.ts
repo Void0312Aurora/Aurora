@@ -10,7 +10,7 @@ export interface MockServer {
   responseClosed: Promise<void>
 }
 
-const servers: Array<Server> = []
+const servers: Server[] = []
 
 /** Close every server opened since the last call; run from each spec's afterEach. */
 export async function closeMockServers(): Promise<void> {

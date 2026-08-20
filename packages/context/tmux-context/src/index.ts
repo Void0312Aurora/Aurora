@@ -3,8 +3,8 @@
  * append durable, source-attributed context naming the tmux session, window,
  * and pane this agent process runs in, plus the window's pane-tree layout.
  *
- * The plugin pulls state once per turn, on the first step (`step === 1`), by
- * running one `tmux display-message` through the `ctx.bash` executor seam. It
+ * The plugin pulls state once per turn, for the first request (`step === 1`), by
+ * running one `tmux display-message` through the `ctx.shell` executor service. It
  * confirms this process genuinely runs inside the pane `$TMUX_PANE` names by
  * matching the pane's `#{pane_tty}` against this process's controlling terminal,
  * so a terminal that merely inherited `$TMUX`/`$TMUX_PANE` from a tmux ancestor
@@ -12,22 +12,22 @@
  * only when the rendered tmux state changes since the last injection (a moved,
  * renamed, or re-laid-out pane), with an optional `refreshIntervalMs` floor
  * between injections. Absent tmux environment, an inherited-only environment,
- * absent `ctx.bash`, or a failed query is a no-op, never an error: an executor
+ * absent `ctx.shell`, or a failed query is a no-op, never an error: an executor
  * rejection is contained and logged as a warning so the turn continues.
  *
  * @module @deepseek-ai/dsh-tmux-context
  */
 
-import type { Context, LoggerService } from 'cordis'
-import z from 'schemastery'
-import type { Agent } from '@deepseek-ai/dsh-agent'
-import type { BashExecutor, BashRunResult } from '@deepseek-ai/dsh-bash'
+import type { Context, LoggerService } from '@deepseek-ai/cordis'
+import z from '@deepseek-ai/schemastery'
+import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
+import type { ShellExecutor, ShellRunResult } from '@deepseek-ai/dsh-shell'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'tmux-context'
 
-/** The agent registry that owns the `agent/step` lifecycle seam. */
+/** The agent registry that owns pre-step processing. */
 export const inject = ['agents']
 
 /** Per-turn tmux-location scheduling. Invalid values fail plugin load. */
@@ -98,14 +98,14 @@ const FIELD_SEP = '\\t'
  * `run()` only promises to resolve for nonzero exits, timeouts, and aborts, so
  * both are contained and reported as a warning.
  *
- * @param bash - the executor seam used to run the read-only tmux/ps commands.
+ * @param bash - The executor service used to run the read-only tmux/ps commands.
  * @param logger - receives a warning when the executor rejects the query.
  * @param processId - this agent process's pid, whose controlling tty must match the pane.
  * @param signal - abort signal forwarded to the executor.
  * @returns the parsed location, or `undefined` when not in a real pane or on any failure.
  */
 async function queryTmuxLocation(
-  bash: BashExecutor,
+  bash: ShellExecutor,
   logger: LoggerService,
   processId: number,
   signal: AbortSignal,
@@ -119,7 +119,7 @@ async function queryTmuxLocation(
     '[ "$pane_tty" = "/dev/$self_tty" ] || exit 1',
     `exec tmux display-message -t "$TMUX_PANE" -p '${format}'`,
   ].join('\n')
-  let result: BashRunResult
+  let result: ShellRunResult
   try {
     result = await bash.run(bash.resolve({ command, signal }))
   } catch (error: unknown) {
@@ -141,7 +141,7 @@ async function queryTmuxLocation(
     paneActive,
     windowLayout,
   ] = parts as [string, string, string, string, string, string, string, string]
-  if (paneId.length === 0) { return undefined }
+  if (paneId.length === 0) return undefined
   return {
     sessionName,
     windowIndex,
@@ -186,7 +186,7 @@ function latestInjectedState(agent: Agent): { state: string; time: number } | un
       const [block] = event.data.content
       if (block?.type !== 'text') return undefined
       const newline = block.text.indexOf('\n')
-      const state = newline !== -1 ? block.text.slice(newline + 1) : ''
+      const state = newline === -1 ? '' : block.text.slice(newline + 1)
       return { state, time: event.time }
     }
   }
@@ -206,7 +206,7 @@ function validateRefreshInterval(refreshIntervalMs: number | undefined): void {
 }
 
 /**
- * Register a prepended `agent/step` listener for the lifetime of `ctx`.
+ * Register a prepended pre-step listener for the lifetime of `ctx`.
  * @param ctx - plugin context; the listener is disposed with it.
  * @param config - durable refresh scheduling configuration.
  * @throws when the refresh interval is invalid.
@@ -215,27 +215,33 @@ export function apply(ctx: Context, config: Config): void {
   const refreshIntervalMs = config.refreshIntervalMs
   validateRefreshInterval(refreshIntervalMs)
 
-  ctx.on('agent/step', async (
-    agent: Agent,
-    turn: number,
-    step: number,
-    signal: AbortSignal,
-  ): Promise<void> => {
-    if (signal.aborted || step !== 1) return
-    const bash = ctx.get('bash')
-    if (bash === undefined) return
+  ctx.on('agent/pre-step', async (
+    { agent, turn, step, signal },
+    next,
+  ): Promise<PreStepDecision> => {
+    const decision = await next()
+    if (decision.kind === 'reject' || signal.aborted || step !== 1) return decision
+    const bash = ctx.get('shell')
+    if (bash === undefined) return decision
     const previous = latestInjectedState(agent)
     if (refreshIntervalMs !== undefined && refreshIntervalMs > 0 && previous !== undefined) {
       const now = Date.now()
-      if (now >= previous.time && now - previous.time < refreshIntervalMs) return
+      if (now >= previous.time && now - previous.time < refreshIntervalMs) return decision
     }
     const location = await queryTmuxLocation(bash, ctx.logger, process.pid, signal)
-    if (location === undefined) return
+    if (location === undefined) return decision
     const state = renderState(location)
-    if (previous !== undefined && previous.state === state) return
-    agent.inject(createUserMessage({
-      content: [{ type: 'text', text: renderReading(location, turn) }],
-      source: { kind: 'plugin', plugin: name },
-    }))
+    if (previous !== undefined && previous.state === state) return decision
+    const text = renderReading(location, turn)
+    return {
+      kind: 'enter',
+      messages: [
+        createUserMessage({
+          content: [{ type: 'text', text }],
+          source: { kind: 'plugin', plugin: name, form: 'snapshot', sections: [{ name, text }] },
+        }),
+        ...decision.messages,
+      ],
+    }
   }, { prepend: true })
 }

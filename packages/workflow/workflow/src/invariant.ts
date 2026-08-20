@@ -1,6 +1,6 @@
 /** Package-owned workflow lifecycle invariants. @module @deepseek-ai/dsh-workflow/invariant */
 
-import type { Context } from 'cordis'
+import type { Context } from '@deepseek-ai/cordis'
 import type { InvariantFailure, InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 import type {
   WorkflowAgentEndInfo,
@@ -53,7 +53,7 @@ function validateWorkflowEnd(trace: WorkflowTrace, result: WorkflowResultInfo, f
   if (!Number.isSafeInteger(result.agentsStarted) || result.agentsStarted < trace.starts) {
     fail('workflow/end agentsStarted must be a safe integer covering every observed agent start')
   }
-  if (result.stopReason !== 'completed' ? typeof result.error !== 'string' : result.error !== undefined) {
+  if (result.stopReason === 'completed' ? result.error !== undefined : typeof result.error !== 'string') {
     fail('workflow/end error must be absent exactly for completed runs')
   }
 }

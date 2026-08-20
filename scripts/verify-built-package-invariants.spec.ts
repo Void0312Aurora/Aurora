@@ -9,7 +9,7 @@ const verifier = fileURLToPath(new URL('./verify-built-package-invariants.mjs', 
 const roots: string[] = []
 
 afterEach(() => {
-  for (const root of roots.splice(0)) { rmSync(root, { recursive: true, force: true }) }
+  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
 })
 
 function fixture(options: {

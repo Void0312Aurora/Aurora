@@ -29,7 +29,7 @@ describe('cleanupAcpExampleTest', () => {
     const closeFailure = new Error('close failed')
     const spawned = { close: vi.fn().mockRejectedValue(closeFailure) }
 
-    const failure = await cleanupAcpExampleTest(spawned, '\0').catch((error: unknown) => { return error })
+    const failure = await cleanupAcpExampleTest(spawned, '\0').catch((error: unknown) => error)
 
     expect(failure).toBeInstanceOf(AggregateError)
     expect((failure as AggregateError).errors).toHaveLength(2)

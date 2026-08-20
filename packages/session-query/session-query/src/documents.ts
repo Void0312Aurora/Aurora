@@ -68,7 +68,7 @@ function classifySurface(events: readonly SessionEvent[]): Map<number, SessionEv
   const result = new Map<number, SessionEventSurface>()
   for (const seq of folded.nodes) result.set(seq, 'current')
   for (const replacement of folded.replacements) {
-    for (const seq of replacement.shadowedSeqs) { result.set(seq, 'shadowed') }
+    for (const seq of replacement.shadowedSeqs) result.set(seq, 'shadowed')
   }
   return result
 }

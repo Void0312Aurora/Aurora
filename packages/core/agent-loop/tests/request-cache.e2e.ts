@@ -1,10 +1,10 @@
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { afterEach, describe, expect, it } from 'vitest'
-import { Context } from 'cordis'
-import LlmService from '@deepseek-ai/dsh-llm'
+import { Context } from '@deepseek-ai/cordis'
+import LlmRuntime from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import ToolRegistry, { defineContentToolFixture } from '@deepseek-ai/dsh-tools'
+import ToolRuntime, { defineContentToolFixture } from '@deepseek-ai/dsh-tools'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
 
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
@@ -39,10 +39,10 @@ afterEach(async () => {
 
 async function loopHarness(): Promise<Context> {
   const created = new Context()
-  await created.plugin(LlmService)
+  await created.plugin(LlmRuntime)
   await created.plugin(SessionStore)
   await created.plugin(SystemPrompt, { persona: SYSTEM })
-  await created.plugin(ToolRegistry)
+  await created.plugin(ToolRuntime)
   await created.plugin(AgentRegistry)
   await created.plugin(AgentLoop, { agents: [] })
   await created.plugin(LlmDeepSeek)
@@ -59,7 +59,7 @@ async function loopHarness(): Promise<Context> {
 
 function waitForIdle(context: Context, agent: Agent): Promise<void> {
   return new Promise((resolve) => {
-    const dispose = context.on('agent/status', (subject, status) => {
+    const dispose = context.on('agent/status', ({ agent: subject, status }) => {
       if (subject === agent && status === 'idle') {
         dispose()
         resolve()
@@ -84,7 +84,7 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY)('log-derived request cache hits (
       .filter(e => e.type === 'assistant/message')
       .map(e => e.data.usage)
     expect(usages.length).toBeGreaterThanOrEqual(3) // 2 steps in turn 1 + ≥1 in turn 2
-    for (const usage of usages) { expect(usage).toBeDefined() }
+    for (const usage of usages) expect(usage).toBeDefined()
 
     // The first request has nothing to hit; every later one shares its
     // predecessor as a byte-identical prefix, so the provider must report

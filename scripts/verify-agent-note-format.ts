@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { agentNoteRoot, walkAgentNoteTree } from './agent-note-tree.ts'
 
-/** The date the format contract landed; the grandfather comment is valid only before it. */
+/** The date these format rules took effect; the grandfather comment is valid only before it. */
 const FORMAT_ADOPTED = '2026-07-05'
 
 /** The exact comment a pre-format Agent Note carries in place of `## Alternatives considered`. */
@@ -67,7 +67,7 @@ for (const note of notes) {
   const h2s = prose.filter(l => l.startsWith('## ')).map(l => l.trimEnd())
   if (h2s[0] !== '## Problem') fail(`the first section must be \`## Problem\` (got ${JSON.stringify(h2s[0] ?? '<none>')})`)
   for (const required of REQUIRED[note.lifecycle] ?? []) {
-    if (!h2s.includes(required)) { fail(`missing the required \`${required}\` section`) }
+    if (!h2s.includes(required)) fail(`missing the required \`${required}\` section`)
   }
   if (note.lifecycle === 'implemented') {
     for (const h2 of h2s.filter(h => BANNED_IMPLEMENTED.test(h))) {
