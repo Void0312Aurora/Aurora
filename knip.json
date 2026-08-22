@@ -660,12 +660,13 @@
         "tests/**/*.spec.tsx",
         "tests/**/*.e2e.ts",
         "tests/**/*.snapshot.ts",
-        "tests/vscode/suite/index.mjs"
+        "tests/vscode/**/*.mjs"
       ],
       "project": [
         "src/**/*.ts",
         "webview/**/*.{ts,tsx}",
         "tests/**/*.{ts,tsx}",
+        "tests/vscode/**/*.mjs",
         "scripts/**/*.mjs"
       ]
     },
