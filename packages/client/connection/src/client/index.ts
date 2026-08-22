@@ -8,6 +8,7 @@ import type { IApiClient } from './api.ts'
 import { ConnectionController, type ConnectionConfig, type ConnectionSinks, type ConnectionState } from './connection.ts'
 import { FixtureApiClient } from './fixture.ts'
 import { WebApiClient } from './web-api-client.ts'
+import { PostMessageApiClient } from './webview-bridge.ts'
 import { isLoopbackHostname } from '../loopback-hostname.ts'
 
 // ---- Contract re-exports (browser-safe apiproxy channels + core types) ----
@@ -32,6 +33,7 @@ export {
   AbstractApiClient,
   transportError,
 } from './api.ts'
+export type { BridgeRequestMessage, BridgeResponseMessage, WebviewBridgePort } from './webview-bridge.ts'
 
 // Connection loop types are public through ConnectionHandle.start; the
 // controller remains package-internal.
@@ -64,16 +66,27 @@ export interface ConnectionHandle {
 
 /**
  * Client plugin body: pick the api by page mode and provide ctx.connection.
+ * Selection order: an embedder webview bridge port (filled by the hosting
+ * bootstrap before boot) wins, then the `?fixture` page switch, then the
+ * same-origin HTTP client.
  * @param ctx - client cordis context.
  */
 export function apply(ctx: Context): void {
   const pageLocation = typeof location === 'undefined' ? undefined : location
+  const bridgePort = globalThis.__DSH_WEBVIEW_BRIDGE__
   const fixture = pageLocation !== undefined && new URLSearchParams(pageLocation.search).has('fixture')
-  const api: IApiClient = fixture ? new FixtureApiClient() : new WebApiClient()
+  const api: IApiClient = bridgePort !== undefined
+    ? new PostMessageApiClient(bridgePort)
+    : fixture
+      ? new FixtureApiClient()
+      : new WebApiClient()
   let started = false
   const handle: ConnectionHandle = {
     api,
-    isLoopback: pageLocation === undefined || isLoopbackHostname(pageLocation.hostname),
+    // A bridged webview reaches the server through the extension host's own
+    // loopback fetch, so it carries loopback capability regardless of the
+    // page authority (the embedder origin is never the wire authority).
+    isLoopback: bridgePort !== undefined || pageLocation === undefined || isLoopbackHostname(pageLocation.hostname),
     start(sinks, config) {
       if (started) throw new Error('connection: the stream loop is already owned by another consumer')
       started = true
