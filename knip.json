@@ -12,7 +12,8 @@
   "ignoreWorkspaces": [
     "vendor/*",
     "python/sdk-runtime",
-    "apps/desktop/closure"
+    "apps/desktop/closure",
+    "apps/vscode/closure"
   ],
   "ignoreDependencies": [
     "@yarnpkg/cli-dist",

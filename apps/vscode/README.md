@@ -1,4 +1,4 @@
-# `@deepseek-ai/dsh-vscode`
+# `dsh-vscode`
 
 English | [中文](README.zh.md)
 
@@ -42,12 +42,24 @@ Windows has no harness confinement backend, so the CLI's default `workspace-writ
 ## Build
 
 ```sh
-pnpm --filter @deepseek-ai/dsh-vscode run build       # host bundle (tsdown) + webview bundle (vite)
-pnpm --filter @deepseek-ai/dsh-vscode run build:host  # extension host only
-pnpm --filter @deepseek-ai/dsh-vscode run build:webview
+pnpm --filter dsh-vscode run build       # host bundle (tsdown) + webview bundle (vite)
+pnpm --filter dsh-vscode run build:host  # extension host only
+pnpm --filter dsh-vscode run build:webview
 ```
 
 The host build emits one self-contained `dist/extension.js` (workspace runtime imports inlined; only the VS Code API and Node built-ins stay external). The webview build emits `dist/webview/webview.js` + `webview.css`, served through `asWebviewUri`.
+
+## Package (self-contained vsix)
+
+```sh
+pnpm --filter dsh-vscode run package    # packs a vsix for the host platform
+```
+
+`package` runs the full repo build, materializes `deploy/` (the `dsh-vscode-closure` dependency-only deploy root — the same self-contained `dsh web` bundle the desktop shell ships), builds the extension, and runs `vsce package --no-dependencies` for the host platform through [scripts/package-vsix.mjs](scripts/package-vsix.mjs). `DSH_VSIX_TARGET` is an optional assertion for release jobs: it must equal the detected host target, because changing only the vsce label cannot replace the native addons already selected for `deploy/`. The vsix carries the runtime under `dist/`, `deploy/`, and `media/`, plus the extension manifest, readmes, and license retained by [.vscodeignore](.vscodeignore); no source or development `node_modules` tree ships. The top-level runtime-closure gate requires the desktop and VS Code dependency maps to remain identical.
+
+The packaged extension needs no Node, no `dsh`, and no checkout: the launcher's embedded-closure branch runs the bundled CLI under **VS Code's own Electron as Node** (`ELECTRON_RUN_AS_NODE=1` with `--expose-internals`, exactly the desktop shell's mechanism, with `process.execPath` being the extension host's Electron). The closure's native addons (node-pty, koffi) are N-API and need no rebuild.
+
+Because the closure carries platform-native addons, the vsix is **per-platform** (`vsce package --target <target>`); the release pipeline must run packaging on matching `win32-x64`, `linux-x64`, `darwin-x64`, `darwin-arm64`, and other supported runners. A dev checkout without `deploy/` falls through to the checkout's built CLI or `dsh` on PATH, so `pnpm --filter dsh-vscode run build` + an Extension Development Host works without packaging.
 
 ## Tests
 
