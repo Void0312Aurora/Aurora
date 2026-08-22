@@ -105,8 +105,14 @@ if (shouldFail) process.exit(77)
 
 function installFakeLefthook(root: string): void {
   const binDirectory = join(root, 'node_modules/.bin')
+  const packageDirectory = join(root, 'node_modules/lefthook')
   mkdirSync(binDirectory, { recursive: true })
   writeFileSync(join(binDirectory, 'fake-lefthook.mjs'), fakeLefthookSource())
+  write(join(packageDirectory, 'package.json'), `${JSON.stringify({ name: 'lefthook', version: '0.0.0-test' })}\n`)
+  write(
+    join(packageDirectory, 'get-exe.js'),
+    'const { join } = require(\'node:path\')\nexports.getExePath = () => join(__dirname, \'../.bin/fake-lefthook.mjs\')\n',
+  )
   if (process.platform === 'win32') {
     writeFileSync(
       join(binDirectory, 'lefthook.cmd'),
@@ -180,9 +186,10 @@ function runInstaller(
   fixture: Fixture,
   root: string,
   extraEnv: NodeJS.ProcessEnv = {},
+  installerPath = installer,
 ): Promise<CommandResult> {
   return new Promise((resolveResult, reject) => {
-    const child = spawn(process.execPath, [installer], {
+    const child = spawn(process.execPath, [installerPath], {
       cwd: root,
       env: { ...fixture.env, ...extraEnv },
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -196,6 +203,13 @@ function runInstaller(
   })
 }
 
+function expectSkippedInstallation(fixture: Fixture, result: CommandResult): void {
+  expect(result.status, result.stderr).toBe(0)
+  expect(gitResult(fixture, fixture.main, ['config', '--get', 'extensions.worktreeConfig']).status).toBe(1)
+  expect(git(fixture, fixture.main, ['config', '--get', 'core.repositoryFormatVersion'])).toBe('0')
+  expect(existsSync(hooksPath(fixture, fixture.main))).toBe(false)
+}
+
 describe('worktree-local Lefthook installer', { timeout: 15_000 }, () => {
   for (const [label, extraEnv] of [
     ['CI', { CI: 'true' }],
@@ -204,6 +218,9 @@ describe('worktree-local Lefthook installer', { timeout: 15_000 }, () => {
     it(`skips hook installation when ${label} marks an automated job`, async () => {
       const fixture = createFixture()
       const common = commonDirectory(fixture)
+      const isolatedInstaller = join(fixture.main, 'scripts/install-lefthook.mjs')
+      write(isolatedInstaller, readFileSync(installer, 'utf8'))
+      rmSync(join(fixture.main, 'node_modules'), { recursive: true, force: true })
       const missingInclude = join(fixture.container, 'missing-ci-credentials.gitconfig')
       git(fixture, fixture.main, [
         'config',
@@ -212,15 +229,23 @@ describe('worktree-local Lefthook installer', { timeout: 15_000 }, () => {
         missingInclude,
       ])
 
-      const result = await runInstaller(fixture, fixture.main, extraEnv)
+      const result = await runInstaller(fixture, fixture.main, extraEnv, isolatedInstaller)
 
-      expect(result.status, result.stderr).toBe(0)
-      expect(gitResult(fixture, fixture.main, ['config', '--get', 'extensions.worktreeConfig']).status).toBe(1)
-      expect(git(fixture, fixture.main, ['config', '--get', 'core.repositoryFormatVersion'])).toBe('0')
-      expect(existsSync(hooksPath(fixture, fixture.main))).toBe(false)
+      expectSkippedInstallation(fixture, result)
       expect(existsSync(join(common, 'config.worktree'))).toBe(false)
     })
   }
+
+  it('skips hook installation when the dev dependency is absent', async () => {
+    const fixture = createFixture()
+    const isolatedInstaller = join(fixture.main, 'scripts/install-lefthook.mjs')
+    write(isolatedInstaller, readFileSync(installer, 'utf8'))
+    rmSync(join(fixture.main, 'node_modules'), { recursive: true, force: true })
+
+    const result = await runInstaller(fixture, fixture.main, {}, isolatedInstaller)
+
+    expectSkippedInstallation(fixture, result)
+  })
 
   it('isolates main and linked worktrees without changing legacy common hooks', async () => {
     const fixture = createFixture()
@@ -584,7 +609,7 @@ describe('worktree-local Lefthook installer', { timeout: 15_000 }, () => {
 
     expect(result.status).toBe(1)
     expect(result.stderr).toContain('sibling dormant worktree config')
-    expect(result.stderr).toContain(linkedConfig)
+    expect(result.stderr).toContain(JSON.stringify(linkedConfig))
     expect(gitResult(fixture, fixture.main, ['config', '--get', 'extensions.worktreeConfig']).status).toBe(1)
     expect(gitResult(fixture, fixture.linked, ['config', '--get', 'core.hooksPath']).status).toBe(1)
     expect(git(fixture, fixture.main, ['config', '--file', linkedConfig, '--get', 'core.hooksPath'])).toBe(linkedHooks)
