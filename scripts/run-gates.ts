@@ -387,6 +387,7 @@ function ciConsumerGates(): Gate[] {
     snapshotGate(validatedBuild),
     webSnapshotGate(validatedBuild),
     desktopElectronLifecycleGate(validatedBuild),
+    vscodeElectronLifecycleGate(validatedBuild),
     pnpmScript('doc-typecheck', 'doc-typecheck', {
       needs: validatedBuild,
       env: { DSH_DOC_TYPECHECK_USE_BUILD_OUTPUT: '1' },
@@ -405,6 +406,18 @@ function desktopElectronLifecycleGate(needs: string[]): Gate {
     id: 'desktop-electron-lifecycle',
     label: 'desktop Electron lifecycle',
     displayCommand: 'xvfb-run --auto-servernum pnpm run test:desktop:electron',
+    command: 'xvfb-run',
+    args: ['--auto-servernum', invocation.command, ...invocation.args],
+    needs,
+  }
+}
+
+function vscodeElectronLifecycleGate(needs: string[]): Gate {
+  const invocation = pnpmInvocation(['run', 'test:vscode:electron'])
+  return {
+    id: 'vscode-electron-lifecycle',
+    label: 'VS Code extension lifecycle',
+    displayCommand: 'xvfb-run --auto-servernum pnpm run test:vscode:electron',
     command: 'xvfb-run',
     args: ['--auto-servernum', invocation.command, ...invocation.args],
     needs,
