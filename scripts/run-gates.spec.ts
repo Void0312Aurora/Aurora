@@ -109,6 +109,17 @@ describe('gate graph validation', () => {
   })
 })
 
+describe('Windows blocking graph', () => {
+  it('requires the built launcher command-shim smoke', () => {
+    const subject = withPnpmEntrypoint(() => gatesForMode('ci-windows-blocking'))
+
+    expect(subject.find(item => item.id === 'windows-command-shim')).toMatchObject({
+      displayCommand: 'pnpm run test:windows-command-shim',
+      needs: ['windows-build'],
+    })
+  })
+})
+
 describe('Oxlint gate', () => {
   it('uses the package script when no worker bound is configured', () => {
     const subject = withEnv('DSH_OXLINT_THREADS', undefined, () =>
@@ -164,7 +175,7 @@ describe('Node 24 lane ownership', () => {
     const subject = withPnpmEntrypoint(() => gatesForMode('ci-consumers'))
 
     expect(defaultConcurrency('ci-consumers', subject.length, 4)).toEqual({
-      workers: 12,
+      workers: 13,
       source: 'ci-consumers gate count',
     })
     expect(subject.map(item => item.id)).toEqual([
@@ -180,11 +191,12 @@ describe('Node 24 lane ownership', () => {
       'doc-typecheck',
       'node-next-types',
       'built-bin-smoke',
+      'vscode-built-entry',
     ])
     expect(subject.find(item => item.id === 'publint')?.needs).toEqual(['build'])
     expect(subject.find(item => item.id === 'built-package-invariants')?.needs).toEqual(['publint'])
     expect(subject.find(item => item.id === 'lint-and-duplication')?.needs).toEqual(['built-package-invariants'])
-    for (const id of ['snapshot', 'web-snapshot', 'desktop-electron-lifecycle', 'vscode-electron-lifecycle', 'doc-typecheck', 'node-next-types', 'built-bin-smoke']) {
+    for (const id of ['snapshot', 'web-snapshot', 'desktop-electron-lifecycle', 'vscode-electron-lifecycle', 'doc-typecheck', 'node-next-types', 'built-bin-smoke', 'vscode-built-entry']) {
       expect(subject.find(item => item.id === id)?.needs).toEqual(['built-package-invariants'])
     }
     expect(subject.find(item => item.id === 'snapshot')?.env).toEqual({ DSH_EXAMPLE_MODE: 'lib' })

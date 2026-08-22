@@ -8,25 +8,25 @@
  * background and never gate the panel on it.
  */
 
-import { spawn as nodeSpawn, type ChildProcess, type SpawnOptions } from 'node:child_process'
+import type { ChildProcess } from 'node:child_process'
 import { killProcessTree } from '@deepseek-ai/dsh-process-tree'
 import {
   childExited,
+  requireWebLaunchPipes,
   resolveWebLaunch,
+  spawnWebLaunch,
+  type SpawnFn,
   waitForHttpOk,
   waitForReadyLine,
 } from '@deepseek-ai/dsh-web-launcher'
-
-/** The single spawn signature this runtime uses (a test seam; the node overload set collapses to this call shape). */
-type SpawnFn = (command: string, args: readonly string[], options: SpawnOptions) => ChildProcess
 
 /** One startup generation and the exact child/listeners it owns. */
 interface StartAttempt {
   child?: ChildProcess
   detach?: () => void
+  abort?: AbortController
   cleanup?: Promise<void>
 }
-
 /** Facts the runtime needs from the extension host. */
 export interface ServerRuntimeOptions {
   /** Extension payload root: anchors the embedded closure and checkout discovery. */
@@ -39,7 +39,7 @@ export interface ServerRuntimeOptions {
   log: (line: string) => void
   /** Called once when a started server exits (never during {@link ServerRuntime.dispose}). */
   onExit?: (code: number | null, signal: NodeJS.Signals | null) => void
-  /** Process spawn; runtime-only test seam. Production uses `node:child_process` spawn. */
+  /** Process spawn; runtime-only test seam. Production uses the shared compatibility launcher. */
   spawn?: SpawnFn
   /** HTTP readiness probe; runtime-only test seam. Production uses global fetch. */
   fetchImpl?: typeof fetch
@@ -52,7 +52,6 @@ export class ServerRuntime {
   private attempt: StartAttempt | undefined
   private urlValue: URL | undefined
   private startTask: Promise<URL> | undefined
-  private startAbort: AbortController | undefined
   private disposed = false
 
   /** @param options - environment facts and lifecycle sinks. */
@@ -63,11 +62,7 @@ export class ServerRuntime {
     return this.urlValue
   }
 
-  /**
-   * True once {@link dispose} ran (set synchronously before the start abort
-   * fires, so a caller observing a rejected start sees it without a race).
-   * A start that rejects against a disposed runtime is teardown, not failure.
-   */
+  /** Whether teardown has permanently claimed this runtime generation. */
   get isDisposed(): boolean {
     return this.disposed
   }
@@ -96,11 +91,8 @@ export class ServerRuntime {
 
   private async performStart(attempt: StartAttempt): Promise<URL> {
     const { options } = this
-    // One controller per attempt: dispose() aborts it so the readiness poll
-    // (up to 30s) stops at once instead of running out against a server we are
-    // already tearing down.
     const startAbort = new AbortController()
-    this.startAbort = startAbort
+    attempt.abort = startAbort
     const launch = resolveWebLaunch({
       env: options.env,
       appDir: options.appDir,
@@ -110,26 +102,14 @@ export class ServerRuntime {
       options.log(`Windows has no harness confinement backend; using ${launch.env.DSH_PERMISSION_MODE} permission mode (approval prompts are disabled). Set DSH_PERMISSION_MODE to override.`)
     }
     options.log(`launching dsh web (${launch.source}): ${launch.command} ${launch.args.join(' ')}`)
-    const spawn: SpawnFn = options.spawn ?? nodeSpawn
-    const child = spawn(launch.command, launch.args, {
-      // The tsx checkout branch needs the repo root; every other branch runs
-      // in the window's workspace folder so the harness adopts it as the
-      // default project root.
-      cwd: launch.cwd ?? options.cwd,
-      env: { ...options.env, ...launch.env },
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
-      // POSIX: a detached child leads its own process group so the tree kill
-      // reaches every descendant; Windows tree-kills via taskkill /T instead.
-      detached: process.platform !== 'win32',
-    })
+    const child = spawnWebLaunch(launch, {
+      // The tsx checkout branch owns its repo-root cwd; every other branch
+      // uses the window's workspace folder as the default project root.
+      ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
+      env: options.env,
+    }, options.spawn)
     attempt.child = child
-    // stdio ['ignore','pipe','pipe'] gives stdout/stderr pipes, but the generic
-    // spawn signature still types them nullable; guard once before use.
-    if (child.stdout === null || child.stderr === null) {
-      throw new Error('dsh web spawned without its stdout/stderr pipes')
-    }
-    const { stdout, stderr } = child
+    const { stdout, stderr } = requireWebLaunchPipes(child)
     stderr.setEncoding('utf8')
     const onStderr = (chunk: string): void => { options.log(`[dsh web:err] ${chunk.trimEnd()}`) }
     stderr.on('data', onStderr)
@@ -187,6 +167,7 @@ export class ServerRuntime {
   /** Stop one exact generation once; detach callbacks before killing it. */
   private stopAttempt(attempt: StartAttempt): Promise<void> {
     attempt.cleanup ??= (async () => {
+      attempt.abort?.abort()
       attempt.detach?.()
       const child = attempt.child
       if (this.attempt === attempt) {
@@ -205,8 +186,6 @@ export class ServerRuntime {
   /** Terminate the server tree and refuse further starts. Idempotent. */
   async dispose(): Promise<void> {
     this.disposed = true
-    // Cancel an in-flight readiness poll so it does not run out its deadline.
-    this.startAbort?.abort()
     const attempt = this.attempt
     this.urlValue = undefined
     this.startTask = undefined

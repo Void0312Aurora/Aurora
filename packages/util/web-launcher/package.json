@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-web-launcher",
-  "description": "Shared dsh web launcher: launch-command resolution (DSH_BIN, embedded closure, checkout, PATH), readiness-line parsing, and HTTP readiness polling for shell hosts",
+  "description": "Shared dsh web launcher: command resolution, Windows-compatible spawning, readiness-line parsing, and HTTP readiness polling for shell hosts",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -32,6 +32,10 @@
   },
   "devDependencies": {
     "@deepseek-ai/dsh-invariants": "workspace:^",
+    "@types/cross-spawn": "6.0.6",
     "cordis": "^4.0.0-rc.7"
+  },
+  "dependencies": {
+    "cross-spawn": "7.0.6"
   }
 }

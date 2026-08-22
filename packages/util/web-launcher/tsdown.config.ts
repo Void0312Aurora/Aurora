@@ -15,4 +15,10 @@ export default defineConfig({
   fixedExtension: false,
   dts: false,
   clean: false,
+  deps: {
+    // Shell hosts materialize or inline this bundle and carry no runtime
+    // node_modules edge; keep the Windows shim implementation self-contained.
+    alwaysBundle: ['cross-spawn'],
+    onlyBundle: ['cross-spawn', 'isexe', 'path-key', 'shebang-command', 'shebang-regex', 'which'],
+  },
 })
