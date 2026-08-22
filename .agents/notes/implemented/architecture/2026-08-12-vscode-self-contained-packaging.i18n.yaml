@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-12-vscode-self-contained-packaging.md
-2026-08-12-vscode-self-contained-packaging.md: 9c5b58d37cb94f551d6e2d1f403d582e1472e8f5
-2026-08-12-vscode-self-contained-packaging.zh.md: 8f4d5cb957edf5ccf2dc5db77ea53b8297e216d7
+2026-08-12-vscode-self-contained-packaging.md: 90ad53dcb133f7f9036905b6f4681432c4356b15
+2026-08-12-vscode-self-contained-packaging.zh.md: 4e5c72d72a261ddaac786790a61a7b7fdba195cb
