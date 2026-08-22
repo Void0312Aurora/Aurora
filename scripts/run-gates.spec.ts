@@ -175,7 +175,7 @@ describe('Node 24 lane ownership', () => {
     const subject = withPnpmEntrypoint(() => gatesForMode('ci-consumers'))
 
     expect(defaultConcurrency('ci-consumers', subject.length, 4)).toEqual({
-      workers: 12,
+      workers: 13,
       source: 'ci-consumers gate count',
     })
     expect(subject.map(item => item.id)).toEqual([
@@ -187,6 +187,7 @@ describe('Node 24 lane ownership', () => {
       'snapshot',
       'web-snapshot',
       'desktop-electron-lifecycle',
+      'vscode-electron-lifecycle',
       'doc-typecheck',
       'node-next-types',
       'built-bin-smoke',
@@ -195,7 +196,7 @@ describe('Node 24 lane ownership', () => {
     expect(subject.find(item => item.id === 'publint')?.needs).toEqual(['build'])
     expect(subject.find(item => item.id === 'built-package-invariants')?.needs).toEqual(['publint'])
     expect(subject.find(item => item.id === 'lint-and-duplication')?.needs).toEqual(['built-package-invariants'])
-    for (const id of ['snapshot', 'web-snapshot', 'desktop-electron-lifecycle', 'doc-typecheck', 'node-next-types', 'built-bin-smoke', 'vscode-built-entry']) {
+    for (const id of ['snapshot', 'web-snapshot', 'desktop-electron-lifecycle', 'vscode-electron-lifecycle', 'doc-typecheck', 'node-next-types', 'built-bin-smoke', 'vscode-built-entry']) {
       expect(subject.find(item => item.id === id)?.needs).toEqual(['built-package-invariants'])
     }
     expect(subject.find(item => item.id === 'snapshot')?.env).toEqual({ DSH_EXAMPLE_MODE: 'lib' })
@@ -210,6 +211,12 @@ describe('Node 24 lane ownership', () => {
       displayCommand: 'xvfb-run --auto-servernum pnpm run test:desktop:electron',
       command: 'xvfb-run',
       args: ['--auto-servernum', process.execPath, '/private/pnpm.cjs', 'run', 'test:desktop:electron'],
+      needs: ['built-package-invariants'],
+    })
+    expect(subject.find(item => item.id === 'vscode-electron-lifecycle')).toMatchObject({
+      displayCommand: 'xvfb-run --auto-servernum pnpm run test:vscode:electron',
+      command: 'xvfb-run',
+      args: ['--auto-servernum', process.execPath, '/private/pnpm.cjs', 'run', 'test:vscode:electron'],
       needs: ['built-package-invariants'],
     })
   })
