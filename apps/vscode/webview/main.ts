@@ -11,33 +11,63 @@ import type { DshWindow } from '@deepseek-ai/dsh-client-modules/client'
 import type {
   BridgeRequestMessage,
   BridgeResponseMessage,
+  WebviewBridgePort,
 } from '@deepseek-ai/dsh-client-connection/client'
+import { bootGatedWebview } from './bootstrap.ts'
+import {
+  createWebviewRouteChannel,
+  isWebviewHostReadyMessage,
+  type WebviewReadyMessage,
+} from './route-bridge.ts'
 import { staticBootGraph, staticPlugins } from './roster.ts'
 
 /** The VS Code webview messaging face (acquireVsCodeApi is call-once). */
 interface VsCodeWebviewApi {
-  postMessage(message: BridgeRequestMessage): void
+  postMessage(message: BridgeRequestMessage | WebviewReadyMessage): void
 }
 
 declare function acquireVsCodeApi(): VsCodeWebviewApi
 
-const vscodeApi = acquireVsCodeApi()
-const listeners = new Set<(message: BridgeResponseMessage) => void>()
-window.addEventListener('message', (event: MessageEvent<BridgeResponseMessage>) => {
-  for (const listener of [...listeners]) listener(event.data)
+const routeChannel = createWebviewRouteChannel()
+globalThis.__DSH_WEBVIEW_ROUTES__ = routeChannel
+let bridge: WebviewBridgePort | undefined
+let resolveHostReady: (() => void) | undefined
+const hostReady = new Promise<void>((resolve) => { resolveHostReady = resolve })
+
+// The listener exists before the webview-ready signal and before client boot.
+// Route messages are retained by the channel, host readiness releases the
+// protocol gate, and response messages fan out once the probe subscribes.
+const bridgeListeners = new Set<(message: BridgeResponseMessage) => void>()
+window.addEventListener('message', (event: MessageEvent<unknown>) => {
+  if (routeChannel.receive(event.data)) return
+  if (isWebviewHostReadyMessage(event.data)) {
+    resolveHostReady?.()
+    resolveHostReady = undefined
+    return
+  }
+  for (const listener of [...bridgeListeners]) listener(event.data as BridgeResponseMessage)
 })
 
-// The bridge port must be seated before the client tree boots: the
-// connection plugin's apply reads it to select the postMessage transport.
-globalThis.__DSH_WEBVIEW_BRIDGE__ = {
-  postMessage: (message) => { vscodeApi.postMessage(message) },
-  onMessage: (listener) => {
-    listeners.add(listener)
-    return () => { listeners.delete(listener) }
-  },
+// `?fixture` is the keyless runnable-example mode used by the browser snapshot.
+// Production documents acquire the one-shot VS Code API, announce route
+// readiness, then expose the bridge only after the protocol handshake passes.
+if (!new URLSearchParams(location.search).has('fixture')) {
+  const vscodeApi = acquireVsCodeApi()
+  bridge = {
+    postMessage: (message) => { vscodeApi.postMessage(message) },
+    onMessage: (listener) => {
+      bridgeListeners.add(listener)
+      return () => { bridgeListeners.delete(listener) }
+    },
+  }
+  vscodeApi.postMessage({ type: 'dsh-webview-ready' })
 }
 ;(globalThis as unknown as DshWindow).__DSH_BOOT__ = staticBootGraph()
 
 const root = document.getElementById('root')
 if (root === null) throw new Error('dsh webview: #root missing from the panel HTML')
-void new AppWebEntry(root, { staticPlugins }).run()
+void bootGatedWebview({
+  root,
+  ...bridge === undefined ? {} : { bridge, hostReady },
+  run: async () => { await new AppWebEntry(root, { staticPlugins }).run() },
+})

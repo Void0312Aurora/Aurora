@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Theme plugin: ThemeService over the --dsw-* token base stylesheets (static scale + alias semantic layers). The service owns the theme preference (`light`/`dark`/`system`, persisted under `dsh.theme`), resolves `system` through `prefers-color-scheme`, and publishes immutable `ThemeSnapshot`s on the `theme/change` event; it never touches the DOM — ui-layout's presenter applies the resolved snapshot (`html { color-scheme }`, `body[data-ds-dark-theme]`, and inline alias tokens). Contract: api-contracts v3 §8.
+Theme plugin: ThemeService over the --dsw-* token base stylesheets (static scale + alias semantic layers). The service owns the theme preference (`light`/`dark`/`system`, persisted under `dsh.theme`), resolves `system` through `prefers-color-scheme`, and publishes immutable `ThemeSnapshot`s on the `theme/change` event. The same plugin seats `ThemePresenter`, which applies each resolved snapshot to the document (`html { color-scheme }`, `body[data-ds-dark-theme]`, and inline alias tokens), so replaceable shells do not own theme projection. Contract: api-contracts v3 §8.
 
 `src/styles/` holds five sheets, all imported by the web shell's `base.css`: `base.css`, `design-platform.css`, `scrollbar.css`, `gradient-shadow-text.css`, and `shiki.css`. `scrollbar.css` is the sole consumer of the `--dsw-alias-scrollbar-*` tokens and must follow `design-platform.css`, which declares them.
 

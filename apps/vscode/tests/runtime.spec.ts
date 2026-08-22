@@ -59,6 +59,11 @@ function runtimeWith(child: FakeChild, extra: Partial<ServerRuntimeOptions> = {}
   return { runtime, spawn, spawnNext, logs }
 }
 
+/** Yield to the microtask/timer queue so awaited runtime steps advance. */
+async function settle(): Promise<void> {
+  await new Promise(resolve => setTimeout(resolve, 0))
+}
+
 describe('ServerRuntime', () => {
   it('resolves the advertised origin once the readiness line and HTTP poll pass', async () => {
     const child = new FakeChild()
@@ -158,6 +163,32 @@ describe('ServerRuntime', () => {
     await runtime.dispose()
     expect(killed).toEqual([4321])
     await expect(runtime.start()).rejects.toThrow(/disposed/)
+  })
+
+  it('aborts an in-flight readiness poll on dispose instead of running out the deadline', async () => {
+    const child = new FakeChild()
+    let fetchCalls = 0
+    // Never answers 200: without the dispose-abort this would poll for 30s.
+    const fetchImpl: typeof fetch = async (_input, init) => {
+      fetchCalls++
+      const signal = init?.signal ?? undefined
+      if (signal?.aborted === true) throw new DOMException('aborted', 'AbortError')
+      return new Response('no', { status: 503 })
+    }
+    const { runtime } = runtimeWith(child, { fetchImpl })
+    const started = runtime.start()
+    child.ready()
+    await settle()
+    expect(runtime.isDisposed).toBe(false)
+    await runtime.dispose()
+    // The flag is what a caller uses to tell this teardown-rejection apart
+    // from a genuine startup failure (no error popup for a disposed runtime).
+    expect(runtime.isDisposed).toBe(true)
+    await expect(started).rejects.toThrow(/aborted/)
+    const callsAtAbort = fetchCalls
+    await new Promise(resolve => setTimeout(resolve, 30))
+    // No further polling after the abort (the ~30s deadline was cut short).
+    expect(fetchCalls).toBe(callsAtAbort)
   })
 
   it('rejects if the child exits while its port is being verified', async () => {

@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-14-vscode-sidebar-shell.md
+2026-08-14-vscode-sidebar-shell.md: 50e480398dd5efffd38fa1dc9d801eb5045e46d2
+2026-08-14-vscode-sidebar-shell.zh.md: 72e435ac1db60f6567861741fd8f92db9eda6cf7

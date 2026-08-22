@@ -8,8 +8,15 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import type { BridgeRequestMessage, BridgeResponseMessage } from '../src/client/webview-bridge.ts'
-import { PostMessageApiClient } from '../src/client/webview-bridge.ts'
+import type {
+  BridgeRequestMessage,
+  BridgeResponseMessage,
+  WebviewBridgePort,
+} from '../src/client/webview-bridge.ts'
+import {
+  PostMessageApiClient,
+  verifyWebviewBridgeProtocol,
+} from '../src/client/webview-bridge.ts'
 
 /** Exposes the protected transport for direct response-body lifecycle checks. */
 class ProbeClient extends PostMessageApiClient {
@@ -55,6 +62,10 @@ function requestBodyOf(message: BridgeRequestMessage): { rpcId: string } {
 
 async function settle(): Promise<void> {
   await new Promise(resolve => setTimeout(resolve, 0))
+}
+
+function throwUnknown(value: unknown): never {
+  throw value
 }
 
 describe('PostMessageApiClient', () => {
@@ -114,6 +125,54 @@ describe('PostMessageApiClient', () => {
     await consumed
 
     expect(frames).toEqual([{ type: 'session/subscribed', sessionId: 's1', lastSeq: -1 }])
+  })
+
+  it('drops its port listener after a completed unary round (no listener leak)', async () => {
+    const fake = fakePort()
+    const client = new PostMessageApiClient(fake.port)
+    const call = client.sessions.list({})
+    await settle()
+    const start = fake.sent[0]!
+    fake.emit({ id: start.id, type: 'dsh-fetch-head', status: 200 })
+    fake.emit({ id: start.id, type: 'dsh-fetch-chunk', chunk: JSON.stringify({ type: 'server-response', rpcId: requestBodyOf(start).rpcId, result: { ok: true, value: { items: [] } } }) })
+    fake.emit({ id: start.id, type: 'dsh-fetch-end' })
+    await call
+    expect(fake.listenerCount()).toBe(0)
+  })
+
+  it('drops its port listener and abort listener after a stream abort (no leak)', async () => {
+    const fake = fakePort()
+    const client = new PostMessageApiClient(fake.port)
+    const abort = new AbortController()
+    const stream = client.events.mux({}, abort.signal)
+    const consumed = (async () => {
+      for await (const _frame of stream) { /* drain until abort */ }
+    })()
+    await settle()
+    const start = fake.sent[0]!
+    fake.emit({ id: start.id, type: 'dsh-fetch-head', status: 200 })
+    await settle()
+    abort.abort()
+    await expect(consumed).rejects.toThrow(/aborted/i)
+    // The abort posts dsh-fetch-abort upstream and the doFetch cleanup drops
+    // the port subscription (the leak the fix closes).
+    expect(fake.sent.some(message => message.type === 'dsh-fetch-abort' && message.id === start.id)).toBe(true)
+    expect(fake.listenerCount()).toBe(0)
+  })
+
+  it('posts dsh-fetch-abort and cleans up when the response body is cancelled directly', async () => {
+    const fake = fakePort()
+    const client = new ProbeClient(fake.port)
+    const responsePromise = client.probeFetch(new URL('http://host/api/events.mux'))
+    await settle()
+    const start = fake.sent[0]!
+    fake.emit({ id: start.id, type: 'dsh-fetch-head', status: 200 })
+    const response = await responsePromise
+    // A consumer that cancels the body (not via the request signal) must still
+    // abort upstream and drop the port listener.
+    await response.body?.cancel()
+    expect(fake.sent.some(message => message.type === 'dsh-fetch-abort' && message.id === start.id)).toBe(true)
+    expect(fake.listenerCount()).toBe(0)
   })
 
   it('sends dsh-fetch-abort and rejects when aborted before the head', async () => {
@@ -412,5 +471,41 @@ describe('PostMessageApiClient', () => {
     expect((await second).result).toEqual({ ok: true, value: describeValue })
     expect((await first).result).toEqual({ ok: true, value: { items: [] } })
     expect(fake.listenerCount()).toBe(0)
+  })
+
+  it('reports a host.describe RPC failure during the protocol probe', async () => {
+    const fake = fakePort()
+    const check = verifyWebviewBridgeProtocol(fake.port)
+    await settle()
+
+    const start = fake.sent[0]!
+    if (start.type !== 'dsh-fetch') throw new Error('expected the protocol probe')
+    fake.emit({ id: start.id, type: 'dsh-fetch-head', status: 200 })
+    fake.emit({
+      id: start.id,
+      type: 'dsh-fetch-chunk',
+      chunk: JSON.stringify({
+        type: 'server-response',
+        rpcId: requestBodyOf(start).rpcId,
+        result: { ok: false, error: { code: 'internal', message: 'probe failed', details: {} } },
+      }),
+    })
+    fake.emit({ id: start.id, type: 'dsh-fetch-end' })
+
+    await expect(check).resolves.toEqual({ ok: false, reason: 'host.describe failed: internal' })
+  })
+
+  it('describes a non-Error bridge rejection during the protocol probe', async () => {
+    const port: WebviewBridgePort = {
+      postMessage() {},
+      onMessage() {
+        return throwUnknown('bridge exploded')
+      },
+    }
+
+    await expect(verifyWebviewBridgeProtocol(port)).resolves.toEqual({
+      ok: false,
+      reason: 'host.describe returned an incompatible response: bridge exploded',
+    })
   })
 })

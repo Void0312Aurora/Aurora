@@ -72,6 +72,10 @@ function callKey(sessionId: string, callId: string): string {
  * reconciliation is needed for this surface.
  */
 export class NativeInteractions {
+  // Cached tool calls, keyed by (sessionId, callId): mux multiplexes sessions
+  // and a provider callId is only unique within its session, so a bare callId
+  // key could surface another session's command in an approval. Entries are
+  // dropped when the call's tool/result arrives, bounding the cache.
   private readonly calls = new Map<string, CachedCall>()
   // Keyed by the correlation id a `*/resolved` frame carries: the approvalId
   // for approvals, the request rpcId for questions. Aborting closes a prompt
@@ -127,8 +131,11 @@ export class NativeInteractions {
     const frame = envelope.payload
     switch (frame.type) {
       case 'session/event':
-        // Cache tool calls so an approval can show what it will do. The call's
-        // view (when the presenter produced one) rides the same frame.
+        // Cache tool calls so an approval can show what it will do (the call's
+        // view rides the same frame). A turn's calls are settled at turn/end
+        // (any approval already happened during the turn), so purge that
+        // session's cache there — this bounds the cache without needing the
+        // result event's callId.
         if (frame.event.type === 'tool/call') {
           const data = frame.event.data as { callId: string; name: string }
           const view = frame.view?.for === 'call' ? frame.view.view : undefined
@@ -165,6 +172,8 @@ export class NativeInteractions {
     correlationId: string,
     frame: Extract<MuxFrame, { type: 'approval/requested' }>,
   ): Promise<void> {
+    // A prompt is already open for this request (a duplicate frame within one
+    // generation); do not open a second.
     if (this.pending.has(correlationId)) return
     const abort = new AbortController()
     this.pending.set(correlationId, abort)

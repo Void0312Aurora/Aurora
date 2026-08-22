@@ -1,7 +1,7 @@
 {
   "name": "dsh-vscode",
-  "displayName": "DeepSeek Harness Panel",
-  "description": "VS Code panel hosting the full DeepSeek Harness GUI: a managed dsh web per window, the complete client stack in a webview, and editor-side integrations",
+  "displayName": "DeepSeek Harness Sidebar",
+  "description": "VS Code Secondary Side Bar view hosting the DeepSeek Harness GUI, one managed dsh web per window, and editor-side integrations",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -24,18 +24,65 @@
   ],
   "activationEvents": [],
   "contributes": {
+    "viewsContainers": {
+      "secondarySidebar": [
+        {
+          "id": "dshSidebar",
+          "title": "DeepSeek Harness",
+          "icon": "$(comment-discussion)"
+        }
+      ]
+    },
+    "views": {
+      "dshSidebar": [
+        {
+          "id": "dsh.sidebar",
+          "name": "DeepSeek Harness",
+          "type": "webview"
+        }
+      ]
+    },
     "commands": [
       {
-        "command": "dsh.openPanel",
-        "title": "DeepSeek Harness: Open Panel",
+        "command": "dsh.focus",
+        "title": "DeepSeek Harness: Focus Sidebar",
         "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "dsh.showChat",
+        "title": "DeepSeek Harness: Show Conversation",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "dsh.showSessions",
+        "title": "DeepSeek Harness: Show Sessions",
+        "icon": "$(history)"
       },
       {
         "command": "dsh.restartServer",
         "title": "DeepSeek Harness: Restart Server",
         "icon": "$(debug-restart)"
       }
-    ]
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "dsh.showChat",
+          "when": "view == dsh.sidebar",
+          "group": "navigation@1"
+        },
+        {
+          "command": "dsh.showSessions",
+          "when": "view == dsh.sidebar",
+          "group": "navigation@2"
+        },
+        {
+          "command": "dsh.restartServer",
+          "when": "view == dsh.sidebar",
+          "group": "1_dsh"
+        }
+      ]
+    }
   },
   "scripts": {
     "build": "tsdown && vite build --config webview/vite.config.ts",
@@ -73,6 +120,7 @@
     "@deepseek-ai/dsh-client-ui-trajectory": "workspace:^",
     "@deepseek-ai/dsh-client-ui-workspace": "workspace:^",
     "@deepseek-ai/dsh-client-web": "workspace:^",
+    "@testing-library/react": "^16.3.2",
     "@types/node": "^22.0.0",
     "@types/react": "~18.3.1",
     "@types/vscode": "^1.100.0",
@@ -80,6 +128,7 @@
     "@vscode/test-electron": "^3.1.0",
     "mocha": "^11.8.0",
     "@vscode/vsce": "^3.6.2",
+    "playwright": "^1.61.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "tsdown": "^0.15.6",

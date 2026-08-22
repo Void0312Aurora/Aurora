@@ -55,3 +55,17 @@
   background: var(--dsw-alias-bg-module-platform);
   border-color: var(--dsw-static-neutral-bluish-400);
 }
+
+/* Narrow viewport (an editor sidebar): at the desktop basis the three cubes
+   wrap to three rows and cost ~240px of a short column. Shrinking the basis
+   and the padding keeps them on one row, which is also how the choice reads
+   best — three alternatives side by side. */
+@media (max-width: 600px) {
+  .themeCube {
+    flex: 1 1 64px;
+    gap: 2px;
+    padding: 10px 4px;
+    font-size: 12px;
+    line-height: 18px;
+  }
+}

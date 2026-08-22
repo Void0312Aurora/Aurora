@@ -21,7 +21,6 @@
 // llm seam post-boot with installLlmReplay on the settled root ctx
 // (the plugin-row path discards the ReplayHandle; the direct install keeps
 // assertConsumed for the teardown fixture-consumption check).
-import { existsSync } from 'node:fs'
 import { mkdtemp, readFile, readdir, realpath, rm, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -54,6 +53,10 @@ import * as ToolCordis from '@deepseek-ai/dsh-tool-cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-agent'
 import { prepareWebRuntimeContext } from '../../cli/src/web.ts'
+import {
+  captureStableAria as captureStableLocatorAria,
+  compareOrRefreshTextGolden,
+} from '../../test-support/snapshot.ts'
 import { DIST_INDEX, REPO_ROOT, requireDist } from './support.ts'
 
 /** Snapshot mode for the lane, from $DSH_SNAPSHOT (same vocabulary as the ACP/TUI suites). */
@@ -550,15 +553,10 @@ function normalizeAria(snapshot: string, workspaceCwd: string): string {
  * @returns the stable normalized snapshot.
  */
 export async function captureStableAria(page: Page, selector: string, workspaceCwd: string): Promise<string> {
-  const region = page.locator(selector).first()
-  let previous = normalizeAria(await region.ariaSnapshot(), workspaceCwd)
-  await expect.poll(async () => {
-    const current = normalizeAria(await region.ariaSnapshot(), workspaceCwd)
-    const stable = current === previous
-    previous = current
-    return stable
-  }, { timeout: 5_000, message: 'aria snapshot did not stabilize' }).toBe(true)
-  return previous
+  return captureStableLocatorAria(
+    page.locator(selector).first(),
+    snapshot => normalizeAria(snapshot, workspaceCwd),
+  )
 }
 
 /**
@@ -570,15 +568,12 @@ export async function captureStableAria(page: Page, selector: string, workspaceC
  * @param mode - the active snapshot mode.
  */
 export async function compareOrRefreshGolden(goldenPath: string, actual: string, mode: WebSnapshotMode): Promise<void> {
-  const payload = `${actual}\n`
-  if (mode === 'refresh') {
-    await writeFile(goldenPath, payload)
-    return
-  }
-  if (!existsSync(goldenPath)) {
-    throw new Error(`missing golden ${goldenPath} — run DSH_SNAPSHOT=refresh pnpm run test:web to generate it`)
-  }
-  expect(payload).toBe(await readFile(goldenPath, 'utf8'))
+  await compareOrRefreshTextGolden({
+    path: goldenPath,
+    actual,
+    refresh: mode === 'refresh',
+    missingMessage: `missing golden ${goldenPath} — run DSH_SNAPSHOT=refresh pnpm run test:web to generate it`,
+  })
 }
 
 /**

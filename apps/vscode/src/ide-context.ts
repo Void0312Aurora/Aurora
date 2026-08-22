@@ -39,6 +39,10 @@ export interface SampleLimits {
   maxTextChars: number
   /** Max diagnostics carried. */
   maxDiagnostics: number
+  /** Max characters of a single diagnostic message (a lone LSP diagnostic can be huge). */
+  maxDiagnosticChars?: number
+  /** Max characters of the whole rendered reading, applied last to the complete output. */
+  maxTotalChars?: number
 }
 
 /**
@@ -51,10 +55,20 @@ export interface IdeContextSnapshot {
   text: string | undefined
 }
 
+/** Default caps applied when the deployment omits them; keep the reading well inside a model turn. */
+const DEFAULT_MAX_DIAGNOSTIC_CHARS = 300
+const DEFAULT_MAX_TOTAL_CHARS = 12000
+
 /** Trim a text body to a character bound, marking a cut with an ellipsis note. */
 function boundText(text: string, maxChars: number): string {
   if (text.length <= maxChars) return text
   return `${text.slice(0, maxChars)}\n… (truncated)`
+}
+
+/** Trim a single-line value (a diagnostic message) to a bound with an inline ellipsis. */
+function boundLine(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text
+  return `${text.slice(0, maxChars)}…`
 }
 
 /**
@@ -67,7 +81,10 @@ function boundText(text: string, maxChars: number): string {
  */
 export function sampleIdeContext(state: EditorState, limits: SampleLimits): IdeContextSnapshot {
   if (state.path === undefined) return { signature: '', text: undefined }
+  const maxDiagnosticChars = limits.maxDiagnosticChars ?? DEFAULT_MAX_DIAGNOSTIC_CHARS
+  const maxTotalChars = limits.maxTotalChars ?? DEFAULT_MAX_TOTAL_CHARS
   const diagnostics = state.diagnostics.slice(0, limits.maxDiagnostics)
+    .map(diagnostic => ({ ...diagnostic, message: boundLine(diagnostic.message, maxDiagnosticChars) }))
   const selection = state.selection === undefined ? undefined : boundText(state.selection, limits.maxTextChars)
   const window = state.window === undefined ? undefined : boundText(state.window, limits.maxTextChars)
   const rangeText = state.range === undefined
@@ -86,14 +103,12 @@ export function sampleIdeContext(state: EditorState, limits: SampleLimits): IdeC
       lines.push(`- ${diagnostic.severity} at line ${String(diagnostic.line)}: ${diagnostic.message}`)
     }
   }
-  const text = `[editor context]\n${lines.join('\n')}`
-  // The signature keys change detection: path, range, selection/window body,
-  // and the diagnostic set. Two samples with the same signature are a no-op.
-  const signature = JSON.stringify({
-    path: state.path,
-    range: state.range ?? null,
-    body: selection ?? window ?? null,
-    diagnostics: diagnostics.map(d => `${d.severity}:${String(d.line)}:${d.message}`),
-  })
+  // The complete result gets the final bound: wrappers, the header, diagnostics
+  // and body together can outrun the per-field caps (20 near-limit diagnostics,
+  // a long path), and the repo rule is to bound the whole emitted value.
+  const text = boundText(`[editor context]\n${lines.join('\n')}`, maxTotalChars)
+  // The signature keys change detection on the emitted text: two samples that
+  // render identically (after every bound) are a no-op.
+  const signature = text
   return { signature, text }
 }

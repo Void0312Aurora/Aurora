@@ -33,7 +33,11 @@ export {
   AbstractApiClient,
   transportError,
 } from './api.ts'
-export type { BridgeRequestMessage, BridgeResponseMessage, WebviewBridgePort } from './webview-bridge.ts'
+export { PostMessageApiClient } from './webview-bridge.ts'
+export { verifyWebviewBridgeProtocol } from './webview-bridge.ts'
+export type {
+  BridgeRequestMessage, BridgeResponseMessage, WebviewBridgePort, WebviewProtocolCheck,
+} from './webview-bridge.ts'
 
 // Connection loop types are public through ConnectionHandle.start; the
 // controller remains package-internal.
@@ -51,7 +55,7 @@ export const inject: string[] = []
 export interface ConnectionHandle {
   /** Shared api client (fixture or real, decided at boot from the page URL). */
   readonly api: IApiClient
-  /** Whether the current page authority is loopback; non-browser contexts default to true. */
+  /** Whether the selected transport can use Host capabilities restricted to loopback clients. */
   readonly isLoopback: boolean
   /**
    * Start the connect/pump/reconnect loop with the consumer's frame sinks.
@@ -86,7 +90,11 @@ export function apply(ctx: Context): void {
     // A bridged webview reaches the server through the extension host's own
     // loopback fetch, so it carries loopback capability regardless of the
     // page authority (the embedder origin is never the wire authority).
-    isLoopback: bridgePort !== undefined || pageLocation === undefined || isLoopbackHostname(pageLocation.hostname),
+    // Fixture mode has no Host behind it even when its document is served from
+    // loopback; Host-only interactions must use their in-memory fallback.
+    isLoopback: bridgePort !== undefined
+      || pageLocation === undefined
+      || (!fixture && isLoopbackHostname(pageLocation.hostname)),
     start(sinks, config) {
       if (started) throw new Error('connection: the stream loop is already owned by another consumer')
       started = true

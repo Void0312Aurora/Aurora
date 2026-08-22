@@ -44,6 +44,12 @@ function defaultSchedule(fn: () => void, ms: number): { cancel: () => void } {
 export class IdeContextFeed {
   private readonly lastSignature = new Map<string, string>()
   private pending: { cancel: () => void } | undefined
+  // One in-flight injection at a time. A nudge arriving during a send sets the
+  // dirty flag instead of starting a second send, so injections never overlap
+  // (no duplicate same-signature sends, no out-of-order completion overwriting
+  // a newer signature with an older one). The trailing run re-samples fresh.
+  private sending = false
+  private dirty = false
 
   /** @param options - client, samplers, bounds, and scheduling. */
   constructor(private readonly options: ContextFeedOptions) {}
@@ -70,6 +76,30 @@ export class IdeContextFeed {
   }
 
   private async flush(): Promise<void> {
+    if (this.sending) {
+      // A send is in flight; mark trailing work and let it re-run on completion.
+      this.dirty = true
+      return
+    }
+    this.sending = true
+    try {
+      do {
+        this.dirty = false
+        await this.sendOnce()
+      } while (this.takeDirty())
+    } finally {
+      this.sending = false
+    }
+  }
+
+  // A method, not an inline `this.dirty` read: the flag is set by a re-entrant
+  // flush() during the awaited send, which static flow analysis would
+  // otherwise narrow to always-false at the loop condition.
+  private takeDirty(): boolean {
+    return this.dirty
+  }
+
+  private async sendOnce(): Promise<void> {
     const sessionId = this.options.activeSession()
     if (sessionId === undefined) return
     const snapshot = sampleIdeContext(this.options.readEditorState(), this.options.limits)
