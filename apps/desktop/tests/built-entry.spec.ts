@@ -8,10 +8,11 @@
  * so it runs keyless in any Node environment.
  *
  * IMPORTANT: the compiled entry lives at `lib/types/` (depth 2); the
- * materialized process-tree primitive lives at `lib/process-tree/`
- * (depth 1). The post-tsc `fixup-import-paths.mjs` adjusts the package-name
- * source specifier (`@deepseek-ai/dsh-process-tree`) to the emitted relative
- * form (`../process-tree/index.js`). This test verifies the fixed output.
+ * materialized workspace primitives live at `lib/process-tree/` and
+ * `lib/web-launcher/` (depth 1). The post-tsc `fixup-import-paths.mjs`
+ * adjusts the package-name source specifiers to the emitted relative forms
+ * (`../process-tree/index.js`, `../web-launcher/index.js`). This test
+ * verifies the fixed output.
  */
 
 import { existsSync } from 'node:fs'
@@ -57,19 +58,23 @@ async function verifyRelativeImports(entryJs: string): Promise<[string, string][
 }
 
 describe('built-entry import graph', () => {
-  it('main.js: every relative import resolves, and it imports the process-tree primitive', async () => {
+  it('main.js: every relative import resolves, and it imports the materialized primitives', async () => {
     const resolved = await verifyRelativeImports(resolve(OUT_DIR, 'main.js'))
     expect(resolved.length, 'main.js must have at least one relative import').toBeGreaterThan(0)
-    // The key regression guard: the post-tsc fixup rewrites the specifier
-    // to the depth-2 form (../process-tree/index.js), which must resolve
-    // to lib/process-tree/index.js from lib/types/main.js.
+    // The key regression guard: the post-tsc fixup rewrites the specifiers
+    // to the depth-2 forms (../process-tree/index.js, ../web-launcher/index.js),
+    // which must resolve to lib/<name>/index.js from lib/types/main.js so the
+    // packaged app has no runtime node_modules edge.
     const procTreeImport = resolved.find(([, p]) => p.includes('process-tree'))
     expect(procTreeImport, 'main.js must import the process-tree primitive via a relative specifier')
       .toBeDefined()
-    // The package-name import is rewritten to the depth-2 relative form in
-    // the artifact so the packaged app has no runtime node_modules edge.
     expect(procTreeImport![0], 'specifier must be the post-fixup depth-2 form')
       .toBe('../process-tree/index.js')
+    const launcherImport = resolved.find(([, p]) => p.includes('web-launcher'))
+    expect(launcherImport, 'main.js must import the web-launcher primitive via a relative specifier')
+      .toBeDefined()
+    expect(launcherImport![0], 'specifier must be the post-fixup depth-2 form')
+      .toBe('../web-launcher/index.js')
   })
 
   it('reaper.js: every relative import resolves, and it imports the process-tree primitive', async () => {
@@ -82,13 +87,15 @@ describe('built-entry import graph', () => {
       .toBe('../process-tree/index.js')
   })
 
-  it('launcher.js: any relative imports resolve', async () => {
-    await verifyRelativeImports(resolve(OUT_DIR, 'launcher.js'))
-  })
-
   it('process-tree/index.js: any relative imports resolve', async () => {
     await verifyRelativeImports(
       resolve(import.meta.dirname, '..', 'lib', 'process-tree', 'index.js'),
+    )
+  })
+
+  it('web-launcher/index.js: any relative imports resolve', async () => {
+    await verifyRelativeImports(
+      resolve(import.meta.dirname, '..', 'lib', 'web-launcher', 'index.js'),
     )
   })
 })

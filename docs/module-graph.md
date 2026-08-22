@@ -15,6 +15,7 @@ flowchart TD
     pkg_process_tree["process-tree"]
     pkg_retention["retention"]
     pkg_timeout["timeout"]
+    pkg_web_launcher["web-launcher"]
   end
   subgraph group_llm["packages/llm"]
     pkg_llm["llm"]
@@ -279,6 +280,7 @@ flowchart TD
   pkg_process_tree --> pkg_invariants
   pkg_retention --> pkg_invariants
   pkg_timeout --> pkg_invariants
+  pkg_web_launcher --> pkg_invariants
   pkg_scope --> pkg_invariants
   pkg_skill --> pkg_invariants
   pkg_acp_snapshot --> pkg_invariants
@@ -1085,6 +1087,7 @@ flowchart TD
 | [`process-tree`](../packages/util/process-tree) | `util` | [`invariants`](../packages/support/invariants) |
 | [`retention`](../packages/util/retention) | `util` | [`invariants`](../packages/support/invariants) |
 | [`timeout`](../packages/util/timeout) | `util` | [`invariants`](../packages/support/invariants) |
+| [`web-launcher`](../packages/util/web-launcher) | `util` | [`invariants`](../packages/support/invariants) |
 | [`scope`](../packages/core/scope) | `core` | [`invariants`](../packages/support/invariants) |
 | [`skill`](../packages/skill/skill) | `skill` | [`invariants`](../packages/support/invariants) |
 | [`acp-snapshot`](../packages/support/acp-snapshot) | `support` | [`invariants`](../packages/support/invariants) |

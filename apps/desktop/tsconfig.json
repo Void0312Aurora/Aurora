@@ -10,6 +10,9 @@
   "references": [
     {
       "path": "../../packages/util/process-tree"
+    },
+    {
+      "path": "../../packages/util/web-launcher"
     }
   ]
 }

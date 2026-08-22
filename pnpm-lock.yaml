@@ -517,6 +517,9 @@ importers:
       '@deepseek-ai/dsh-process-tree':
         specifier: workspace:^
         version: link:../../packages/util/process-tree
+      '@deepseek-ai/dsh-web-launcher':
+        specifier: workspace:^
+        version: link:../../packages/util/web-launcher
     devDependencies:
       '@resvg/resvg-js':
         specifier: ^2.6.2
@@ -6384,6 +6387,15 @@ importers:
         version: link:../../../vendor/cordis
 
   packages/util/timeout:
+    devDependencies:
+      '@deepseek-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../support/invariants
+      cordis:
+        specifier: ^4.0.0-rc.7
+        version: link:../../../vendor/cordis
+
+  packages/util/web-launcher:
     devDependencies:
       '@deepseek-ai/dsh-invariants':
         specifier: workspace:^

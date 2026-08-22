@@ -9,8 +9,8 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { join } from 'node:path'
 import { killProcessTree } from '@deepseek-ai/dsh-process-tree'
+import { resolveWebLaunch, waitForHttpOk, waitForReadyLine, childExited } from '@deepseek-ai/dsh-web-launcher'
 import { app, BrowserWindow, dialog, Menu, nativeImage, shell, Tray } from './electron-api.ts'
-import { resolveWebLaunch, waitForHttpOk, waitForReadyLine, childExited } from './launcher.ts'
 
 const APP_ID = 'ai.deepseek.dsh-desktop'
 const WINDOW_TITLE = 'DSH Desktop'
