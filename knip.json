@@ -659,12 +659,14 @@
         "tests/**/*.spec.ts",
         "tests/**/*.spec.tsx",
         "tests/**/*.e2e.ts",
-        "tests/**/*.snapshot.ts"
+        "tests/**/*.snapshot.ts",
+        "tests/vscode/**/*.mjs"
       ],
       "project": [
         "src/**/*.ts",
         "webview/**/*.{ts,tsx}",
         "tests/**/*.{ts,tsx}",
+        "tests/vscode/**/*.mjs",
         "scripts/**/*.mjs"
       ]
     },
