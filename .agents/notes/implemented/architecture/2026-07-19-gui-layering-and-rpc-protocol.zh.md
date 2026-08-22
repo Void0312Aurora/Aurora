@@ -163,7 +163,7 @@ export type ResponseValue<K> =
 |---|---|---|---|
 | `session.list` | `{ cursor?: string }`（cursor 留座不实现） | `{ items: SessionSummary[] }` | 已持久化 session，updatedAt 倒序；v1 不建索引 |
 
-其余方法（`session.create`/`session.history`/`session.rename`/`session.prompt`/`session.cancel`/`host.describe`）的参数与返回不在此复写——签名即事实源，见 `api/sessions.ts`、`api/host.ts` 与 `RpcMethodMap`。
+其余方法（`session.create`/`session.history`/`session.rename`/`session.injectContext`/`session.prompt`/`session.cancel`/`host.describe`）的参数与返回不在此复写——签名即事实源，见 `api/sessions.ts`、`api/host.ts` 与 `RpcMethodMap`。协议版本把门与 IDE 上下文注入由 [wire 协议版本与 IDE 上下文注入笔记](2026-08-12-wire-protocol-version-and-ide-context-injection.md)规定。
 
 ### 帧（server→client，具名 union）
 
@@ -184,8 +184,8 @@ export type ResponseValue<K> =
 - **重连 = 重建**：不做续传 cursor（`mux` 的 `since` 签名留座、传了忽略）；断线重开流 + 重拉 history；`subscribed.lastSeq` 与 history 尾 seq 比对，有缝再补拉一次。
 - **冷会话处理遵循所有权**：`session.history` 与 `session.fork` 的源端读取会在不获取 Agent 的情况下检查持久化存储，而绑定到 Agent 的普通会话方法（如 `prompt`）则通过在途表去重后恢复会话。由会话支撑的 subagent 会拒绝这条通用恢复路径，且附加状态不对客户端暴露（`running` 已经覆盖）。
 - **审批/问答**：requested 帧受理时 mint 稳定 rpcId；先到先赢，host 内存 pending 表（keyed by rpcId）是唯一裁判；mux 重开后在 subscribed 帧后重放仍 pending 的 requested 帧（rpcId 原样复用，刷新恢复）。审计事件 `approval/asked`/`decided` 照旧走 durable 日志——帧=live 控制面，事件=durable 审计。**现状**：契约与帧类型已 shipped，host 侧 pending 表/wire answerer 未实现（`api-proxy.ts` 的 `respond` 是 stub，恒回 `not-pending`）；PendingCard v1 只展示。
-- **不设协议版本**：client 与 host 绑定发布，`host.describe` 无 protocolVersion 字段；出现独立发布的 client 时再引入。
-- **预留接缝纪律**：map 只含已实现方法，未知 method 在信封 parse 即 fail loud（`bad-request`），不设 not-implemented 兜底码。预留清单（实现时把签名抄进域接口+map 加行+schema 加对即升格）：`session.fork`、`prompt.mode` 加 `'inject'`、`task.list`、`host.listModels`、describe 加 `hostInstanceId`。（`session.rename` 已从本清单毕业：追加 user 来源的 `session/title` 事件。）
+- **协议版本**：`host.describe` 返回 `API_PROTOCOL_VERSION`；独立发布的 client 在消费带版本的方法或帧之前拒绝缺失或不兼容的版本。仓库内 client 仍与 host 一同发布。兼容性规则由 [wire 协议版本与 IDE 上下文注入笔记](2026-08-12-wire-protocol-version-and-ide-context-injection.md)维护。
+- **预留接缝纪律**：map 只含已实现方法，未知 method 在信封 parse 即 fail loud（`bad-request`），不设 not-implemented 兜底码。剩余预留清单（实现时把签名抄进域接口+map 加行+schema 加对即升格）只有 `task.list` 与 describe 增加 `hostInstanceId`。`session.fork`、`session.injectContext`、`session.rename` 与 `llm.models` 已升格为正式方法。
 
 ## 客户端载体：AbstractApiClient 类体系（`fetch/client.ts`）
 
@@ -232,7 +232,7 @@ export type ResponseValue<K> =
 
 ## Consequences
 
-所有 client 形态消费同一契约：加一个 unary 方法是从单一签名辐射的五步机械改动，换载体只动一个 `doFetch` 子类，wire 上每条消息可 zod 校验、可经 envelope tap 观测、可按 rpcId 对账。普通 unary 调用仍受时限约束，而 `host.pickDirectory` 与 `command.execute` 可保持挂起，直到操作完成或调用方／连接取消到来；若由用户掌控节奏的操作不自行结束，请求可能一直挂起，这是为避免把合理的操作时长视为传输失败而接受的代价。其余接受的代价：两组包需要显式 tsconfig paths 条目；预留接缝（fork/inject/task.list/listModels/hostInstanceId）在真实消费者出现前保持休眠。
+所有 client 形态消费同一契约：加一个 unary 方法是从单一签名辐射的五步机械改动，换载体只动一个 `doFetch` 子类，wire 上每条消息可 zod 校验、可经 envelope tap 观测、可按 rpcId 对账。普通 unary 调用仍受时限约束，而 `host.pickDirectory` 与 `command.execute` 可保持挂起，直到操作完成或调用方／连接取消到来；若由用户掌控节奏的操作不自行结束，请求可能一直挂起，这是为避免把合理的操作时长视为传输失败而接受的代价。其余接受的代价：两组包需要显式 tsconfig paths 条目；剩余预留接缝（`task.list` 与 `hostInstanceId`）在真实消费者出现前保持休眠。
 
 ## Alternatives considered
 

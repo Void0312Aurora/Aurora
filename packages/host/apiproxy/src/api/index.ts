@@ -41,6 +41,7 @@ export type {
   SessionsApi, SessionSummary,
 } from './sessions.ts'
 export type { DirectoryEntry, DirectoryListing, HostApi } from './host.ts'
+export { API_PROTOCOL_VERSION } from './host.ts'
 export type {
   SubagentAddress, SubagentCatalog, SubagentListEntry, SubagentPromptReceipt, SubagentsApi,
 } from './subagents.ts'
