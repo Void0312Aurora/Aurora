@@ -63,15 +63,24 @@ function headersRecord(init: HeadersInit | undefined): Record<string, string> {
   return record
 }
 
-let nextBridgeRequestId = 1
+const BRIDGE_REQUEST_IDS = Symbol.for('@deepseek-ai/dsh-client-connection/webview-bridge-request-ids')
 
-/** Allocate one correlation id across every client in this browser module instance. */
-function allocateBridgeRequestId(): number {
+/** Keep each port's correlation space stable across lazy-bundle/HMR evaluations. */
+function requestIds(): WeakMap<WebviewBridgePort, number> {
+  const root = globalThis as typeof globalThis & Record<symbol, WeakMap<WebviewBridgePort, number> | undefined>
+  return root[BRIDGE_REQUEST_IDS] ??= new WeakMap<WebviewBridgePort, number>()
+}
+
+/** Allocate one correlation id across every client sharing this port. */
+function allocateBridgeRequestId(port: WebviewBridgePort): number {
+  const ids = requestIds()
+  const next = ids.get(port) ?? 1
   /* v8 ignore next -- a finite test process cannot exhaust monotonic safe integers */
-  if (!Number.isSafeInteger(nextBridgeRequestId)) {
+  if (!Number.isSafeInteger(next)) {
     throw new Error('webview bridge: request id space exhausted')
   }
-  return nextBridgeRequestId++
+  ids.set(port, next + 1)
+  return next
 }
 
 /**
@@ -86,7 +95,7 @@ export class PostMessageApiClient extends AbstractApiClient {
   }
 
   protected doFetch(input: URL, init?: RequestInit): Promise<Response> {
-    const id = allocateBridgeRequestId()
+    const id = allocateBridgeRequestId(this.port)
     const signal = init?.signal ?? undefined
     return new Promise<Response>((resolve, reject) => {
       const encoder = new TextEncoder()

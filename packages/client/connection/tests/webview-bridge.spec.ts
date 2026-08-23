@@ -7,7 +7,7 @@
  * loop lives with the VS Code extension.
  */
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { BridgeRequestMessage, BridgeResponseMessage } from '../src/client/webview-bridge.ts'
 import { PostMessageApiClient } from '../src/client/webview-bridge.ts'
 
@@ -310,16 +310,7 @@ describe('PostMessageApiClient', () => {
   })
 
   it('cleans a synchronously completed response after subscription setup returns', async () => {
-    const seed = fakePort()
-    const seedClient = new ProbeClient(seed.port)
-    const seedResponse = seedClient.probeFetch(new URL('http://host/api/session.list'))
-    await settle()
-    const seedStart = seed.sent[0]!
-    seed.emit({ id: seedStart.id, type: 'dsh-fetch-head', status: 200 })
-    seed.emit({ id: seedStart.id, type: 'dsh-fetch-end' })
-    await (await seedResponse).text()
-
-    const queuedId = seedStart.id + 1
+    const queuedId = 1
     let unsubscribed = false
     let posted = false
     const client = new ProbeClient({
@@ -411,6 +402,37 @@ describe('PostMessageApiClient', () => {
 
     expect((await second).result).toEqual({ ok: true, value: describeValue })
     expect((await first).result).toEqual({ ok: true, value: { items: [] } })
+    expect(fake.listenerCount()).toBe(0)
+  })
+
+  it('keeps ids distinct across independent module evaluations sharing one port', async () => {
+    vi.resetModules()
+    const firstModule = await import('../src/client/webview-bridge.ts')
+    vi.resetModules()
+    const secondModule = await import('../src/client/webview-bridge.ts')
+    const fake = fakePort()
+    const first = new firstModule.PostMessageApiClient(fake.port).sessions.list({})
+    const second = new secondModule.PostMessageApiClient(fake.port).host.describe({})
+    await settle()
+
+    const [a, b] = fake.sent
+    if (a?.type !== 'dsh-fetch' || b?.type !== 'dsh-fetch') throw new Error('expected two starts')
+    expect(a.id).not.toBe(b.id)
+
+    let secondSettled = false
+    void second.finally(() => { secondSettled = true })
+    fake.emit({ id: a.id, type: 'dsh-fetch-head', status: 200 })
+    fake.emit({ id: a.id, type: 'dsh-fetch-chunk', chunk: JSON.stringify({ type: 'server-response', rpcId: requestBodyOf(a).rpcId, result: { ok: true, value: { items: [] } } }) })
+    fake.emit({ id: a.id, type: 'dsh-fetch-end' })
+    expect((await first).result).toEqual({ ok: true, value: { items: [] } })
+    await settle()
+    expect(secondSettled).toBe(false)
+
+    const describeValue = { protocolVersion: 1, version: 'v', cwd: '/w', attachedSessions: 0 }
+    fake.emit({ id: b.id, type: 'dsh-fetch-head', status: 200 })
+    fake.emit({ id: b.id, type: 'dsh-fetch-chunk', chunk: JSON.stringify({ type: 'server-response', rpcId: requestBodyOf(b).rpcId, result: { ok: true, value: describeValue } }) })
+    fake.emit({ id: b.id, type: 'dsh-fetch-end' })
+    expect((await second).result).toEqual({ ok: true, value: describeValue })
     expect(fake.listenerCount()).toBe(0)
   })
 })

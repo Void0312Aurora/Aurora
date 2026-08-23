@@ -124,8 +124,9 @@ export class AppWebEntry {
     this.modules = new ClientModuleSystem({
       modules: this.manifest.modules, staticModules: getStaticModules(), ...seams,
     })
-    // The app-shell assembly is the only shell-own module: every other graph
-    // row is a plugin bundle arriving through fetch (web2 single package form).
+    // The kernel supplies its app-shell assembly and module-system client
+    // statically. Embedders may also supply validated host-graph rows below;
+    // ordinary web compositions fetch those rows as plugin bundles.
     this.modules.registerStatic(APP_SHELL_ID, AppShell)
     // Adoption handoff, supply side (design §4.7): register the modules
     // package's own client half under its bare package name (= graph row id
