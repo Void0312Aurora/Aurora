@@ -12,7 +12,7 @@ import type {} from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import type {} from '@deepseek-ai/dsh-user-approval'
 import type {} from '@deepseek-ai/dsh-permission'
-import { launchWebScaffold, type WebScaffold } from './scaffold.ts'
+import { launchWebScaffold, webSnapshotMode, type WebScaffold } from './scaffold.ts'
 
 /**
  * The catalog the shipped Web composition puts in front of the model, minus the
@@ -56,6 +56,7 @@ const EXPECTED_TOOLS = [
 const RIPGREP_TOOLS = ['glob', 'grep']
 
 let scaffold: WebScaffold | undefined
+const keylessIt = webSnapshotMode() === 'record' ? it.skip : it
 
 class CapturingAdapter extends LlmAdapter {
   readonly requests: GenerateOptions[] = []
@@ -110,7 +111,7 @@ it('assembles the shipped Web catalog with the confined access default', async (
   expect(scaffold.ctx.permission.defaultPreset).toBe('workspace-write')
 }, 120_000)
 
-it('carries IDE context through the shipped HTTP composition into the next model request', async () => {
+keylessIt('carries IDE context through the shipped HTTP composition into the next model request', async () => {
   scaffold = await launchWebScaffold()
   const adapter = new CapturingAdapter()
   scaffold.ctx.llm.registerAdapter(['deepseek-official'], adapter)
