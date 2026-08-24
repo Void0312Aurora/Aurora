@@ -16,7 +16,7 @@ Web GUI 是产品最丰富的界面，桌面外壳已证明一个客户端壳可
 
 **扩展宿主掌管服务器并代理每一个 `/api` 字节；webview 从不接触网络。** `ServerRuntime`（`apps/vscode/src/runtime.ts`）经共享的 `@deepseek-ai/dsh-web-launcher` 原语 spawn `dsh web --host 127.0.0.1 --port 0`，使用与桌面外壳相同的解析/就绪/HTTP 轮询逻辑，并经 `@deepseek-ai/dsh-process-tree` 树杀。每次启动尝试拥有自身的子进程与监听器；spawn 后的任何失败都会先终止该子进程，再允许重试替换。`RuntimeLifecycle`（`apps/vscode/src/lifecycle.ts`）拥有当前代次，在重启期间保留面板，并向 `ApiBridge` 与原生 wire 客户端提供当前 origin 解析器，任何消费者都不会保留已销毁的服务器。webview 的 `PostMessageApiClient`（`packages/client/connection`，Web 与 Fixture 之外的第三个平台子类）把每个请求经嵌入器端口 post 出去；`ApiBridge`（`apps/vscode/src/bridge.ts`）以当前服务器的回环 origin 重放。回环 Host 与任何非浏览器客户端一样通过栅栏，因此栅栏本身分毫未改 —— 桥正是 GUI 能触达服务器的原因，并报告 `isLoopback: true`，因为 wire 客户端是扩展宿主的 fetch，而非 webview 页面。
 
-**GUI 被静态打包，并通过未改动的壳内核启动。** `AppWebEntry` 新增一个 seam —— 经模块系统既有 `registerStatic` 路径注册的 `staticPlugins` map —— 让 webview 在构建期把每个插件实现交给它，而非一张 fetch 图。`webview/vite.config.ts` 把 roster（`apps/cli/config/web.cordis.yml` 的 `dshClient` 行去掉 dev-only hmr，加一个 VS Code 主题适配器）打成一对资源，经 `asWebviewUri` 在严格 CSP 下提供（`script-src` 钉在扩展资源 origin，无内联脚本）。主题适配器经既有 `ThemeService.register()` 把编辑器的 `--vscode-*` 变量映射到客户端的 `--dsw-alias-*` token，使 GUI 跟随编辑器配色主题。
+**GUI 被静态打包，并通过未改动的壳内核启动。** `AppWebEntry` 新增一个 seam —— 经模块系统既有 `registerStatic` 路径注册的 `staticPlugins` map —— 让 webview 在构建期把每个插件实现交给它，而非一张 fetch 图。`webview/vite.config.ts` 把 roster（`apps/cli/config/web.cordis.yml` 的 `dshClient` 行去掉 dev-only hmr，加一个 VS Code 主题适配器）打成一对资源，经 `asWebviewUri` 在严格 CSP 下提供（`script-src` 钉在扩展资源 origin，无内联脚本或运行时表达式求值）。扩展自有的 Loader overlay 用面板内 browse 后端替换宿主 OS 目录选择器，而静态 roster 携带与之匹配的客户端半边。主题适配器经既有 `ThemeService.register()` 把编辑器的 `--vscode-*` 变量映射到客户端的 `--dsw-alias-*` token，使 GUI 跟随编辑器配色主题。
 
 **窗口是隔离单位。** 每个窗口只有一个当前 `ServerRuntime`（`--port 0` 保证窗口之间以及与独立 `dsh web` 之间不冲突）；第一个 workspace folder 作为服务器 cwd，harness 据此采纳为默认项目根。启动保持异步，webview 的连接循环会在服务器就绪或重启发布替代代次时重连。
 
@@ -29,4 +29,4 @@ Web GUI 是产品最丰富的界面，桌面外壳已证明一个客户端壳可
 
 ## 后果
 
-启动器抽取使 `apps/desktop` 成为 `@deepseek-ai/dsh-web-launcher` 的消费者。`PostMessageApiClient`、`AppWebEntry` 的静态插件 seam 与主题适配器都有无密钥覆盖；扩展宿主测试覆盖失败启动清理、重启/origin 重绑定、中继、面板 CSP 与 roster 一致性。`pnpm run test:vscode:electron` 在隔离的 Extension Development Host 中加载构建后的 `dist/extension.js`，对确定性的本地服务器打开已装配面板，验证上下文注入与一次原生审批，重启服务器，并比较用户可见结果快照。宿主 bundle 内联 workspace 运行时导入，只保留 `vscode` 与 Node 内建模块为 external。扩展仍依赖启动器经 `DSH_BIN`、checkout 或 PATH 解析出 `dsh`；三者皆无的机器会在面板中收到启动错误。
+启动器抽取使 `apps/desktop` 成为 `@deepseek-ai/dsh-web-launcher` 的消费者。`PostMessageApiClient`、`AppWebEntry` 的静态插件 seam 与主题适配器都有无密钥覆盖；扩展宿主测试覆盖失败启动清理、重启/origin 重绑定、中继、面板 CSP 与 roster 一致性。`pnpm run test:vscode:electron` 在隔离的 Extension Development Host 中加载构建后的 `dist/extension.js`，以确定性 replay 适配器对生产 CLI 打开已装配面板，验证精确会话的上下文准入，将稳定后的原生问题里程碑与已提交的 aria golden 比较，通过 VS Code 原生控件回答，等待替代代次就绪，并证明第二个桥接 prompt 在该代次中完成。宿主 bundle 内联 workspace 运行时导入，只保留 `vscode` 与 Node 内建模块为 external。扩展仍依赖启动器经 `DSH_BIN`、checkout 或 PATH 解析出 `dsh`；三者皆无的机器会在面板中收到启动错误。

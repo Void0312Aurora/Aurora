@@ -6,6 +6,8 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { runTests } from '@vscode/test-electron'
+import { parseLoaderConfig, validateLoaderMetadata } from '../../../../scripts/cordis-loader-metadata.mjs'
+import { renderReplayOverlay } from './config.mjs'
 import { driveWebview } from './drive-webview.mjs'
 
 const testRoot = fileURLToPath(new URL('.', import.meta.url))
@@ -14,13 +16,21 @@ const extensionTestsPath = join(testRoot, 'suite', 'index.mjs')
 const repoRoot = resolve(extensionDevelopmentPath, '..', '..')
 const cliBin = join(repoRoot, 'apps', 'cli', 'lib', 'bin.js')
 const replayModule = join(repoRoot, 'packages', 'support', 'llm-replay', 'lib', 'index.js')
-const replayFixture = join(testRoot, 'session.jsonl')
+const directoryPickerModule = join(repoRoot, 'packages', 'host', 'directory-picker-browse', 'lib', 'index.js')
+const replayFixture = join(repoRoot, 'apps', 'web', 'tests', 'snapshots', 'steering', 'session.jsonl')
+const expectedSnapshot = join(testRoot, 'extension.expected.md')
 const temporary = await mkdtemp(join(tmpdir(), 'dsh-vscode-electron-'))
 const workspace = join(temporary, 'workspace')
 const home = join(temporary, 'home')
 const sessions = join(temporary, 'sessions')
+const testConfig = join(temporary, 'vscode-test.cordis.yml')
 const driverReady = join(temporary, 'driver-ready')
+const driverMilestone = join(temporary, 'driver-milestone.json')
 const driverResult = join(temporary, 'driver-result.json')
+const driverFailure = join(temporary, 'driver-failure.json')
+const restartReady = join(temporary, 'restart-ready')
+const restartMilestone = join(temporary, 'restart-milestone.json')
+const restartResult = join(temporary, 'restart-result.json')
 
 function probeFreePort() {
   return new Promise((resolvePort, reject) => {
@@ -45,36 +55,33 @@ await writeFile(join(workspace, 'seed.ts'), 'export const assembled = true\n')
 // consumes the first `web` as this bootstrap's script path, so restore the
 // command word before loading the real built CLI.
 await writeFile(join(workspace, 'web'), `process.argv.splice(2, 0, 'web'); import(${JSON.stringify(pathToFileURL(cliBin).href)}).catch(error => { console.error(error); process.exitCode = 1 })\n`)
-await writeFile(join(home, 'config.yaml'), [
-  '- id: llm-deepseek',
-  '  disabled: true',
-  '- insert:',
-  '    - id: vscode-replay',
-  '      name: !!js process.env.DSH_VSCODE_REPLAY_MODULE',
-  '      config:',
-  '        file: !!js process.env.DSH_SNAPSHOT_FILE',
-  '        paceMs: 5',
-  '        providers:',
-  '          - id: deepseek-official',
-  '            name: DeepSeek',
-  '            models:',
-  '              - id: deepseek-v4-flash',
-  '- id: session-title-llm',
-  '  disabled: true',
-  '- id: session-persistence-jsonl',
-  '  config:',
-  '    root: !!js process.env.DSH_VSCODE_SESSIONS_ROOT',
-  '    compression: none',
-  '',
-].join('\n'))
+const overlay = renderReplayOverlay({
+  directoryPickerModule: pathToFileURL(directoryPickerModule).href,
+  replayModule: pathToFileURL(replayModule).href,
+})
+const overlayErrors = validateLoaderMetadata(parseLoaderConfig(overlay), 'generated-vscode-overlay')
+if (overlayErrors.length > 0) {
+  throw new Error(`invalid generated VS Code Loader overlay:\n${overlayErrors.join('\n')}`)
+}
+await writeFile(testConfig, overlay)
 
 const cdpPort = await probeFreePort()
 const driverTask = driveWebview({
   endpoint: `http://127.0.0.1:${cdpPort}`,
   ready: driverReady,
+  milestone: driverMilestone,
   result: driverResult,
+  restartReady,
+  restartMilestone,
+  restartResult,
   temporary,
   workspace,
+}).catch(async (error) => {
+  await writeFile(driverFailure, JSON.stringify({
+    message: error instanceof Error ? error.message : String(error),
+    stack: error instanceof Error ? error.stack : undefined,
+  }))
+  throw error
 })
 
 try {
@@ -84,7 +91,7 @@ try {
       : { vscodeExecutablePath: process.env.DSH_VSCODE_EXECUTABLE }),
     extensionDevelopmentPath,
     extensionTestsPath,
-    launchArgs: [workspace, '--disable-extensions', `--remote-debugging-port=${cdpPort}`],
+    launchArgs: [workspace, '--disable-extensions', '--locale=en', `--remote-debugging-port=${cdpPort}`],
     extensionTestsEnv: {
       // The harness launcher uses Electron-as-Node for embedded closures, but
       // the test host itself must boot as Electron even when the caller has
@@ -96,9 +103,16 @@ try {
       DSH_SNAPSHOT_FILE: replayFixture,
       DSH_TELEMETRY_DISABLED: '1',
       DSH_VSCODE_DRIVER_READY: driverReady,
+      DSH_VSCODE_DRIVER_MILESTONE: driverMilestone,
       DSH_VSCODE_DRIVER_RESULT: driverResult,
+      DSH_VSCODE_DRIVER_FAILURE: driverFailure,
+      DSH_VSCODE_RESTART_READY: restartReady,
+      DSH_VSCODE_RESTART_MILESTONE: restartMilestone,
+      DSH_VSCODE_RESTART_RESULT: restartResult,
       DSH_VSCODE_TEST_EXTENSION: extensionDevelopmentPath,
-      DSH_VSCODE_REPLAY_MODULE: replayModule,
+      DSH_VSCODE_TEST_CONFIG: testConfig,
+      DSH_VSCODE_TEST_RUNTIME_TRACE: '1',
+      DSH_VSCODE_TEST_SNAPSHOT: expectedSnapshot,
       DSH_VSCODE_SESSIONS_ROOT: sessions,
     },
   })
@@ -110,13 +124,22 @@ try {
     // assertion and only then close the test process.
     await driverOutcome.value.close().catch(() => undefined)
   }
+  if (driverOutcome?.status === 'rejected') throw driverOutcome.reason
   const failed = outcomes.find(outcome => outcome.status === 'rejected')
   if (failed?.status === 'rejected') throw failed.reason
 } catch (error) {
-  try {
-    console.error(`VS Code webview driver result:\n${await readFile(driverResult, 'utf8')}`)
-  } catch {
-    console.error('VS Code webview driver emitted no result')
+  for (const [label, path] of [
+    ['failure', driverFailure],
+    ['first milestone', driverMilestone],
+    ['first result', driverResult],
+    ['restart milestone', restartMilestone],
+    ['restart result', restartResult],
+  ]) {
+    try {
+      console.error(`VS Code webview driver ${label}:\n${await readFile(path, 'utf8')}`)
+    } catch {
+      console.error(`VS Code webview driver emitted no ${label}`)
+    }
   }
   throw error
 } finally {

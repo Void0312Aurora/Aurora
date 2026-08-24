@@ -1,7 +1,7 @@
 /** Assembled built-extension round trip through the production CLI and webview. */
 
 import assert from 'node:assert/strict'
-import { access, readFile, readdir, writeFile } from 'node:fs/promises'
+import { readFile, readdir, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import * as vscode from 'vscode'
 
@@ -9,15 +9,21 @@ async function delay(ms) {
   await new Promise(resolvePromise => setTimeout(resolvePromise, ms))
 }
 
-async function waitForFile(path, timeoutMs = 90_000) {
+async function waitForDriverFile(path, failure, timeoutMs = 90_000) {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     try {
-      await access(path)
-      return
-    } catch {
-      await delay(100)
+      return JSON.parse(await readFile(path, 'utf8'))
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error
     }
+    try {
+      const failed = JSON.parse(await readFile(failure, 'utf8'))
+      throw new Error(`VS Code webview driver failed: ${String(failed.message)}\n${String(failed.stack ?? '')}`)
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error
+    }
+    await delay(100)
   }
   throw new Error(`timed out waiting for ${path}`)
 }
@@ -35,24 +41,108 @@ async function findSessionLogs(root) {
   return found
 }
 
+async function sessionEventLogs(root) {
+  const logs = []
+  for (const path of await findSessionLogs(root)) {
+    const text = await readFile(path, 'utf8')
+    const lines = text.trim().split(/\r?\n/).filter(Boolean)
+    const events = []
+    for (let index = 0; index < lines.length; index++) {
+      try {
+        events.push(JSON.parse(lines[index]))
+      } catch (error) {
+        if (index !== lines.length - 1) throw error
+      }
+    }
+    logs.push(events)
+  }
+  return logs
+}
+
+async function waitForSessionEvents(root, predicate, message, timeoutMs = 30_000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const logs = await sessionEventLogs(root)
+    if (predicate(logs)) return logs
+    await delay(100)
+  }
+  throw new Error(`timed out waiting for ${message}`)
+}
+
 function contentText(event) {
   const blocks = event?.data?.content
   if (!Array.isArray(blocks)) return ''
   return blocks.filter(block => block?.type === 'text').map(block => block.text).join('')
 }
 
+function toolResultCount(logs) {
+  return logs.flat().filter(event => event.type === 'tool/result').length
+}
+
+async function answerNativeQuestion(sessionsRoot, expectedResults) {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    await vscode.commands.executeCommand('workbench.action.focusQuickOpen')
+    await vscode.commands.executeCommand('workbench.action.quickOpenSelectNext')
+    await vscode.commands.executeCommand('workbench.action.acceptSelectedQuickOpenItem')
+    const logs = await sessionEventLogs(sessionsRoot)
+    if (toolResultCount(logs) >= expectedResults) return
+    await delay(100)
+  }
+  await waitForSessionEvents(
+    sessionsRoot,
+    logs => toolResultCount(logs) >= expectedResults,
+    `native question answer ${String(expectedResults)}`,
+  )
+}
+
+function assertPromptAdmission(logs, prompt) {
+  const promptLocations = []
+  for (const events of logs) {
+    for (let index = 0; index < events.length; index++) {
+      const event = events[index]
+      if (event.type !== 'user/message' || event.data?.source?.kind !== 'user' || contentText(event) !== prompt) continue
+      promptLocations.push({ events, index })
+    }
+  }
+  assert.ok(promptLocations.length >= 2, `expected two bridged prompts, got ${String(promptLocations.length)}`)
+  for (const { events, index: promptIndex } of promptLocations) {
+    const contextIndex = events.findLastIndex((event, index) => (
+      index < promptIndex
+      && event.type === 'user/message'
+      && event.data?.source?.kind === 'plugin'
+      && event.data.source.plugin === 'ide'
+    ))
+    const requestIndex = events.findIndex((event, index) => index > promptIndex && event.type === 'request/header')
+    assert.ok(contextIndex >= 0, 'production log has no IDE context event before a prompt')
+    assert.ok(contentText(events[contextIndex]).includes('seed.ts'), 'IDE context does not contain the opened seed.ts')
+    assert.ok(requestIndex > promptIndex, `request/header index ${String(requestIndex)} must follow prompt index ${String(promptIndex)}`)
+  }
+}
+
 suite('built DeepSeek Harness extension', () => {
-  test('drives a real prompt after exact-session IDE context admission and restarts', async () => {
+  test('drives native questions through two ready server generations', async () => {
     const workspace = vscode.workspace.workspaceFolders?.[0]
     assert.ok(workspace)
     const extensionRoot = process.env.DSH_VSCODE_TEST_EXTENSION
     const driverReady = process.env.DSH_VSCODE_DRIVER_READY
+    const driverMilestone = process.env.DSH_VSCODE_DRIVER_MILESTONE
     const driverResult = process.env.DSH_VSCODE_DRIVER_RESULT
+    const driverFailure = process.env.DSH_VSCODE_DRIVER_FAILURE
+    const restartReady = process.env.DSH_VSCODE_RESTART_READY
+    const restartMilestone = process.env.DSH_VSCODE_RESTART_MILESTONE
+    const restartResult = process.env.DSH_VSCODE_RESTART_RESULT
     const sessionsRoot = process.env.DSH_VSCODE_SESSIONS_ROOT
+    const snapshotPath = process.env.DSH_VSCODE_TEST_SNAPSHOT
     assert.ok(extensionRoot)
     assert.ok(driverReady)
+    assert.ok(driverMilestone)
     assert.ok(driverResult)
+    assert.ok(driverFailure)
+    assert.ok(restartReady)
+    assert.ok(restartMilestone)
+    assert.ok(restartResult)
     assert.ok(sessionsRoot)
+    assert.ok(snapshotPath)
 
     const extension = vscode.extensions.all.find(candidate => resolve(candidate.extensionPath) === resolve(extensionRoot))
     assert.ok(extension, `development extension not found at ${extensionRoot}`)
@@ -61,34 +151,32 @@ suite('built DeepSeek Harness extension', () => {
     await vscode.window.showTextDocument(document)
     await vscode.commands.executeCommand('dsh.openPanel')
     await writeFile(driverReady, 'ready\n')
-    await waitForFile(driverResult)
 
-    const driver = JSON.parse(await readFile(driverResult, 'utf8'))
-    assert.equal(typeof driver.snapshot, 'string')
-    assert.match(driver.snapshot, /Reply with the single word LIGHTHOUSE and stop\./)
-    assert.match(driver.snapshot, /LIGHTHOUSE/)
-    assert.match(driver.snapshot, /Describe what you want to build/)
-
-    const logs = await findSessionLogs(sessionsRoot)
-    assert.equal(logs.length, 1, `expected one production session log, got ${logs.join(', ')}`)
-    const events = (await readFile(logs[0], 'utf8')).trim().split(/\r?\n/).map(line => JSON.parse(line))
-    const contextIndex = events.findIndex(event => (
-      event.type === 'user/message'
-      && event.data?.source?.kind === 'plugin'
-      && event.data.source.plugin === 'ide'
-    ))
-    const promptIndex = events.findIndex(event => (
-      event.type === 'user/message'
-      && event.data?.source?.kind === 'user'
-      && contentText(event) === driver.prompt
-    ))
-    const requestIndex = events.findIndex((event, index) => index > promptIndex && event.type === 'request/header')
-    assert.ok(contextIndex >= 0, 'production log has no IDE context event')
-    assert.ok(contentText(events[contextIndex]).includes('seed.ts'), 'IDE context does not contain the opened seed.ts')
-    assert.ok(promptIndex > contextIndex, `prompt index ${promptIndex} must follow context index ${contextIndex}`)
-    assert.ok(requestIndex > promptIndex, `request/header index ${requestIndex} must follow prompt index ${promptIndex}`)
+    const expectedSnapshot = await readFile(snapshotPath, 'utf8')
+    const firstMilestone = await waitForDriverFile(driverMilestone, driverFailure)
+    assert.equal(`${String(firstMilestone.snapshot)}\n`, expectedSnapshot)
+    await answerNativeQuestion(sessionsRoot, 1)
+    const firstResult = await waitForDriverFile(driverResult, driverFailure)
+    assert.equal(firstResult.final, "Great, let's move forward. BANANA!")
 
     await vscode.commands.executeCommand('dsh.restartServer')
+    await writeFile(restartReady, 'ready\n')
+    const replacementMilestone = await waitForDriverFile(restartMilestone, driverFailure)
+    assert.equal(`${String(replacementMilestone.snapshot)}\n`, expectedSnapshot)
+    await answerNativeQuestion(sessionsRoot, 2)
+    const replacementResult = await waitForDriverFile(restartResult, driverFailure)
+    assert.equal(replacementResult.final, "Great, let's move forward. BANANA!")
+
+    const logs = await waitForSessionEvents(
+      sessionsRoot,
+      eventLogs => eventLogs.flat().filter(event => (
+        event.type === 'user/message'
+        && event.data?.source?.kind === 'user'
+        && contentText(event) === firstMilestone.prompt
+      )).length >= 2,
+      'the replacement bridged prompt',
+    )
+    assertPromptAdmission(logs, firstMilestone.prompt)
     assert.equal(extension.isActive, true)
-  }).timeout(120_000)
+  }).timeout(240_000)
 })
