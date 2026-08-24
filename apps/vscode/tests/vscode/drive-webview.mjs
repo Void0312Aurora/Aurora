@@ -3,7 +3,10 @@
 import { access, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { chromium } from 'playwright'
-import { captureStableAriaSnapshot, normalizeAriaSnapshot } from '../../../web/tests/stable-aria.ts'
+import {
+  captureStableAria as captureStableLocatorAria,
+  normalizeAriaSnapshot,
+} from '../../../test-support/snapshot.ts'
 
 const PROMPT = 'Use the ask_user_question tool to ask me exactly one question with id "checkpoint", question "Ready to continue?", header "Checkpoint", and options labeled "Yes" and "No". After I answer, reply with one short sentence acknowledging my answer and stop.'
 const FINAL = "Great, let's move forward. BANANA!"
@@ -116,8 +119,8 @@ function normalizeSnapshot(snapshot, temporary) {
 }
 
 async function captureStableSnapshot(locator, temporary) {
-  return captureStableAriaSnapshot(
-    () => locator.ariaSnapshot({ timeout: 15_000 }),
+  return captureStableLocatorAria(
+    locator,
     snapshot => normalizeSnapshot(snapshot, temporary),
   )
 }

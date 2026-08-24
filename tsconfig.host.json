@@ -9,7 +9,6 @@
   },
   "include": [
     "apps/web/tests/scaffold.ts",
-    "apps/web/tests/stable-aria.ts",
     "apps/test-support/snapshot.ts",
     "apps/web/tests/support.ts",
     "apps/web/tests/scaffold-hermetic.e2e.ts",
