@@ -140,11 +140,12 @@ async function ensureWorkspace(frame, workspace) {
   const serverStarting = dialog.getByText('dsh web is not running yet', { exact: true })
   const workspaceDeadline = Date.now() + 75_000
   while (Date.now() < workspaceDeadline) {
-    // This is fixture setup, not the interaction under test. The embedded
-    // client's own sidebar/resizer may overlap the empty-state trigger in a
-    // narrow Extension Host viewport, so dispatch to the structurally located
-    // control and reserve ordinary user-action clicks for the native question.
-    await choose.click({ force: true })
+    // This is fixture setup, not the interaction under test. A narrow host can
+    // place sidebar chrome over the empty-state trigger; a forced coordinate
+    // click still lands on that covering element. Invoke the structurally
+    // located control itself and reserve ordinary user-action clicks for the
+    // native question under test.
+    await choose.evaluate(element => element.click())
     if (!await dialog.isVisible().catch(() => false)) {
       const addWorkspace = frame.getByText('Add workspace…', { exact: true })
       await addWorkspace.waitFor({ timeout: 15_000 })
@@ -201,7 +202,7 @@ async function driveQuestionRound(browser, frame, options) {
   const snapshot = await captureStableSnapshot(question, options.temporary)
   await writeFile(options.milestone, JSON.stringify({ prompt: PROMPT, snapshot, workspacePicker }))
   await frame.getByText(FINAL, { exact: true }).waitFor({ timeout: 60_000 })
-  const richSnapshot = await captureStableSnapshot(frame.locator('[class*="centerCol"]').first(), options.temporary)
+  const richSnapshot = await captureStableSnapshot(frame.locator('#root').first(), options.temporary)
   await writeFile(options.result, JSON.stringify({ final: FINAL, snapshot: richSnapshot }))
 }
 

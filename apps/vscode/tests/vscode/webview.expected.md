@@ -1,3 +1,25 @@
+- button "New session"
+- button "Collapse sidebar":
+  - img
+- button "New session":
+  - img
+  - text: New Session
+- text: Workspaces
+- button "Group by":
+  - img
+- button "Add workspace":
+  - img
+- button "Search sessions":
+  - img
+- textbox "Search name, keywords..."
+- tree "Sessions":
+  - treeitem "project 1 session" [expanded]:
+    - img
+    - text: project 1 session
+  - treeitem "Use the ask_user_question tool to now" [selected]
+- button "Settings":
+  - img
+  - text: Settings
 - banner:
   - navigation "Session hierarchy":
     - button "Use the ask_user_question tool to" [disabled]
@@ -44,4 +66,6 @@
   - text: deepseek-v4-flash
   - img
 - button "Send message" [disabled]
-- text: 1 turns · 2 steps Tool call {{duration}} Cache hit 98% Input 15.8K tok · Output 156 tok
+- text: 1 turns · 2 steps Tool call {{duration}} Cache hit 98% Input 15.8K tok · Output 156 tok Details
+- button "Close details"
+- text: Click a tool row in the message flow to view its details
