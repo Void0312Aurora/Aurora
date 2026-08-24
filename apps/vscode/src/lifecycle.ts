@@ -27,9 +27,17 @@ export interface RuntimeLifecycleOptions {
   onStartFailure: (error: unknown) => void
 }
 
+/** One published generation plus the revocation signal for waits that use it. */
+interface OwnedRuntime {
+  readonly runtime: ManagedServer
+  readonly revoked: Promise<void>
+  readonly revoke: () => void
+  disposal?: Promise<void>
+}
+
 /** Owns the current server generation and the native consumers attached to it. */
 export class RuntimeLifecycle {
-  private runtime: ManagedServer | undefined
+  private owner: OwnedRuntime | undefined
   private restartTask: Promise<void> | undefined
   private disposed = false
   private disposeTask: Promise<void> | undefined
@@ -38,7 +46,7 @@ export class RuntimeLifecycle {
   constructor(private readonly options: RuntimeLifecycleOptions) {}
 
   /** Current ready origin; consumers call this for every operation. */
-  readonly origin = (): URL | undefined => this.runtime?.url
+  readonly origin = (): URL | undefined => this.owner?.runtime.url
 
   /** Ensure one generation and its native consumers are running. */
   start(): void {
@@ -49,10 +57,13 @@ export class RuntimeLifecycle {
   /** Start or reuse a generation outside an in-progress restart barrier. */
   private async startGeneration(): Promise<void> {
     if (this.disposed) return
-    const current = this.runtime ??= this.options.createRuntime()
+    const current = this.owner ??= this.createOwner()
     this.options.startNative()
     try {
-      await current.start()
+      // Teardown must not depend on a server generation reaching readiness.
+      // Revocation releases this transaction even when start() remains
+      // pending; disposeOwned() independently tears down the exact runtime.
+      await Promise.race([current.runtime.start().then(() => undefined), current.revoked])
     } catch (error) {
       // A restart or deactivate may dispose a generation while start awaits
       // readiness. Its rejection belongs to teardown, not the replacement.
@@ -63,8 +74,30 @@ export class RuntimeLifecycle {
   }
 
   /** Re-read ownership after an await (the generation may have been replaced). */
-  private owns(runtime: ManagedServer): boolean {
-    return !this.disposed && this.runtime === runtime
+  private owns(owner: OwnedRuntime): boolean {
+    return !this.disposed && this.owner === owner
+  }
+
+  /** Publish a revocable owner before its runtime crosses any await. */
+  private createOwner(): OwnedRuntime {
+    let revoke = (): void => {}
+    const revoked = new Promise<void>((resolve) => { revoke = resolve })
+    return { runtime: this.options.createRuntime(), revoked, revoke }
+  }
+
+  /** Revoke and unpublish the current generation synchronously. */
+  private detachOwner(): OwnedRuntime | undefined {
+    const current = this.owner
+    this.owner = undefined
+    current?.revoke()
+    return current
+  }
+
+  /** Dispose one exact generation once. */
+  private disposeOwned(owner: OwnedRuntime | undefined): Promise<void> {
+    if (owner === undefined) return Promise.resolve()
+    owner.disposal ??= owner.runtime.dispose()
+    return owner.disposal
   }
 
   /** Dispose the current generation, then start a replacement. */
@@ -72,10 +105,9 @@ export class RuntimeLifecycle {
     if (this.disposed) return Promise.resolve()
     if (this.restartTask !== undefined) return this.restartTask
     this.options.stopNative()
-    const current = this.runtime
-    this.runtime = undefined
+    const current = this.detachOwner()
     const task = (async () => {
-      await current?.dispose()
+      await this.disposeOwned(current)
       await this.startGeneration()
     })()
     const completion = task.finally(() => {
@@ -94,9 +126,9 @@ export class RuntimeLifecycle {
   private async performDispose(): Promise<void> {
     this.disposed = true
     this.options.stopNative()
-    await this.restartTask
-    const current = this.runtime
-    this.runtime = undefined
-    await current?.dispose()
+    // Detach first: if restart already published a replacement whose start()
+    // is still pending, revocation immediately releases the restart barrier.
+    const currentDisposal = this.disposeOwned(this.detachOwner())
+    await Promise.all([this.restartTask ?? Promise.resolve(), currentDisposal])
   }
 }

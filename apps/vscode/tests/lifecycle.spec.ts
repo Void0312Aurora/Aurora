@@ -141,4 +141,28 @@ describe('RuntimeLifecycle', () => {
     await Promise.all([restartA, deactivate])
     expect(second.start).not.toHaveBeenCalled()
   })
+
+  it('deactivate revokes and disposes an unready replacement without releasing readiness', async () => {
+    const first = new FakeRuntime(new URL('http://127.0.0.1:5401/'))
+    const second = new FakeRuntime(undefined)
+    second.start.mockImplementation(() => new Promise<URL>(() => {}))
+    const generations = [first, second]
+    const lifecycle = new RuntimeLifecycle({
+      createRuntime: () => generations.shift()!,
+      startNative: () => {},
+      stopNative: () => {},
+      onStartFailure: () => {},
+    })
+
+    lifecycle.start()
+    await settle()
+    const restarting = lifecycle.restart()
+    await settle()
+    expect(second.start).toHaveBeenCalledTimes(1)
+
+    const deactivate = lifecycle.dispose()
+    expect(second.dispose).toHaveBeenCalledTimes(1)
+    await Promise.all([restarting, deactivate])
+    expect(first.dispose).toHaveBeenCalledTimes(1)
+  })
 })
