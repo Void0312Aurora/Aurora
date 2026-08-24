@@ -129,6 +129,31 @@ describe('RuntimeLifecycle', () => {
     expect(runtimes).toHaveLength(1)
   })
 
+  it('deactivation preempts a replacement that has not become ready', async () => {
+    const { lifecycle, runtimes, ready } = harness()
+    await lifecycle.start()
+    const first = runtimes[0]!
+    first.ready.resolve()
+    await settle()
+
+    const restarting = lifecycle.restart()
+    await settle()
+    first.disposed.resolve()
+    await settle()
+    const replacement = runtimes[1]!
+
+    const deactivating = lifecycle.deactivate()
+    await settle()
+    expect(replacement.disposeCalls).toBe(1)
+    expect(lifecycle.current).toBeUndefined()
+    expect(ready).toEqual([first])
+    await expect(restarting).resolves.toBeUndefined()
+
+    replacement.disposed.resolve()
+    await deactivating
+    expect(ready).toEqual([first])
+  })
+
   it('ignores readiness that settles after deactivation claimed the runtime', async () => {
     const { lifecycle, runtimes, ready } = harness()
     await lifecycle.start()
