@@ -16,11 +16,9 @@ export default defineConfig({
   dts: false,
   clean: false,
   // A development extension is loaded outside pnpm's workspace resolver and
-  // the eventual vsix carries no node_modules. Inline every package import;
-  // only the host-provided vscode module and Node built-ins remain external.
+  // the eventual vsix carries no node_modules. Inline every package import,
+  // including the launcher's Windows command-shim closure; only the
+  // host-provided vscode module and Node built-ins remain external.
   noExternal: id => id !== 'vscode' && !id.startsWith('node:'),
   external: ['vscode'],
-  // The vsix excludes node_modules; both host primitives, including the
-  // launcher's Windows command-shim closure, must live in extension.js.
-  noExternal: ['@deepseek-ai/dsh-process-tree', '@deepseek-ai/dsh-web-launcher'],
 })

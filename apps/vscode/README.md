@@ -12,9 +12,9 @@ The substitution costs no plugin any change. `root` takes a single occupant, so 
 
 `ctx.layout` is implemented verbatim from the wide shell's `ILayout`, so cross-plugin panel gestures keep working with only their meaning changed: toggling the sidebar routes between the sessions pane and the conversation, and opening details brings that pane forward.
 
-Navigation lives in **native view title actions**, not webview pixels — the scarcest resource in a narrow column. The commands post a route message that `webview/route-bridge.ts` turns into a `ctx.layout` call.
+Navigation lives in **native view title actions**, not webview pixels — the scarcest resource in a narrow column. The host retains the latest requested route until the webview reports that its page-level listener is ready; the webview then replays that route through `webview/route-bridge.ts`, and `NarrowLayoutService` retains it again until the root store attaches. A title action therefore survives initial page and plugin boot instead of becoming a one-shot message.
 
-The shell lives in this app rather than `packages/client` because the VS Code sidebar is its only consumer, the same way the theme adapter next to it does; a second narrow-container host is what would justify promoting it to a package.
+The shell lives in this app rather than `packages/client` because the VS Code sidebar is its only consumer; a second narrow-container host is what would justify promoting it to a package.
 
 ### Fitting the occupants
 
@@ -31,7 +31,7 @@ webview (browser)            extension host (Node)             dsh web
   full dsh client stack  ◀──  postMessage  ◀──  SSE/JSON  ◀──────  /api
 ```
 
-The webview's page origin is `vscode-webview://…`, which the server's `/api` browser-trust fence refuses. So the webview never fetches the server directly: its transport (`PostMessageApiClient` from [`@deepseek-ai/dsh-client-connection`](../../packages/client/connection/README.md)) posts every request to the extension host, which replays it against the server's loopback origin — a loopback Host passes the fence like any non-browser client. The bridge confines every relayed request to that origin under `/api/`: an absolute URL, a protocol-relative or backslash authority, or a non-API path is refused before any fetch, so injected webview script cannot borrow the host's loopback network reach for other targets. The GUI itself is the ordinary dsh client stack, bundled statically by `webview/vite.config.ts` (the webview's CSP forbids fetching plugin bundles, so every plugin ships inside one bundle) and booted through the shared `AppWebEntry` kernel with the roster registered as static plugins.
+The webview's page origin is `vscode-webview://…`, which the server's `/api` browser-trust fence refuses. So the webview never fetches the server directly: its transport (`PostMessageApiClient` from [`@deepseek-ai/dsh-client-connection`](../../packages/client/connection/README.md)) posts requests to the extension host, which replays them against the server's loopback origin — a loopback Host passes the fence like any non-browser client. The extension host retains server readiness until the page listener is installed, so the bootstrap does not misclassify an ordinary startup interval as incompatibility. After that signal, the bootstrap sends only `host.describe` before publishing the transport to the plugin graph and requires the host's `protocolVersion` to equal the bundled client's; an older, newer, missing, or malformed version renders an incompatible-host state and starts neither the client plugins nor their streams. The bridge confines every relayed request to that origin under `/api/`: an absolute URL, a protocol-relative or backslash authority, or a non-API path is refused before any fetch, so injected webview script cannot borrow the host's loopback network reach for other targets. The compatible GUI is the ordinary dsh client stack, bundled statically by `webview/vite.config.ts` (the webview's CSP forbids fetching plugin bundles, so every plugin ships inside one bundle) and booted through the shared `AppWebEntry` kernel with the roster registered as static plugins.
 
 The extension launches, on demand:
 
@@ -39,7 +39,7 @@ The extension launches, on demand:
 dsh web --host 127.0.0.1 --port 0
 ```
 
-through the shared [`@deepseek-ai/dsh-web-launcher`](../../packages/util/web-launcher/README.md) primitive (the desktop shell uses the same one), which resolves `dsh` in the order `DSH_BIN` → embedded closure → checkout → PATH and spawns it through the shared Windows command-shim-compatible boundary. Both `DSH_BIN` and PATH therefore accept npm-installed `.cmd` shims without enabling a general shell. `--port 0` means parallel windows never collide. The managed server is torn down (tree-killed) when the extension host deactivates.
+through the shared [`@deepseek-ai/dsh-web-launcher`](../../packages/util/web-launcher/README.md) primitive (the desktop shell uses the same one), which resolves `dsh` in the order `DSH_BIN` → embedded closure → checkout → PATH and spawns it through the shared Windows command-shim-compatible boundary. Both `DSH_BIN` and PATH therefore accept npm-installed `.cmd` shims without enabling a general shell. `--port 0` means parallel windows never collide. One serialized lifecycle transaction owns start, restart, and deactivation: it detaches a runtime before awaiting disposal, cleans failed starts, and closes publication synchronously when teardown begins, so concurrent restarts cannot orphan a server and a restart racing deactivation cannot launch one afterward.
 
 ## Native interactions
 
@@ -52,8 +52,8 @@ The extension feeds the model your editor context so a prompt can refer to "this
 ## Commands
 
 - **DeepSeek Harness: Focus Sidebar** — reveal the view (VS Code resolves it on first reveal, which starts the server).
-- **DeepSeek Harness: Show Conversation** / **Show Sessions** — route the front pane; both are title actions on the view.
-- **DeepSeek Harness: Restart Server** — tree-kill and relaunch the managed server. The view stays: the bridge resolves the server origin through a live getter, so the webview reconnects to the new port by itself.
+- **DeepSeek Harness: Show Conversation** / **Show Sessions** — route the front pane; both are title actions on the view, and their latest request is replayed after webview readiness.
+- **DeepSeek Harness: Restart Server** — serialize tree-kill and relaunch of the managed server. The view stays: the bridge resolves the server origin through a live getter, so the webview reconnects to the new port by itself.
 
 ## Windows
 

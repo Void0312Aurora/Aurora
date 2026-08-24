@@ -12,9 +12,9 @@ GUI 的宽屏 shell 把三个槽排成可拖拽的分栏，且拒绝让中栏低
 
 `ctx.layout` 逐字实现宽屏 shell 的 `ILayout`，因此跨插件的面板手势照常工作，只是含义改变：切换侧栏变成在会话窗格与对话之间路由，打开详情变成把该窗格提到前面。
 
-导航位于**原生 view title actions**，而非 webview 像素——后者是窄栏里最稀缺的资源。命令 post 一条路由消息，由 `webview/route-bridge.ts` 转成 `ctx.layout` 调用。
+导航位于**原生 view title actions**，而非 webview 像素——后者是窄栏里最稀缺的资源。宿主会保留最新的目标路由，直到 webview 报告页面级监听器已就绪；webview 随后经 `webview/route-bridge.ts` 重放该路由，`NarrowLayoutService` 还会继续保留它，直到 root store 接入。因此 title action 能跨过初始页面与插件启动，而不是一条即发即弃的消息。
 
-该 shell 住在本 app 而非 `packages/client`，因为 VS Code 侧栏是它唯一的消费者，与紧邻的主题适配器同理；出现第二个窄容器宿主时才值得把它提升为包。
+该 shell 住在本 app 而非 `packages/client`，因为 VS Code 侧栏是它唯一的消费者；出现第二个窄容器宿主时才值得把它提升为包。
 
 ### 让占用者放得下
 
@@ -31,7 +31,7 @@ webview (browser)            extension host (Node)             dsh web
   full dsh client stack  ◀──  postMessage  ◀──  SSE/JSON  ◀──────  /api
 ```
 
-webview 的页面 origin 是 `vscode-webview://…`，会被服务器的 `/api` 浏览器信任栅栏拒绝。因此 webview 从不直接 fetch 服务器：它的传输（[`@deepseek-ai/dsh-client-connection`](../../packages/client/connection/README.md) 的 `PostMessageApiClient`）把每个请求 post 给扩展宿主，宿主再以服务器的回环 origin 重放——回环 Host 与任何非浏览器客户端一样通过栅栏。桥把每个中继请求收束在该 origin 的 `/api/` 之下：绝对 URL、protocol-relative 或反斜杠 authority、非 API 路径在任何 fetch 之前即被拒绝，被注入的 webview 脚本无法借宿主的回环网络触达去别的目标。GUI 本身就是普通 dsh 客户端栈，由 `webview/vite.config.ts` 静态打包（webview 的 CSP 禁止 fetch 插件 bundle，所以所有插件打进同一个 bundle），并通过共享的 `AppWebEntry` 内核以静态插件方式启动 roster。
+webview 的页面 origin 是 `vscode-webview://…`，会被服务器的 `/api` 浏览器信任栅栏拒绝。因此 webview 从不直接 fetch 服务器：它的传输（[`@deepseek-ai/dsh-client-connection`](../../packages/client/connection/README.md) 的 `PostMessageApiClient`）把请求 post 给扩展宿主，宿主再以服务器的回环 origin 重放——回环 Host 与任何非浏览器客户端一样通过栅栏。扩展宿主会保留服务器就绪状态，直到页面监听器安装完成，因此 bootstrap 不会把正常的启动间隔误判为不兼容。收到该信号后，bootstrap 在把传输公布给插件图之前只发送 `host.describe`，并要求 host 的 `protocolVersion` 等于内置客户端版本；版本更旧、更新、缺失或格式错误时会渲染不兼容 host 状态，客户端插件及其 stream 均不启动。桥把每个中继请求收束在该 origin 的 `/api/` 之下：绝对 URL、protocol-relative 或反斜杠 authority、非 API 路径在任何 fetch 之前即被拒绝，被注入的 webview 脚本无法借宿主的回环网络触达别的目标。兼容时的 GUI 就是普通 dsh 客户端栈，由 `webview/vite.config.ts` 静态打包（webview 的 CSP 禁止 fetch 插件 bundle，所以所有插件打进同一个 bundle），并通过共享的 `AppWebEntry` 内核以静态插件方式启动 roster。
 
 扩展按需拉起：
 
@@ -39,7 +39,7 @@ webview 的页面 origin 是 `vscode-webview://…`，会被服务器的 `/api` 
 dsh web --host 127.0.0.1 --port 0
 ```
 
-经共享的 [`@deepseek-ai/dsh-web-launcher`](../../packages/util/web-launcher/README.md) 原语（桌面外壳用的是同一个），按 `DSH_BIN` → 内嵌闭包 → checkout → PATH 顺序解析 `dsh`，再通过共享的兼容 Windows 命令 shim 的边界 spawn。于是 `DSH_BIN` 与 PATH 均可接受 npm 安装的 `.cmd` shim，无需启用通用 shell。`--port 0` 意味着并行窗口永不冲突。扩展宿主 deactivate 时受管服务器会被（树）终止。
+经共享的 [`@deepseek-ai/dsh-web-launcher`](../../packages/util/web-launcher/README.md) 原语（桌面外壳用的是同一个），按 `DSH_BIN` → 内嵌闭包 → checkout → PATH 顺序解析 `dsh`，再通过共享的兼容 Windows 命令 shim 的边界 spawn。于是 `DSH_BIN` 与 PATH 均可接受 npm 安装的 `.cmd` shim，无需启用通用 shell。`--port 0` 意味着并行窗口永不冲突。启动、重启与 deactivate 由同一个串行生命周期事务拥有：它会在等待 disposer 前先解除 runtime 所有权，清理失败的启动，并在 teardown 开始时同步关闭发布，因此并发重启不会遗留服务器，和 deactivate 竞态的重启也不会在其后拉起新服务器。
 
 ## 原生交互
 
@@ -52,8 +52,8 @@ dsh web --host 127.0.0.1 --port 0
 ## 命令
 
 - **DeepSeek Harness: Focus Sidebar**——显示该视图（VS Code 在首次显示时解析它，从而启动服务器）。
-- **DeepSeek Harness: Show Conversation** / **Show Sessions**——路由前台窗格；两者都是该视图的 title action。
-- **DeepSeek Harness: Restart Server**——树杀并重启受管服务器。视图会保留：桥经活的 getter 解析服务器 origin，webview 自行重连到新端口。
+- **DeepSeek Harness: Show Conversation** / **Show Sessions**——路由前台窗格；两者都是该视图的 title action，最新请求会在 webview 就绪后重放。
+- **DeepSeek Harness: Restart Server**——串行执行受管服务器的树杀与重启。视图会保留：桥经活的 getter 解析服务器 origin，webview 自行重连到新端口。
 
 ## Windows
 
