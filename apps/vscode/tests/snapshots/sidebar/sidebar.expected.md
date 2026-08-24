@@ -15,6 +15,8 @@ horizontal-scrollers: 1
 - text: Workspaces
 - button "Group by":
   - img
+- button "Add workspace":
+  - img
 - button "Search sessions":
   - img
 - textbox "Search name, keywords..."
