@@ -9,14 +9,14 @@
 
 import * as vscode from 'vscode'
 import type { BridgeRequestMessage } from '@deepseek-ai/dsh-client-connection/client'
-import type { AskUserQuestionAnswer, AskUserQuestionItem } from '@deepseek-ai/dsh-user-interaction/types'
 import { isWebviewReadyMessage } from '../webview/route-bridge.ts'
 import { ActiveSessionTracker } from './active-session.ts'
 import { ApiBridge } from './bridge.ts'
 import { IdeContextFeed } from './context-feed.ts'
 import { LoopbackApiClient, verifyHostProtocol } from './host-client.ts'
 import type { EditorState, IdeDiagnostic } from './ide-context.ts'
-import { NativeInteractions, type ApprovalPrompt, type NativeUi } from './interactions.ts'
+import { NativeInteractions } from './interactions.ts'
+import { createNativeUi } from './native-ui.ts'
 import { panelHtml, WEBVIEW_DIST } from './panel.ts'
 import { ServerRuntime } from './runtime.ts'
 import { RuntimeLifecycle } from './runtime-lifecycle.ts'
@@ -65,103 +65,6 @@ let runtimeLifecycle: RuntimeLifecycle<ServerRuntime> | undefined
 /** Working directory for the managed server: the window's first workspace folder. */
 function workspaceCwd(): string | undefined {
   return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
-}
-
-/** Render a cached tool call as a one-line "what this will do" hint for an approval. */
-function approvalDetail(prompt: ApprovalPrompt): string {
-  const call = prompt.call
-  const what = call === undefined ? prompt.toolName : call.title
-  return prompt.reason === undefined ? what : `${what}\n\n${prompt.reason}`
-}
-
-/** The vscode-backed native prompt surfaces (non-modal notifications + QuickPick). */
-function nativeUi(): NativeUi {
-  return {
-    // The notification cannot be closed programmatically, so the abort signal
-    // cannot dismiss an approval already on screen — a VS Code limitation. It
-    // stays non-modal, so a resolved-elsewhere frame simply supersedes it and a
-    // late click answers a no-longer-pending request (harmless not-pending).
-    confirmApproval: async (prompt) => {
-      const choice = await vscode.window.showInformationMessage(
-        `DeepSeek Harness wants to run ${prompt.toolName}`,
-        { detail: approvalDetail(prompt), modal: false },
-        'Allow', 'Reject',
-      )
-      return choice === 'Allow' ? 'allowed-once' : choice === 'Reject' ? 'rejected' : 'dismissed'
-    },
-    askQuestions: (items, signal) => askQuestionsNatively(items, signal),
-  }
-}
-
-/** Show one QuickPick that resolves to the picked labels, undefined on dismiss, or on abort. */
-function pickOne(item: AskUserQuestionItem, signal: AbortSignal): Promise<string[] | undefined> {
-  return new Promise((resolve) => {
-    const quickPick = vscode.window.createQuickPick()
-    quickPick.title = item.question
-    if (item.detail !== undefined) quickPick.placeholder = item.detail
-    quickPick.canSelectMany = item.multiSelect ?? false
-    quickPick.items = (item.options ?? []).map(option => ({
-      label: option.label,
-      ...option.description === undefined ? {} : { description: option.description },
-    }))
-    let done = false
-    const settle = (value: string[] | undefined): void => {
-      if (done) return
-      done = true
-      signal.removeEventListener('abort', onAbort)
-      quickPick.dispose()
-      resolve(value)
-    }
-    const onAbort = (): void => { settle(undefined) }
-    quickPick.onDidAccept(() => { settle(quickPick.selectedItems.map(i => i.label)) })
-    quickPick.onDidHide(() => { settle(undefined) })
-    signal.addEventListener('abort', onAbort, { once: true })
-    quickPick.show()
-  })
-}
-
-/** Show one InputBox that resolves to its value, undefined on dismiss, or on abort. */
-function inputOne(item: AskUserQuestionItem, signal: AbortSignal): Promise<string | undefined> {
-  return new Promise((resolve) => {
-    const inputBox = vscode.window.createInputBox()
-    inputBox.title = item.question
-    if (item.detail !== undefined) inputBox.placeholder = item.detail
-    let done = false
-    const settle = (value: string | undefined): void => {
-      if (done) return
-      done = true
-      signal.removeEventListener('abort', onAbort)
-      inputBox.dispose()
-      resolve(value)
-    }
-    const onAbort = (): void => { settle(undefined) }
-    inputBox.onDidAccept(() => { settle(inputBox.value) })
-    inputBox.onDidHide(() => { settle(undefined) })
-    signal.addEventListener('abort', onAbort, { once: true })
-    inputBox.show()
-  })
-}
-
-/**
- * Drive one ask() batch through sequential QuickPicks/InputBoxes; undefined
- * (a dismiss or the request resolving elsewhere via `signal`) leaves it for
- * the webview.
- */
-async function askQuestionsNatively(items: AskUserQuestionItem[], signal: AbortSignal): Promise<AskUserQuestionAnswer | undefined> {
-  const answers: AskUserQuestionAnswer['answers'] = []
-  for (const item of items) {
-    if (signal.aborted) return undefined
-    if ((item.options ?? []).length === 0) {
-      const custom = await inputOne(item, signal)
-      if (custom === undefined) return undefined
-      answers.push({ id: item.id, selected: [], custom })
-      continue
-    }
-    const selected = await pickOne(item, signal)
-    if (selected === undefined) return undefined
-    answers.push({ id: item.id, selected })
-  }
-  return { answers }
 }
 
 /**
@@ -216,7 +119,7 @@ function ensureInteractions(output: vscode.OutputChannel): void {
   const client = new LoopbackApiClient(currentOrigin)
   const native = new NativeInteractions({
     client,
-    ui: nativeUi(),
+    ui: createNativeUi(vscode.window),
     log: (line) => { output.appendLine(`[native] ${line}`) },
   })
   interactions = native
