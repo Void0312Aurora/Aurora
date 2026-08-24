@@ -83,8 +83,10 @@ export class ApiBridge {
     const controller = new AbortController()
     this.inflight.set(id, controller)
     try {
-      await this.options.beforeRelay?.(message, controller.signal)
-      controller.signal.throwIfAborted()
+      if (this.options.beforeRelay !== undefined) {
+        await this.options.beforeRelay(message, controller.signal)
+        controller.signal.throwIfAborted()
+      }
       const origin = this.options.origin()
       if (origin === undefined) {
         this.options.post({ type: 'dsh-fetch-error', id, message: 'dsh web is not running yet' })

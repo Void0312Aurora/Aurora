@@ -45,7 +45,7 @@ export class IdeContextFeed {
   private readonly lastSignature = new Map<string, string>()
   private readonly primes = new Map<string, Promise<void>>()
   private pending: { cancel: () => void } | undefined
-  private tail: Promise<void> = Promise.resolve()
+  private tail: Promise<void> | undefined
   private disposed = false
   private sendAbort: AbortController | undefined
 
@@ -94,14 +94,23 @@ export class IdeContextFeed {
   }
 
   private enqueue(explicitSessionId?: string): Promise<void> {
-    const run = this.tail.then(async () => {
-      if (this.disposed) return
-      await this.sendOnce(explicitSessionId)
-    })
-    this.tail = run.catch((error: unknown) => {
+    const previous = this.tail
+    const run = previous === undefined
+      ? this.sendOnce(explicitSessionId)
+      : previous.then(() => this.sendOnce(explicitSessionId))
+    const settled = run.catch((error: unknown) => {
       if (!this.disposed) this.options.log(`injectContext scheduling failed: ${error instanceof Error ? error.message : String(error)}`)
     })
-    return this.tail
+    this.tail = settled
+    void settled.then(() => {
+      if (this.tail === settled) this.tail = undefined
+    })
+    return settled
+  }
+
+  /** Read disposal after an await without stale control-flow narrowing. */
+  private isDisposed(): boolean {
+    return this.disposed
   }
 
   private async sendOnce(explicitSessionId?: string): Promise<void> {
@@ -119,14 +128,14 @@ export class IdeContextFeed {
         sessionId: sessionId as Parameters<IApiClient['sessions']['injectContext']>[0]['sessionId'],
         content: [{ type: 'text', text: snapshot.text }],
       }, controller.signal)
-      if (this.disposed) return
+      if (this.isDisposed()) return
       if (response.result.ok) {
         this.lastSignature.set(sessionId, snapshot.signature)
       } else {
         this.options.log(`injectContext rejected for ${sessionId}: ${response.result.error.code}`)
       }
     } catch (error) {
-      if (!this.disposed) this.options.log(`injectContext failed for ${sessionId}: ${error instanceof Error ? error.message : String(error)}`)
+      if (!this.isDisposed()) this.options.log(`injectContext failed for ${sessionId}: ${error instanceof Error ? error.message : String(error)}`)
     } finally {
       if (this.sendAbort === controller) this.sendAbort = undefined
     }
