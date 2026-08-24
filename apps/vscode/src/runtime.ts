@@ -35,6 +35,8 @@ export interface ServerRuntimeOptions {
   cwd?: string
   /** Environment the launch resolution reads (DSH_BIN, DSH_PERMISSION_MODE). */
   env: NodeJS.ProcessEnv
+  /** Extension-owned Loader overlay passed to `dsh web --config`. */
+  configPath: string
   /** Line sink for launch diagnostics and forwarded server stdout. */
   log: (line: string) => void
   /** Called once when a started server exits (never during {@link ServerRuntime.dispose}). */
@@ -94,9 +96,10 @@ export class ServerRuntime {
     if (launch.env.DSH_PERMISSION_MODE !== undefined && (options.env.DSH_PERMISSION_MODE === undefined || options.env.DSH_PERMISSION_MODE === '')) {
       options.log(`Windows has no harness confinement backend; using ${launch.env.DSH_PERMISSION_MODE} permission mode (approval prompts are disabled). Set DSH_PERMISSION_MODE to override.`)
     }
-    options.log(`launching dsh web (${launch.source}): ${launch.command} ${launch.args.join(' ')}`)
+    const args = [...launch.args, '--config', options.configPath]
+    options.log(`launching dsh web (${launch.source}): ${launch.command} ${args.join(' ')}`)
     const spawn: SpawnFn = options.spawn ?? nodeSpawn
-    const child = spawn(launch.command, launch.args, {
+    const child = spawn(launch.command, args, {
       // The tsx checkout branch needs the repo root; every other branch runs
       // in the window's workspace folder so the harness adopts it as the
       // default project root.

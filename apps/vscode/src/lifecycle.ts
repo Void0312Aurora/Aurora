@@ -43,20 +43,28 @@ export class RuntimeLifecycle {
   /** Ensure one generation and its native consumers are running. */
   start(): void {
     if (this.restartTask !== undefined) return
-    this.startGeneration()
+    void this.startGeneration().catch(() => undefined)
   }
 
   /** Start or reuse a generation outside an in-progress restart barrier. */
-  private startGeneration(): void {
+  private async startGeneration(): Promise<void> {
     if (this.disposed) return
     const current = this.runtime ??= this.options.createRuntime()
     this.options.startNative()
-    void current.start().catch((error: unknown) => {
+    try {
+      await current.start()
+    } catch (error) {
       // A restart or deactivate may dispose a generation while start awaits
       // readiness. Its rejection belongs to teardown, not the replacement.
-      if (this.disposed || this.runtime !== current) return
+      if (!this.owns(current)) return
       this.options.onStartFailure(error)
-    })
+      throw error
+    }
+  }
+
+  /** Re-read ownership after an await (the generation may have been replaced). */
+  private owns(runtime: ManagedServer): boolean {
+    return !this.disposed && this.runtime === runtime
   }
 
   /** Dispose the current generation, then start a replacement. */
@@ -68,7 +76,7 @@ export class RuntimeLifecycle {
     this.runtime = undefined
     const task = (async () => {
       await current?.dispose()
-      this.startGeneration()
+      await this.startGeneration()
     })()
     const completion = task.finally(() => {
       if (this.restartTask === completion) this.restartTask = undefined

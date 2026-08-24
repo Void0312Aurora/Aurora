@@ -44,6 +44,7 @@
     { "path": "../../packages/client/ui-permission" },
     { "path": "../../packages/client/ui-plan" },
     { "path": "../../packages/client/ui-question" },
-    { "path": "../../packages/client/ui-trajectory" }
+    { "path": "../../packages/client/ui-trajectory" },
+    { "path": "../../packages/host/directory-picker-browse" }
   ]
 }

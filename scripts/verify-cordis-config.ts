@@ -10,13 +10,9 @@
 
 import { globSync, readFileSync } from 'node:fs'
 import { dirname, relative, resolve } from 'node:path'
-import * as yaml from 'js-yaml'
 import ts from 'typescript'
 import { cordisConfigFiles } from './cordis-config-files.ts'
-
-interface JsExpr {
-  __jsExpr: string
-}
+import { parseLoaderConfig, validateLoaderMetadata } from './cordis-loader-metadata.mjs'
 
 interface PackageManifest {
   name?: string
@@ -32,11 +28,10 @@ const root = resolve(import.meta.dirname, '..')
 // These example files are overlays consumed by the built dsh app, so their bare
 // specifiers resolve from apps/cli rather than the examples workspace.
 const appOverlayFiles = new Set([
+  'apps/vscode/config/web.cordis.yml',
   'examples/web-cordis/cordis.yml',
   ...globSync('examples/mcp-memory/*.cordis.yml', { cwd: root }),
 ])
-const metadataFields = ['id', 'name', 'group', 'disabled', 'inject', 'intercept', 'isolate'] as const
-
 /** The adaptive directory-picker chooser package (mounts a backend row at boot). */
 const CHOOSER_PACKAGE = '@deepseek-ai/dsh-host-directory-picker-auto'
 
@@ -50,26 +45,17 @@ const CHOOSER_BACKEND_PACKAGES = [
   '@deepseek-ai/dsh-host-directory-picker-native',
   '@deepseek-ai/dsh-host-directory-picker-browse',
 ]
-const jsExprType = new yaml.Type('tag:yaml.org,2002:js', {
-  kind: 'scalar',
-  resolve: data => typeof data === 'string',
-  construct: (data: unknown): JsExpr => {
-    if (typeof data !== 'string') throw new TypeError('!!js requires a scalar string')
-    return { __jsExpr: data }
-  },
-})
-const schema = yaml.JSON_SCHEMA.extend(jsExprType)
-
 const files = cordisConfigFiles(root)
 const errors: string[] = []
 const pluginReferences: PluginReference[] = []
 
 for (const file of files) {
-  const document: unknown = yaml.load(readFileSync(resolve(root, file), 'utf8'), { schema })
+  const document = parseLoaderConfig(readFileSync(resolve(root, file), 'utf8'))
   if (!isUnknownArray(document)) {
     errors.push(`${file}: root must be a Loader entry array`)
     continue
   }
+  errors.push(...validateLoaderMetadata(document, file))
   for (let index = 0; index < document.length; index++) {
     validateEntry(document[index], file, `[${index}]`)
   }
@@ -93,7 +79,6 @@ function validateEntry(value: unknown, file: string, path: string): void {
     return
   }
   recordPlugin(value, file)
-  validateMetadata(value, file, path)
   if ((value.group === true || value.name === '@cordisjs/plugin-group') && isUnknownArray(value.config)) {
     for (let index = 0; index < value.config.length; index++) {
       validateEntry(value.config[index], file, `${path}.config[${index}]`)
@@ -112,7 +97,6 @@ function validateEntry(value: unknown, file: string, path: string): void {
     const patchPath = `${path}.config.patches[${index}]`
     if (!isRecord(patch)) continue
     recordPlugin(patch, file)
-    validateMetadata(patch, file, patchPath)
     if (!isUnknownArray(patch.insert)) continue
     for (let insertIndex = 0; insertIndex < patch.insert.length; insertIndex++) {
       validateEntry(patch.insert[insertIndex], file, `${patchPath}.insert[${insertIndex}]`)
@@ -279,32 +263,6 @@ function packageNameFromSpecifier(specifier: string): string | undefined {
     return segments.length >= 2 ? `${segments[0]}/${segments[1]}` : undefined
   }
   return segments[0] || undefined
-}
-
-function validateMetadata(entry: Record<string, unknown>, file: string, path: string): void {
-  for (const field of metadataFields) {
-    if (!(field in entry)) continue
-    const expressionPaths: string[] = []
-    collectExpressionPaths(entry[field], `${path}.${field}`, expressionPaths)
-    for (const expressionPath of expressionPaths) errors.push(`${file}${expressionPath}: !!js is not interpolated here`)
-  }
-}
-
-function collectExpressionPaths(value: unknown, path: string, output: string[]): void {
-  if (isJsExpr(value)) {
-    output.push(path)
-    return
-  }
-  if (isUnknownArray(value)) {
-    for (let index = 0; index < value.length; index++) collectExpressionPaths(value[index], `${path}[${index}]`, output)
-    return
-  }
-  if (!isRecord(value)) return
-  for (const [key, child] of Object.entries(value)) collectExpressionPaths(child, `${path}.${key}`, output)
-}
-
-function isJsExpr(value: unknown): value is JsExpr {
-  return isRecord(value) && typeof value.__jsExpr === 'string'
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

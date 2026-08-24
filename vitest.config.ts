@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url'
 import tsconfigPaths from 'vite-tsconfig-paths'
 import { defineConfig } from 'vitest/config'
 import { vitestExecArgv } from './vitest.shared.ts'
@@ -8,6 +9,10 @@ import { COVERAGE_EXEMPT_ENV, coverageExemptHeavySuites } from './scripts/covera
 // map applies to every test file. paths must win over package exports so built
 // lib/ never loads a second module-singleton copy.
 const pathsPlugin = (): ReturnType<typeof tsconfigPaths> => tsconfigPaths({ projects: ['./tsconfig.base.json'] })
+const sourceAliases = [{
+  find: /^@deepseek-ai\/dsh-host-directory-picker-browse\/client$/,
+  replacement: fileURLToPath(new URL('./packages/host/directory-picker-browse/src/client/index.ts', import.meta.url)),
+}]
 
 const windowsUnsupportedPackages = process.platform === 'win32'
   ? [
@@ -70,6 +75,9 @@ const processBoundTests = [
 
 export default defineConfig({
   plugins: [pathsPlugin()],
+  resolve: {
+    alias: sourceAliases,
+  },
   test: {
     setupFiles: ['./scripts/test-invariants.ts'],
     // .tsx: client component specs (jsdom via per-file @vitest-environment pragma).
@@ -84,6 +92,7 @@ export default defineConfig({
     projects: [
       {
         plugins: [pathsPlugin()],
+        resolve: { alias: sourceAliases },
         test: {
           name: 'thread-safe',
           execArgv: vitestExecArgv,
@@ -105,6 +114,7 @@ export default defineConfig({
       },
       {
         plugins: [pathsPlugin()],
+        resolve: { alias: sourceAliases },
         test: {
           name: 'process-bound',
           execArgv: vitestExecArgv,

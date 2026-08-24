@@ -85,6 +85,37 @@ describe('RuntimeLifecycle', () => {
     await lifecycle.dispose()
   })
 
+  it('keeps restart pending until the replacement is ready and rejects its startup failure', async () => {
+    const first = new FakeRuntime(new URL('http://127.0.0.1:5251/'))
+    let resolveSecond: ((url: URL) => void) | undefined
+    const second = new FakeRuntime(undefined)
+    second.start.mockImplementation(() => new Promise<URL>((resolve) => { resolveSecond = resolve }))
+    const third = new FakeRuntime(undefined)
+    third.start.mockRejectedValue(new Error('replacement failed'))
+    const generations = [first, second, third]
+    const onStartFailure = vi.fn()
+    const lifecycle = new RuntimeLifecycle({
+      createRuntime: () => generations.shift()!,
+      startNative: () => {},
+      stopNative: () => {},
+      onStartFailure,
+    })
+
+    lifecycle.start()
+    await settle()
+    let restartSettled = false
+    const restarting = lifecycle.restart().finally(() => { restartSettled = true })
+    await settle()
+    expect(restartSettled).toBe(false)
+    resolveSecond?.(new URL('http://127.0.0.1:5252/'))
+    await restarting
+    expect(restartSettled).toBe(true)
+
+    await expect(lifecycle.restart()).rejects.toThrow('replacement failed')
+    expect(onStartFailure).toHaveBeenCalledWith(expect.objectContaining({ message: 'replacement failed' }))
+    await lifecycle.dispose()
+  })
+
   it('coalesces restart requests and makes deactivate wait for teardown', async () => {
     let release: (() => void) | undefined
     const first = new FakeRuntime(new URL('http://127.0.0.1:5301/'))

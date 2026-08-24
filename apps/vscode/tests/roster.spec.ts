@@ -46,6 +46,11 @@ describe('webview static roster', () => {
     expect(theme.inject).toEqual(['theme'])
   })
 
+  it('pins the browse directory flow paired with the extension overlay', () => {
+    expect(staticPlugins).toHaveProperty('@deepseek-ai/dsh-host-directory-picker-browse')
+    expect(staticPlugins).not.toHaveProperty('@deepseek-ai/dsh-host-directory-picker-native')
+  })
+
   it('bundles every browser plugin the shipped web config composes (minus dev-only hmr)', () => {
     // hmr is dev-only (disabled in web.cordis.yml) and modules is kernel-owned;
     // neither is a roster plugin. Every other composed client name must bundle.

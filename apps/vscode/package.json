@@ -36,7 +36,7 @@
     "build": "tsdown && vite build --config webview/vite.config.ts",
     "build:host": "tsdown",
     "build:webview": "vite build --config webview/vite.config.ts",
-    "test:electron": "node tests/vscode/run.mjs"
+    "test:electron": "node scripts/verify-webview-csp.mjs && node tests/vscode/run.mjs"
   },
   "dependencies": {
     "@deepseek-ai/dsh-process-tree": "workspace:^",
@@ -66,6 +66,7 @@
     "@deepseek-ai/dsh-client-ui-trajectory": "workspace:^",
     "@deepseek-ai/dsh-client-ui-workspace": "workspace:^",
     "@deepseek-ai/dsh-client-web": "workspace:^",
+    "@deepseek-ai/dsh-host-directory-picker-browse": "workspace:^",
     "@types/node": "^22.0.0",
     "@types/react": "~18.3.1",
     "@types/vscode": "^1.100.0",

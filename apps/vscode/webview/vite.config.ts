@@ -22,6 +22,29 @@ const CLIENT_SUBPATH_PACKAGES = [
 
 export default defineConfig({
   plugins: [
+    {
+      name: 'dsh-vscode-csp-loader-utils',
+      enforce: 'pre',
+      resolveId(source, importer) {
+        const owner = importer?.replaceAll('\\', '/') ?? ''
+        if (!owner.includes('/vendor/loader/src/')) return undefined
+        if (source !== './config/utils.ts' && source !== './utils.ts') return undefined
+        return src('./loader-utils-stub.ts')
+      },
+    },
+    {
+      name: 'dsh-vscode-csp-schemastery',
+      enforce: 'pre',
+      transform(code, id) {
+        if (!id.replaceAll('\\', '/').endsWith('/vendor/schemastery/src/index.ts')) return undefined
+        const unsafe = "schema.callback = new Function('return ' + schema.callback)()"
+        if (!code.includes(unsafe)) throw new Error('schemastery callback evaluator changed; update the webview CSP transform')
+        return code.replace(
+          unsafe,
+          "throw new Error('dsh webview: serialized schema callbacks are disabled by CSP')",
+        )
+      },
+    },
     react(),
     // Resolves every bare workspace package name to its src (the same map
     // vitest uses), so the bundle never loads a second lib/ module copy.
@@ -33,6 +56,10 @@ export default defineConfig({
       // apps/web): its only node-only import; the process probes are mapped
       // by `define` below.
       { find: /^node:module$/, replacement: src('./node-module-stub.ts') },
+      {
+        find: /^@deepseek-ai\/dsh-host-directory-picker-browse\/client$/,
+        replacement: src('../../../packages/host/directory-picker-browse/src/client/index.ts'),
+      },
       { find: /^@deepseek-ai\/dsh-client-web$/, replacement: src('../../../packages/client/web/src/boot.tsx') },
       { find: /^@deepseek-ai\/dsh-client-modules\/client$/, replacement: src('../../../packages/client/modules/src/client/index.ts') },
       ...CLIENT_SUBPATH_PACKAGES.map(name => ({
@@ -47,6 +74,9 @@ export default defineConfig({
     // internal slot the shell boot fills with the client module loader).
     'process.versions.node': '"0.0.0"',
     'process.execArgv': '[]',
+    // React and client stores guard development-only branches with this
+    // expression; a webview has no ambient Node `process` object.
+    'process.env.NODE_ENV': '"production"',
     // vendored loader index.ts: envData falls to its default branch.
     'process.env.CORDIS_SHARED': 'undefined',
   },

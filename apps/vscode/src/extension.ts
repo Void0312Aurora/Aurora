@@ -195,14 +195,20 @@ function disposeNativeLayer(): void {
 
 /** Build the one runtime-generation owner used by panel and restart commands. */
 function ensureLifecycle(context: vscode.ExtensionContext, output: vscode.OutputChannel): RuntimeLifecycle {
+  const logRuntime = (line: string): void => {
+    output.appendLine(line)
+    if (process.env.DSH_VSCODE_TEST_RUNTIME_TRACE === '1') console.error(`[dsh-vscode] ${line}`)
+  }
   lifecycle ??= new RuntimeLifecycle({
     createRuntime: () => {
       const cwd = workspaceCwd()
       return new ServerRuntime({
         appDir: context.extensionUri.fsPath,
+        configPath: process.env.DSH_VSCODE_TEST_CONFIG
+          ?? vscode.Uri.joinPath(context.extensionUri, 'config', 'web.cordis.yml').fsPath,
         ...cwd === undefined ? {} : { cwd },
         env: process.env,
-        log: (line) => { output.appendLine(line) },
+        log: logRuntime,
         onExit: () => {
           void vscode.window.showWarningMessage('dsh web exited; the panel will reconnect when it is started again.')
         },
@@ -215,7 +221,7 @@ function ensureLifecycle(context: vscode.ExtensionContext, output: vscode.Output
     stopNative: disposeNativeLayer,
     onStartFailure: (error) => {
       const message = error instanceof Error ? error.message : String(error)
-      output.appendLine(`dsh web failed to start: ${message}`)
+      logRuntime(`dsh web failed to start: ${message}`)
       void vscode.window.showErrorMessage(`DeepSeek Harness: dsh web failed to start — ${message}`)
     },
   })

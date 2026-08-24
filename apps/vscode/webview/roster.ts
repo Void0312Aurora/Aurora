@@ -29,6 +29,7 @@ import * as UiPermission from '@deepseek-ai/dsh-client-ui-permission/client'
 import * as UiPlan from '@deepseek-ai/dsh-client-ui-plan/client'
 import * as UiQuestion from '@deepseek-ai/dsh-client-ui-question/client'
 import * as UiTrajectory from '@deepseek-ai/dsh-client-ui-trajectory/client'
+import * as DirectoryPickerBrowse from '@deepseek-ai/dsh-host-directory-picker-browse/client'
 import * as VscodeTheme from './theme.ts'
 
 /** The VS Code theme adapter's boot-graph id (a webview-own module, not an npm package). */
@@ -57,6 +58,7 @@ export const staticPlugins: Record<string, unknown> = {
   '@deepseek-ai/dsh-client-ui-plan': UiPlan,
   '@deepseek-ai/dsh-client-ui-question': UiQuestion,
   '@deepseek-ai/dsh-client-ui-trajectory': UiTrajectory,
+  '@deepseek-ai/dsh-host-directory-picker-browse': DirectoryPickerBrowse,
   [VSCODE_THEME_ID]: VscodeTheme,
 }
 

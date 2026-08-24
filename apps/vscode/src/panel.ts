@@ -33,7 +33,8 @@ export function panelHtml(assets: PanelAssets): string {
     "default-src 'none'",
     `script-src ${assets.cspSource}`,
     `style-src ${assets.cspSource} 'unsafe-inline'`,
-    `font-src ${assets.cspSource}`,
+    // The statically bundled KaTeX faces are data URLs in webview.css.
+    `font-src ${assets.cspSource} data:`,
     `img-src ${assets.cspSource} data:`,
   ].join('; ')
   return `<!DOCTYPE html>

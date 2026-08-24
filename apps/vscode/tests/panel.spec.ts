@@ -30,5 +30,6 @@ describe('panelHtml', () => {
     expect(/script-src[^;]*unsafe-inline/.test(csp)).toBe(false)
     // Inline style attributes (React) do need the style allowance.
     expect(csp).toContain("style-src vscode-webview://fake 'unsafe-inline'")
+    expect(csp).toContain('font-src vscode-webview://fake data:')
   })
 })

@@ -49,6 +49,7 @@ function runtimeWith(child: FakeChild, extra: Partial<ServerRuntimeOptions> = {}
   const spawn = vi.fn((): ChildProcess => current as unknown as ChildProcess)
   const runtime = new ServerRuntime({
     appDir: '/ext',
+    configPath: '/ext/config/web.cordis.yml',
     env: { DSH_BIN: '/tools/dsh' }, // pins the launch to one deterministic branch
     log: line => logs.push(line),
     spawn,
@@ -62,12 +63,15 @@ function runtimeWith(child: FakeChild, extra: Partial<ServerRuntimeOptions> = {}
 describe('ServerRuntime', () => {
   it('resolves the advertised origin once the readiness line and HTTP poll pass', async () => {
     const child = new FakeChild()
-    const { runtime } = runtimeWith(child)
+    const { runtime, spawn } = runtimeWith(child)
     const started = runtime.start()
     child.ready(5123)
     const url = await started
     expect(url.href).toBe('http://127.0.0.1:5123/')
     expect(runtime.url?.href).toBe('http://127.0.0.1:5123/')
+    expect(spawn).toHaveBeenCalledWith('/tools/dsh', [
+      'web', '--host', '127.0.0.1', '--port', '0', '--config', '/ext/config/web.cordis.yml',
+    ], expect.any(Object))
   })
 
   it('shares one attempt across concurrent starts', async () => {
