@@ -7,22 +7,12 @@
 
 import { spawnSync } from 'node:child_process'
 import { createRequire } from 'node:module'
-
-/** Map the running platform+arch to vsce's target triple; the default when DSH_VSIX_TARGET is unset. */
-function hostTarget() {
-  const arch = process.arch === 'arm64' ? 'arm64' : 'x64'
-  switch (process.platform) {
-    case 'win32': return `win32-${arch}`
-    case 'darwin': return `darwin-${arch}`
-    case 'linux': return `linux-${arch}`
-    default: return `${process.platform}-${arch}`
-  }
-}
+import { hostVsixTarget } from './vsix-target.mjs'
 
 const target = process.env.DSH_VSIX_TARGET && process.env.DSH_VSIX_TARGET !== ''
   ? process.env.DSH_VSIX_TARGET
-  : hostTarget()
-const detectedTarget = hostTarget()
+  : hostVsixTarget()
+const detectedTarget = hostVsixTarget()
 if (target !== detectedTarget) {
   console.error(
     `[dsh-vscode] target ${target} does not match this materialized closure (${detectedTarget}); package on a matching runner`,

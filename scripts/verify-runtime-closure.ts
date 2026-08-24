@@ -22,11 +22,18 @@ interface WorkspacePackage {
 }
 
 const root = resolve(import.meta.dirname, '..')
-await verifyProductClosureParity()
 const { values } = parseArgs({
   args: process.argv.slice(2),
-  options: { manifest: { type: 'string' } },
+  options: {
+    manifest: { type: 'string' },
+    'desktop-manifest': { type: 'string' },
+    'vscode-manifest': { type: 'string' },
+  },
 })
+await verifyProductClosureParity(
+  resolve(root, values['desktop-manifest'] ?? 'apps/desktop/closure/package.json'),
+  resolve(root, values['vscode-manifest'] ?? 'apps/vscode/closure/package.json'),
+)
 const runtimeManifestPath = resolve(root, values.manifest ?? 'python/sdk-runtime/package.json')
 const runtimeManifest = await loadManifest(runtimeManifestPath)
 const runtimeName = runtimeManifest.name ?? 'python/sdk-runtime'
@@ -74,9 +81,9 @@ if (failures.length > 0) {
 console.log(`verify-runtime-closure: ${queue.length} workspace packages form a closed runtime dependency graph.`)
 
 /** Keep the two self-contained GUI products on one exact server dependency set. */
-async function verifyProductClosureParity(): Promise<void> {
-  const desktop = await loadManifest(resolve(root, 'apps/desktop/closure/package.json'))
-  const vscode = await loadManifest(resolve(root, 'apps/vscode/closure/package.json'))
+async function verifyProductClosureParity(desktopPath: string, vscodePath: string): Promise<void> {
+  const desktop = await loadManifest(desktopPath)
+  const vscode = await loadManifest(vscodePath)
   const desktopDependencies = desktop.dependencies ?? {}
   const vscodeDependencies = vscode.dependencies ?? {}
   const names = [...new Set([...Object.keys(desktopDependencies), ...Object.keys(vscodeDependencies)])].sort()
