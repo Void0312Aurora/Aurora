@@ -44,7 +44,7 @@ export class RuntimeLifecycle<T extends ManagedRuntime> {
   start(): Promise<void> {
     return this.enqueue(() => {
       if (this.deactivated || this.currentValue !== undefined) return
-      this.launch()
+      void this.launch().catch(() => undefined)
     })
   }
 
@@ -53,7 +53,7 @@ export class RuntimeLifecycle<T extends ManagedRuntime> {
     return this.enqueue(async () => {
       const current = this.detach()
       await current?.dispose()
-      if (!this.deactivated) this.launch()
+      if (!this.deactivated) await this.launch()
     })
   }
 
@@ -66,40 +66,40 @@ export class RuntimeLifecycle<T extends ManagedRuntime> {
     })
   }
 
-  private launch(): void {
-    if (this.deactivated || this.currentValue !== undefined) return
+  private launch(): Promise<void> {
+    if (this.deactivated || this.currentValue !== undefined) return Promise.resolve()
     let candidate: T
     try {
       candidate = this.options.create()
     } catch (error) {
-      this.options.onStartError(error)
-      return
+      const failure = error instanceof Error ? error : new Error(String(error))
+      this.options.onStartError(failure)
+      return Promise.reject(failure)
     }
     this.currentValue = candidate
-    void candidate.start().then(
-      () => {
+    const ready = candidate.start().then(
+      async () => {
         if (this.deactivated || this.currentValue !== candidate) return
-        void Promise.resolve(this.options.onReady(candidate)).catch((error: unknown) => {
-          this.options.onStartError(error)
-        })
-      },
-      (error: unknown) => {
-        void this.enqueue(async () => {
-          if (this.currentValue !== candidate) return
-          this.currentValue = undefined
-          const teardown = this.deactivated || candidate.isDisposed
-          try {
-            await candidate.dispose()
-          } catch (disposeError) {
-            if (!teardown) {
-              this.options.onStartError(new AggregateError([error, disposeError], 'runtime startup and cleanup failed'))
-            }
-            return
-          }
-          if (!teardown) this.options.onStartError(error)
-        })
+        await this.options.onReady(candidate)
       },
     )
+    void ready.catch((error: unknown) => {
+      void this.enqueue(async () => {
+        if (this.currentValue !== candidate) return
+        this.currentValue = undefined
+        const teardown = this.deactivated || candidate.isDisposed
+        try {
+          await candidate.dispose()
+        } catch (disposeError) {
+          if (!teardown) {
+            this.options.onStartError(new AggregateError([error, disposeError], 'runtime startup and cleanup failed'))
+          }
+          return
+        }
+        if (!teardown) this.options.onStartError(error)
+      })
+    })
+    return ready
   }
 
   private detach(): T | undefined {

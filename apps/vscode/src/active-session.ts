@@ -73,10 +73,12 @@ export class ActiveSessionTracker {
   private async runGeneration(abort: AbortController): Promise<void> {
     const buffered: Array<RpcRequest<HostFrame>> = []
     let live = false
+    let markOpen!: () => void
+    const opened = new Promise<void>((resolve) => { markOpen = resolve })
     const isLive = (): boolean => live
     const pump = (async (): Promise<{ ok: true } | { ok: false; error: Error }> => {
       try {
-        for await (const envelope of this.options.client.events.host({}, abort.signal)) {
+        for await (const envelope of this.options.client.events.host({}, abort.signal, markOpen)) {
           if (isLive()) this.handle(envelope)
           else buffered.push(envelope)
         }
@@ -86,6 +88,15 @@ export class ActiveSessionTracker {
         return { ok: false, error: error instanceof Error ? error : new Error(String(error)) }
       }
     })()
+    const opening = await Promise.race([
+      opened.then(() => ({ type: 'open' as const })),
+      pump.then(outcome => ({ type: 'stream' as const, outcome })),
+    ])
+    if (opening.type === 'stream') {
+      abort.abort()
+      if (!opening.outcome.ok) throw opening.outcome.error
+      return
+    }
     const list = this.options.client.sessions.list({}, abort.signal)
 
     try {

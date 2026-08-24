@@ -86,9 +86,6 @@ export default defineConfig({
     // internal slot the shell boot fills with the client module loader).
     'process.versions.node': '"0.0.0"',
     'process.execArgv': '[]',
-    // React and client stores guard development-only branches with this
-    // expression; a webview has no ambient Node `process` object.
-    'process.env.NODE_ENV': '"production"',
     // vendored loader index.ts: envData falls to its default branch.
     'process.env.CORDIS_SHARED': 'undefined',
     // React's CJS entry branches on this at module top level. An application

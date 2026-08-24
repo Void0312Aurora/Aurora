@@ -13,35 +13,43 @@ import { ActiveSessionTracker } from '../src/active-session.ts'
 function fakeHostStream(options: {
   lists?: SessionSummary[][]
   list?: (signal: AbortSignal | undefined) => ReturnType<IApiClient['sessions']['list']>
+  open?: (generation: number) => boolean
 } = {}) {
   let push: ((frame: RpcRequest<HostFrame>) => void) | undefined
   let fail: ((error: Error) => void) | undefined
   let listCalls = 0
+  let hostCalls = 0
+  let openStream: (() => void) | undefined
   const client = {
     events: {
       mux: () => ({ [Symbol.asyncIterator]: () => ({ next: () => Promise.resolve({ value: undefined as never, done: true }) }) }),
-      host: (_payload: unknown, signal: AbortSignal): AsyncIterable<RpcRequest<HostFrame>> => ({
-        [Symbol.asyncIterator]: () => {
-          const queue: RpcRequest<HostFrame>[] = []
-          let waiting: ((r: IteratorResult<RpcRequest<HostFrame>>) => void) | undefined
-          let rejectNext: ((e: Error) => void) | undefined
-          push = (frame) => {
-            if (waiting !== undefined) { waiting({ value: frame, done: false }); waiting = undefined }
-            else queue.push(frame)
-          }
-          fail = (error) => { if (rejectNext !== undefined) { rejectNext(error); rejectNext = undefined } }
-          signal.addEventListener('abort', () => {
-            if (waiting !== undefined) { waiting({ value: undefined as never, done: true }); waiting = undefined }
-          }, { once: true })
-          return {
-            next: () => new Promise<IteratorResult<RpcRequest<HostFrame>>>((resolve, reject) => {
-              if (queue.length > 0) { resolve({ value: queue.shift()!, done: false }); return }
-              waiting = resolve
-              rejectNext = reject
-            }),
-          }
-        },
-      }),
+      host: (_payload: unknown, signal: AbortSignal, onOpen?: () => void): AsyncIterable<RpcRequest<HostFrame>> => {
+        const generation = ++hostCalls
+        openStream = onOpen
+        if (onOpen !== undefined && (options.open?.(generation) ?? true)) queueMicrotask(onOpen)
+        return {
+          [Symbol.asyncIterator]: () => {
+            const queue: RpcRequest<HostFrame>[] = []
+            let waiting: ((r: IteratorResult<RpcRequest<HostFrame>>) => void) | undefined
+            let rejectNext: ((e: Error) => void) | undefined
+            push = (frame) => {
+              if (waiting !== undefined) { waiting({ value: frame, done: false }); waiting = undefined }
+              else queue.push(frame)
+            }
+            fail = (error) => { if (rejectNext !== undefined) { rejectNext(error); rejectNext = undefined } }
+            signal.addEventListener('abort', () => {
+              if (waiting !== undefined) { waiting({ value: undefined as never, done: true }); waiting = undefined }
+            }, { once: true })
+            return {
+              next: () => new Promise<IteratorResult<RpcRequest<HostFrame>>>((resolve, reject) => {
+                if (queue.length > 0) { resolve({ value: queue.shift()!, done: false }); return }
+                waiting = resolve
+                rejectNext = reject
+              }),
+            }
+          },
+        }
+      },
     },
     sessions: {
       list: (_payload: unknown, signal?: AbortSignal) => {
@@ -56,6 +64,8 @@ function fakeHostStream(options: {
   return {
     client,
     listCalls: () => listCalls,
+    hostCalls: () => hostCalls,
+    openStream: () => { openStream?.() },
     emit: (frame: HostFrame) => push?.({ rpcId: 'h' as never, payload: frame }),
     failStream: (error: Error) => fail?.(error),
   }
@@ -140,6 +150,33 @@ describe('ActiveSessionTracker', () => {
     })
     await settle()
     expect(tracker.active()).toBeUndefined()
+    tracker.dispose()
+  })
+
+  it('waits for the replacement stream to open before listing and replays buffered frames', async () => {
+    const fake = fakeHostStream({
+      lists: [
+        [{ sessionId: 'first' as never, updatedAt: 1, running: false, blank: false }],
+        [{ sessionId: 'baseline' as never, updatedAt: 2, running: false, blank: false }],
+      ],
+      open: generation => generation === 1,
+    })
+    const tracker = new ActiveSessionTracker({ client: fake.client, log: () => {}, reconnectMs: 1 })
+    void tracker.run()
+    await settle()
+    expect(tracker.active()).toBe('first')
+    expect(fake.listCalls()).toBe(1)
+
+    fake.failStream(new Error('lost'))
+    await new Promise(resolve => setTimeout(resolve, 10))
+    expect(fake.hostCalls()).toBeGreaterThanOrEqual(2)
+    expect(fake.listCalls()).toBe(1)
+    fake.emit({ type: 'host/session-status', sessionId: 'buffered' as never, running: true })
+    fake.openStream()
+    await settle()
+
+    expect(fake.listCalls()).toBe(2)
+    expect(tracker.active()).toBe('buffered')
     tracker.dispose()
   })
 })

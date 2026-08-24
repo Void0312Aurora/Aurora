@@ -69,15 +69,48 @@ describe('RuntimeLifecycle', () => {
     expect(runtimes).toHaveLength(1)
 
     first.disposed.resolve()
-    await restartA
+    await settle()
     const second = runtimes[1]!
+    let restartASettled = false
+    void restartA.finally(() => { restartASettled = true })
+    await settle()
+    expect(restartASettled).toBe(false)
+    second.ready.resolve()
+    await restartA
     await settle()
     expect(second.disposeCalls).toBe(1)
     second.disposed.resolve()
+    await settle()
+    const third = runtimes[2]!
+    let restartBSettled = false
+    void restartB.finally(() => { restartBSettled = true })
+    await settle()
+    expect(restartBSettled).toBe(false)
+    third.ready.resolve()
     await restartB
 
     expect(runtimes).toHaveLength(3)
     expect(lifecycle.current).toBe(runtimes[2])
+  })
+
+  it('rejects restart when the replacement fails before readiness', async () => {
+    const { lifecycle, runtimes, errors } = harness()
+    await lifecycle.start()
+    const first = runtimes[0]!
+    first.ready.resolve()
+    await settle()
+
+    const restarting = lifecycle.restart()
+    await settle()
+    first.disposed.resolve()
+    await settle()
+    const replacement = runtimes[1]!
+    replacement.ready.reject(new Error('replacement failed'))
+    await expect(restarting).rejects.toThrow('replacement failed')
+    await settle()
+    expect(replacement.disposeCalls).toBe(1)
+    replacement.disposed.resolve()
+    await vi.waitFor(() => { expect(errors).toEqual([new Error('replacement failed')]) })
   })
 
   it('prevents a restart racing deactivation from launching a replacement', async () => {
