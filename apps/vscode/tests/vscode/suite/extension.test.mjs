@@ -133,6 +133,8 @@ suite('built DeepSeek Harness extension', () => {
     const restartResult = process.env.DSH_VSCODE_RESTART_RESULT
     const sessionsRoot = process.env.DSH_VSCODE_SESSIONS_ROOT
     const snapshotPath = process.env.DSH_VSCODE_TEST_SNAPSHOT
+    const webviewSnapshotPath = process.env.DSH_VSCODE_TEST_WEBVIEW_SNAPSHOT
+    const personalMarker = process.env.DSH_VSCODE_PERSONAL_MARKER
     assert.ok(extensionRoot)
     assert.ok(driverReady)
     assert.ok(driverMilestone)
@@ -143,6 +145,8 @@ suite('built DeepSeek Harness extension', () => {
     assert.ok(restartResult)
     assert.ok(sessionsRoot)
     assert.ok(snapshotPath)
+    assert.ok(webviewSnapshotPath)
+    assert.ok(personalMarker)
 
     const extension = vscode.extensions.all.find(candidate => resolve(candidate.extensionPath) === resolve(extensionRoot))
     assert.ok(extension, `development extension not found at ${extensionRoot}`)
@@ -153,11 +157,15 @@ suite('built DeepSeek Harness extension', () => {
     await writeFile(driverReady, 'ready\n')
 
     const expectedSnapshot = await readFile(snapshotPath, 'utf8')
+    const expectedWebviewSnapshot = await readFile(webviewSnapshotPath, 'utf8')
     const firstMilestone = await waitForDriverFile(driverMilestone, driverFailure)
     assert.equal(`${String(firstMilestone.snapshot)}\n`, expectedSnapshot)
+    assert.equal(firstMilestone.workspacePicker, 'browse-dialog')
+    assert.equal(await readFile(personalMarker, 'utf8'), 'personal overlay active\n')
     await answerNativeQuestion(sessionsRoot, 1)
     const firstResult = await waitForDriverFile(driverResult, driverFailure)
     assert.equal(firstResult.final, "Great, let's move forward. BANANA!")
+    assert.equal(`${String(firstResult.snapshot)}\n`, expectedWebviewSnapshot)
 
     await vscode.commands.executeCommand('dsh.restartServer')
     await writeFile(restartReady, 'ready\n')
@@ -166,6 +174,7 @@ suite('built DeepSeek Harness extension', () => {
     await answerNativeQuestion(sessionsRoot, 2)
     const replacementResult = await waitForDriverFile(restartResult, driverFailure)
     assert.equal(replacementResult.final, "Great, let's move forward. BANANA!")
+    assert.equal(`${String(replacementResult.snapshot)}\n`, expectedWebviewSnapshot)
 
     const logs = await waitForSessionEvents(
       sessionsRoot,

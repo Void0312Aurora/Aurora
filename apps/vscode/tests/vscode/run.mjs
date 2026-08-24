@@ -22,6 +22,7 @@ const replayModule = join(repoRoot, 'packages', 'support', 'llm-replay', 'lib', 
 const directoryPickerModule = join(repoRoot, 'packages', 'host', 'directory-picker-browse', 'lib', 'index.js')
 const replayFixture = join(repoRoot, 'apps', 'web', 'tests', 'snapshots', 'steering', 'session.jsonl')
 const expectedSnapshot = join(testRoot, 'extension.expected.md')
+const expectedWebviewSnapshot = join(testRoot, 'webview.expected.md')
 const temporary = await mkdtemp(join(tmpdir(), 'dsh-vscode-electron-'))
 const workspace = join(temporary, 'workspace')
 const home = join(temporary, 'home')
@@ -34,6 +35,8 @@ const driverFailure = join(temporary, 'driver-failure.json')
 const restartReady = join(temporary, 'restart-ready')
 const restartMilestone = join(temporary, 'restart-milestone.json')
 const restartResult = join(temporary, 'restart-result.json')
+const personalMarker = join(temporary, 'personal-overlay-loaded')
+const personalProbe = join(temporary, 'personal-probe.mjs')
 
 function probeFreePort() {
   return new Promise((resolvePort, reject) => {
@@ -54,12 +57,31 @@ await mkdir(join(workspace, 'project'), { recursive: true })
 await mkdir(home, { recursive: true })
 await mkdir(sessions, { recursive: true })
 await writeFile(join(workspace, 'seed.ts'), 'export const assembled = true\n')
+// The Extension Host gate owns both exact textual artifacts. Reading the
+// inventory before launch makes either missing golden a gate failure rather
+// than silently reducing coverage.
+await Promise.all([expectedSnapshot, expectedWebviewSnapshot].map(path => readFile(path, 'utf8')))
 // This scenario validates the assembled extension, native question surface,
 // and runtime replacement. Keep the product onboarding state out of that path
 // just as ordinary web E2E worlds do; its dedicated tests leave this pending.
 await writeFile(join(home, 'settings.yaml'), [
   `${WELCOME_NOTICE_SETTINGS_NAMESPACE}:`,
   `  ${WELCOME_NOTICE_ACK_FIELD}: ${JSON.stringify(WELCOME_NOTICE_VERSION)}`,
+  '',
+].join('\n'))
+// Personal configuration has a separately observable effect. The VS Code
+// overlay must compose after it (to force the browse picker), not replace it.
+await writeFile(personalProbe, [
+  "import { writeFileSync } from 'node:fs'",
+  'export function apply() {',
+  "  writeFileSync(process.env.DSH_VSCODE_PERSONAL_MARKER, 'personal overlay active\\n')",
+  '}',
+  '',
+].join('\n'))
+await writeFile(join(home, 'config.yaml'), [
+  '- insert:',
+  '    - id: vscode-personal-probe',
+  `      name: ${JSON.stringify(pathToFileURL(personalProbe).href)}`,
   '',
 ].join('\n'))
 // DSH_BIN receives the normal `web --host ...` argv. Point it at Node: Node
@@ -124,6 +146,8 @@ try {
       DSH_VSCODE_TEST_CONFIG: testConfig,
       DSH_VSCODE_TEST_RUNTIME_TRACE: '1',
       DSH_VSCODE_TEST_SNAPSHOT: expectedSnapshot,
+      DSH_VSCODE_TEST_WEBVIEW_SNAPSHOT: expectedWebviewSnapshot,
+      DSH_VSCODE_PERSONAL_MARKER: personalMarker,
       DSH_VSCODE_SESSIONS_ROOT: sessions,
     },
   })

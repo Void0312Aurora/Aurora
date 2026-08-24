@@ -3,6 +3,7 @@
 import { access, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { chromium } from 'playwright'
+import { captureStableAriaSnapshot, normalizeAriaSnapshot } from '../../../web/tests/stable-aria.ts'
 
 const PROMPT = 'Use the ask_user_question tool to ask me exactly one question with id "checkpoint", question "Ready to continue?", header "Checkpoint", and options labeled "Yes" and "No". After I answer, reply with one short sentence acknowledging my answer and stop.'
 const FINAL = "Great, let's move forward. BANANA!"
@@ -110,21 +111,15 @@ async function browserDiagnostic(browser, messages) {
 }
 
 function normalizeSnapshot(snapshot, temporary) {
-  return snapshot
-    .replaceAll(temporary, '{{temporary}}')
-    .replaceAll(temporary.replaceAll('\\', '/'), '{{temporary}}')
+  return normalizeAriaSnapshot(snapshot, temporary)
+    .replaceAll('{{cwd}}', '{{temporary}}')
 }
 
 async function captureStableSnapshot(locator, temporary) {
-  const deadline = Date.now() + 5_000
-  let previous = normalizeSnapshot(await locator.ariaSnapshot({ timeout: 15_000 }), temporary)
-  while (Date.now() < deadline) {
-    await delay(100)
-    const current = normalizeSnapshot(await locator.ariaSnapshot({ timeout: 15_000 }), temporary)
-    if (current === previous) return current
-    previous = current
-  }
-  throw new Error('aria snapshot did not stabilize')
+  return captureStableAriaSnapshot(
+    () => locator.ariaSnapshot({ timeout: 15_000 }),
+    snapshot => normalizeSnapshot(snapshot, temporary),
+  )
 }
 
 async function ensureWorkspace(frame, workspace) {
@@ -135,11 +130,11 @@ async function ensureWorkspace(frame, workspace) {
   const choose = frame.getByRole('button', { name: 'Choose workspace' })
   const surfaceDeadline = Date.now() + 10_000
   while (Date.now() < surfaceDeadline) {
-    if (await composer.isVisible().catch(() => false)) return composer
+    if (await composer.isVisible().catch(() => false)) return { composer, workspacePicker: 'existing' }
     if (await choose.isVisible().catch(() => false)) break
     await delay(100)
   }
-  if (await composer.isVisible().catch(() => false)) return composer
+  if (await composer.isVisible().catch(() => false)) return { composer, workspacePicker: 'existing' }
   await choose.waitFor({ timeout: 30_000 })
   const dialog = frame.getByRole('dialog', { name: 'Select Workspace Directory' })
   const serverStarting = dialog.getByText('dsh web is not running yet', { exact: true })
@@ -180,14 +175,14 @@ async function ensureWorkspace(frame, workspace) {
     while (openClicked && Date.now() < actionDeadline) {
       if (!await dialog.isVisible().catch(() => false)) {
         await composer.waitFor({ timeout: 20_000 })
-        return composer
+        return { composer, workspacePicker: 'browse-dialog' }
       }
       if (await serverStarting.isVisible().catch(() => false)) break
       await delay(100)
     }
     if (!await dialog.isVisible().catch(() => false)) {
       await composer.waitFor({ timeout: 20_000 })
-      return composer
+      return { composer, workspacePicker: 'browse-dialog' }
     }
     if (!await serverStarting.isVisible().catch(() => false)) {
       throw new Error('workspace Open action did not complete')
@@ -199,14 +194,15 @@ async function ensureWorkspace(frame, workspace) {
 }
 
 async function driveQuestionRound(browser, frame, options) {
-  const composer = await ensureWorkspace(frame, options.workspace)
+  const { composer, workspacePicker } = await ensureWorkspace(frame, options.workspace)
   await composer.fill(PROMPT)
   await composer.press('Enter')
   const question = await findNativeQuestion(browser)
   const snapshot = await captureStableSnapshot(question, options.temporary)
-  await writeFile(options.milestone, JSON.stringify({ prompt: PROMPT, snapshot }))
+  await writeFile(options.milestone, JSON.stringify({ prompt: PROMPT, snapshot, workspacePicker }))
   await frame.getByText(FINAL, { exact: true }).waitFor({ timeout: 60_000 })
-  await writeFile(options.result, JSON.stringify({ final: FINAL }))
+  const richSnapshot = await captureStableSnapshot(frame.locator('[class*="centerCol"]').first(), options.temporary)
+  await writeFile(options.result, JSON.stringify({ final: FINAL, snapshot: richSnapshot }))
 }
 
 export async function driveWebview(options) {
