@@ -204,7 +204,7 @@ function ensureLifecycle(context: vscode.ExtensionContext, output: vscode.Output
       const cwd = workspaceCwd()
       return new ServerRuntime({
         appDir: context.extensionUri.fsPath,
-        configPath: process.env.DSH_VSCODE_TEST_CONFIG
+        appConfigPath: process.env.DSH_VSCODE_TEST_CONFIG
           ?? vscode.Uri.joinPath(context.extensionUri, 'config', 'web.cordis.yml').fsPath,
         ...cwd === undefined ? {} : { cwd },
         env: process.env,

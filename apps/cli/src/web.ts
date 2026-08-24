@@ -93,6 +93,8 @@ export function prepareWebRuntimeContext(ctx: Context, sourceRoot: string, mode:
  * @param config - an overlay of loader patches applied over the shipped web
  * composition instead of `$DSH_HOME/config.yaml`, or `undefined` to use the
  * personal overlay; already parsed from `--config`.
+ * @param appConfig - an application-owned overlay applied after the selected
+ * user layer; already parsed from the hidden `--app-config` host contract.
  */
 export async function runWeb(
   host: string | undefined,
@@ -101,12 +103,14 @@ export async function runWeb(
   workspaceRoot: string | undefined,
   trustedHosts: string[] | undefined,
   config?: string,
+  appConfig?: string,
 ): Promise<void> {
   const mode: WebMode = dev ? 'development' : 'production'
   const entry = new AppCLIEntry({
     configPath: BASE_CONFIG,
     overlayPath: WEB_OVERLAY,
     ...config !== undefined && { extraOverlayPath: resolveConfigPath(config, undefined) },
+    ...appConfig !== undefined && { appOverlayPath: resolveConfigPath(appConfig, undefined) },
     dev,
     prepare: (ctx) => { prepareWebRuntimeContext(ctx, SOURCE_ROOT, mode) },
     watchPersonalConfig: true,

@@ -49,7 +49,7 @@ function runtimeWith(child: FakeChild, extra: Partial<ServerRuntimeOptions> = {}
   const spawn = vi.fn((): ChildProcess => current as unknown as ChildProcess)
   const runtime = new ServerRuntime({
     appDir: '/ext',
-    configPath: '/ext/config/web.cordis.yml',
+    appConfigPath: '/ext/config/web.cordis.yml',
     env: { DSH_BIN: '/tools/dsh' }, // pins the launch to one deterministic branch
     log: line => logs.push(line),
     spawn,
@@ -70,7 +70,7 @@ describe('ServerRuntime', () => {
     expect(url.href).toBe('http://127.0.0.1:5123/')
     expect(runtime.url?.href).toBe('http://127.0.0.1:5123/')
     expect(spawn).toHaveBeenCalledWith('/tools/dsh', [
-      'web', '--host', '127.0.0.1', '--port', '0', '--config', '/ext/config/web.cordis.yml',
+      'web', '--host', '127.0.0.1', '--port', '0', '--app-config', '/ext/config/web.cordis.yml',
     ], expect.any(Object))
   })
 

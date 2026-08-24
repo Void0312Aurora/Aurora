@@ -146,6 +146,12 @@ export interface AppCLIEntryOptions {
    * `$DSH_HOME/config.yaml` overlay is applied instead.
    */
   extraOverlayPath?: string
+  /**
+   * Optional application-owned tail overlay. This composes after the selected
+   * user layer, so host invariants win without replacing or disabling live
+   * `$DSH_HOME/config.yaml`.
+   */
+  appOverlayPath?: string
   /** Whether to append client-bundle HMR (the Web surface's prod/dev difference). */
   dev: boolean
   /** Whether `$DSH_HOME/config.yaml` remains live after the initial boot. */
@@ -263,9 +269,13 @@ export class AppCLIEntry {
     // list: patches never cross an include boundary, so nesting them would
     // silently stop reaching base rows. The surface overlay applies first, then
     // this entry's profile-json and CLI-flag patches, which therefore win.
+    const appOverlay = this.options.appOverlayPath === undefined
+      ? []
+      : loadOverlayPatches('dsh', this.options.appOverlayPath)
     const compose = (overlay: PatchOptions[]): PatchOptions[] => [
       ...loadOverlayPatches('dsh', this.options.overlayPath),
       ...overlay,
+      ...appOverlay,
       ...this.patches,
     ]
     // An explicit --config overlay REPLACES the personal overlay, so there is
@@ -304,6 +314,7 @@ export class AppCLIEntry {
     const rows = new Map<string, { config?: unknown }>()
     const files = [this.options.configPath, this.options.overlayPath]
     if (this.options.extraOverlayPath !== undefined) files.push(this.options.extraOverlayPath)
+    if (this.options.appOverlayPath !== undefined) files.push(this.options.appOverlayPath)
     for (const file of files) {
       for (const row of this.parseRowList(file)) {
         if (typeof row.id === 'string') rows.set(row.id, row)

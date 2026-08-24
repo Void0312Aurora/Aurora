@@ -12,7 +12,7 @@
  * @module @deepseek-ai/dsh/args
  */
 
-import { Command, CommanderError } from 'commander'
+import { Command, CommanderError, Option } from 'commander'
 
 /**
  * Interactive TUI: the default mode. `--config` applies an overlay over the
@@ -78,6 +78,8 @@ interface WebInvocation {
   mode: 'web'
   /** Overlay of loader patches applied over the shipped web composition. */
   config?: string
+  /** Application-owned tail overlay applied after the selected user layer. */
+  appConfig?: string
   host?: string
   port?: number
   dev: boolean
@@ -98,6 +100,7 @@ export type DshInvocation =
 /** Raw web-subcommand options straight from Commander. */
 interface WebOptions {
   config?: string
+  appConfig?: string
   host?: string
   port?: string
   dev?: boolean
@@ -143,6 +146,7 @@ function resolveWeb(options: WebOptions): WebInvocation {
   return {
     mode: 'web',
     ...options.config !== undefined && { config: options.config },
+    ...options.appConfig !== undefined && { appConfig: options.appConfig },
     ...options.host !== undefined && { host: options.host },
     ...options.port !== undefined && { port: Number(options.port) },
     dev: options.dev === true,
@@ -283,6 +287,10 @@ Examples:
   const web = program.command('web').description('serve the browser UI on the configured host and port')
   web
     .option('--config <path>', 'apply this overlay of loader patches over the shipped configuration')
+    // Host applications need a non-user layer for invariants such as their
+    // directory-picker bridge. Keep this off the ordinary help surface: unlike
+    // --config, it never replaces the personal layer.
+    .addOption(new Option('--app-config <path>', 'append an application-owned overlay after the user configuration').hideHelp())
     .option('--host <host>', 'bind host; pass 0.0.0.0 to reach it from another machine')
     .option('--port <port>', 'listen port; pass 0 to let the OS pick a free one')
     .option('--dev', 'mount the client-plugin HMR receiver (run pnpm run dev:web separately to rebuild bundles)')
@@ -294,6 +302,7 @@ Examples:
       rejectParentOptions('web')
       const dump = resolveDump('web', options, message => program.error(message))
       if (dump !== undefined) {
+        if (options.appConfig !== undefined) program.error('error: --dump-config/--dump-default-config take no --app-config')
         resolved = dump
         return
       }

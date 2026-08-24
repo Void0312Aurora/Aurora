@@ -36,6 +36,9 @@ describe('parseDshArgs', () => {
     // Bare `web` carries no host/port: the shipped Web overlay owns the default.
     expect(parse(['web'])).toEqual({ mode: 'web', dev: false })
     expect(parse(['web', '--config', 'web.yml'])).toEqual({ mode: 'web', dev: false, config: 'web.yml' })
+    expect(parse(['web', '--app-config', 'host.yml'])).toEqual({ mode: 'web', dev: false, appConfig: 'host.yml' })
+    expect(parse(['web', '--config', 'user.yml', '--app-config', 'host.yml']))
+      .toEqual({ mode: 'web', dev: false, config: 'user.yml', appConfig: 'host.yml' })
     // Host/port are unvalidated pass-throughs (the webserver schema gates them
     // at boot); the adapter only coerces the port string to a number.
     expect(parse(['web', '--host', '0.0.0.0', '--port', '8080', '--dev', '--workspace-root', '/w']))
@@ -66,6 +69,7 @@ describe('parseDshArgs', () => {
     expect(exitCode(['--dump-config', '--config-replace', 'tree.yml'])).toBe(1)
     expect(exitCode(['web', '--dump-config', '--dump-default-config'])).toBe(1)
     expect(exitCode(['web', '--dump-default-config', '--config', 'w.yml'])).toBe(1)
+    expect(exitCode(['web', '--dump-config', '--app-config', 'host.yml'])).toBe(1)
     // A leaked dump flag on a subcommand that has none is a mistyped invocation.
     expect(exitCode(['meta', '--experimental', '--dump-config'])).toBe(1)
     expect(exitCode(['upgrade', '--experimental', '--dump-config'])).toBe(1)
