@@ -7,6 +7,9 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { runTests } from '@vscode/test-electron'
 import { parseLoaderConfig, validateLoaderMetadata } from '../../../../scripts/cordis-loader-metadata.mjs'
+import {
+  WELCOME_NOTICE_ACK_FIELD, WELCOME_NOTICE_SETTINGS_NAMESPACE, WELCOME_NOTICE_VERSION,
+} from '../../../../packages/client/ui-settings-general/src/onboarding-copy.ts'
 import { renderReplayOverlay } from './config.mjs'
 import { driveWebview } from './drive-webview.mjs'
 
@@ -51,6 +54,14 @@ await mkdir(join(workspace, 'project'), { recursive: true })
 await mkdir(home, { recursive: true })
 await mkdir(sessions, { recursive: true })
 await writeFile(join(workspace, 'seed.ts'), 'export const assembled = true\n')
+// This scenario validates the assembled extension, native question surface,
+// and runtime replacement. Keep the product onboarding state out of that path
+// just as ordinary web E2E worlds do; its dedicated tests leave this pending.
+await writeFile(join(home, 'settings.yaml'), [
+  `${WELCOME_NOTICE_SETTINGS_NAMESPACE}:`,
+  `  ${WELCOME_NOTICE_ACK_FIELD}: ${JSON.stringify(WELCOME_NOTICE_VERSION)}`,
+  '',
+].join('\n'))
 // DSH_BIN receives the normal `web --host ...` argv. Point it at Node: Node
 // consumes the first `web` as this bootstrap's script path, so restore the
 // command word before loading the real built CLI.

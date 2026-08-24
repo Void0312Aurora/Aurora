@@ -127,13 +127,7 @@ async function captureStableSnapshot(locator, temporary) {
   throw new Error('aria snapshot did not stabilize')
 }
 
-async function dismissOnboarding(frame) {
-  const onboarding = frame.getByRole('button', { name: /^(Continue|继续)$/ })
-  if (await onboarding.isVisible().catch(() => false)) await onboarding.click()
-}
-
 async function ensureWorkspace(frame, workspace) {
-  const onboarding = frame.getByRole('button', { name: /^(Continue|继续)$/ })
   // The same composer changes its localized placeholder when workspace
   // creation promotes the blank hero into an active session. Bind to the
   // control's stable role/state instead of one transient copy string.
@@ -141,10 +135,6 @@ async function ensureWorkspace(frame, workspace) {
   const choose = frame.getByRole('button', { name: 'Choose workspace' })
   const surfaceDeadline = Date.now() + 10_000
   while (Date.now() < surfaceDeadline) {
-    if (await onboarding.isVisible().catch(() => false)) {
-      await onboarding.click()
-      break
-    }
     if (await composer.isVisible().catch(() => false)) return composer
     if (await choose.isVisible().catch(() => false)) break
     await delay(100)
@@ -155,7 +145,11 @@ async function ensureWorkspace(frame, workspace) {
   const serverStarting = dialog.getByText('dsh web is not running yet', { exact: true })
   const workspaceDeadline = Date.now() + 75_000
   while (Date.now() < workspaceDeadline) {
-    await choose.click()
+    // This is fixture setup, not the interaction under test. The embedded
+    // client's own sidebar/resizer may overlap the empty-state trigger in a
+    // narrow Extension Host viewport, so dispatch to the structurally located
+    // control and reserve ordinary user-action clicks for the native question.
+    await choose.click({ force: true })
     if (!await dialog.isVisible().catch(() => false)) {
       const addWorkspace = frame.getByText('Add workspace…', { exact: true })
       await addWorkspace.waitFor({ timeout: 15_000 })
@@ -174,7 +168,6 @@ async function ensureWorkspace(frame, workspace) {
     const open = dialog.getByRole('button', { name: 'Open', exact: true })
     let openClicked = false
     while (Date.now() < workspaceDeadline) {
-      await dismissOnboarding(frame)
       if (await serverStarting.isVisible().catch(() => false)) break
       if (await open.isEnabled().catch(() => false)) {
         await open.click()
