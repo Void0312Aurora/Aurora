@@ -8,6 +8,7 @@ class FakeControl<T extends vscode.QuickPickItem = vscode.QuickPickItem> {
   title: string | undefined
   placeholder: string | undefined
   prompt: string | undefined
+  validationMessage: string | undefined
   value = ''
   canSelectMany = false
   items: readonly T[] = []
@@ -90,10 +91,99 @@ describe('createNativeUi', () => {
     ], abort.signal)
     fake.quickPicks[0]?.fireAccept(fake.quickPicks[0].items.slice(0, 1))
     await Promise.resolve()
+    const other = fake.quickPicks[1]?.items.find(item => item.label === 'Other…')
+    if (other === undefined) throw new Error('expected Other item')
+    fake.quickPicks[1]?.fireAccept([other])
+    await Promise.resolve()
     expect(fake.inputBoxes[0]?.show).toHaveBeenCalledTimes(1)
     abort.abort()
     await expect(result).resolves.toBeUndefined()
     expect(fake.inputBoxes[0]?.hide).toHaveBeenCalledTimes(1)
     expect(fake.inputBoxes[0]?.dispose).toHaveBeenCalledTimes(1)
+  })
+
+  it('returns a trimmed custom-only answer and keeps blank input open', async () => {
+    const fake = fakeWindow()
+    const ui = createNativeUi(fake.window)
+    const result = ui.askQuestions([{ id: 'q1', question: 'Choose', options: [{ label: 'A' }] }], new AbortController().signal)
+    const other = fake.quickPicks[0]?.items.find(item => item.label === 'Other…')
+    if (other === undefined) throw new Error('expected Other item')
+    fake.quickPicks[0]?.fireAccept([other])
+    await Promise.resolve()
+
+    const input = fake.inputBoxes[0]
+    if (input === undefined) throw new Error('expected custom input')
+    input.value = '   '
+    input.fireAccept()
+    expect(input.validationMessage).toMatch(/Enter an answer/)
+    expect(input.hide).not.toHaveBeenCalled()
+    input.value = '  custom answer  '
+    input.fireAccept()
+    await expect(result).resolves.toEqual({ answers: [{ id: 'q1', selected: [], custom: 'custom answer' }] })
+  })
+
+  it('preserves selected options alongside a multi-select custom answer', async () => {
+    const fake = fakeWindow()
+    const ui = createNativeUi(fake.window)
+    const result = ui.askQuestions([{
+      id: 'q1',
+      question: 'Choose',
+      multiSelect: true,
+      options: [{ label: 'A' }, { label: 'B' }],
+    }], new AbortController().signal)
+    const picker = fake.quickPicks[0]
+    const option = picker?.items.find(item => item.label === 'A')
+    const other = picker?.items.find(item => item.label === 'Other…')
+    if (picker === undefined || option === undefined || other === undefined) throw new Error('expected option and Other items')
+    picker.fireAccept([option, other])
+    await Promise.resolve()
+    const input = fake.inputBoxes[0]
+    if (input === undefined) throw new Error('expected custom input')
+    input.value = 'C'
+    input.fireAccept()
+    await expect(result).resolves.toEqual({ answers: [{ id: 'q1', selected: ['A'], custom: 'C' }] })
+  })
+
+  it('returns selected-only and explicit skip answer shapes', async () => {
+    const fake = fakeWindow()
+    const ui = createNativeUi(fake.window)
+    const result = ui.askQuestions([
+      { id: 'q1', question: 'Choose', options: [{ label: 'A' }] },
+      { id: 'q2', question: 'Optional detail' },
+    ], new AbortController().signal)
+    const option = fake.quickPicks[0]?.items.find(item => item.label === 'A')
+    if (option === undefined) throw new Error('expected option')
+    fake.quickPicks[0]?.fireAccept([option])
+    await Promise.resolve()
+    const skip = fake.quickPicks[1]?.items.find(item => item.label === 'Skip')
+    if (skip === undefined) throw new Error('expected Skip item')
+    fake.quickPicks[1]?.fireAccept([skip])
+    await expect(result).resolves.toEqual({ answers: [
+      { id: 'q1', selected: ['A'] },
+      { id: 'q2', selected: [] },
+    ] })
+  })
+
+  it('supports multi selected-only and multi custom-only answers in order', async () => {
+    const fake = fakeWindow()
+    const ui = createNativeUi(fake.window)
+    const result = ui.askQuestions([
+      { id: 'q1', question: 'Select', multiSelect: true, options: [{ label: 'A' }, { label: 'B' }] },
+      { id: 'q2', question: 'Customize', multiSelect: true, options: [{ label: 'A' }] },
+    ], new AbortController().signal)
+    fake.quickPicks[0]?.fireAccept(fake.quickPicks[0].items.filter(item => item.label === 'A' || item.label === 'B'))
+    await Promise.resolve()
+    const other = fake.quickPicks[1]?.items.find(item => item.label === 'Other…')
+    if (other === undefined) throw new Error('expected Other item')
+    fake.quickPicks[1]?.fireAccept([other])
+    await Promise.resolve()
+    const input = fake.inputBoxes[0]
+    if (input === undefined) throw new Error('expected custom input')
+    input.value = 'C'
+    input.fireAccept()
+    await expect(result).resolves.toEqual({ answers: [
+      { id: 'q1', selected: ['A', 'B'] },
+      { id: 'q2', selected: [], custom: 'C' },
+    ] })
   })
 })

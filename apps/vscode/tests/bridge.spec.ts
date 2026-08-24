@@ -15,12 +15,17 @@ const RUNNING_ORIGIN = new URL('http://127.0.0.1:5173/')
 // origin is required (no default): a default would swallow an explicit
 // `undefined` — JS default params fire on undefined regardless of how it
 // was passed — and the "no origin yet" case needs a genuine undefined.
-function collectingBridge(fetchImpl: typeof fetch, origin: URL | undefined) {
+function collectingBridge(
+  fetchImpl: typeof fetch,
+  origin: URL | undefined,
+  beforeRelay?: ConstructorParameters<typeof ApiBridge>[0]['beforeRelay'],
+) {
   const posted: BridgeResponseMessage[] = []
   const bridge = new ApiBridge({
     origin: () => origin,
     post: message => posted.push(message),
     fetchImpl,
+    ...beforeRelay === undefined ? {} : { beforeRelay },
   })
   return { bridge, posted }
 }
@@ -34,6 +39,10 @@ function streamResponse(chunks: string[], status = 200): Response {
     },
   })
   return new Response(body, { status })
+}
+
+function requestHref(input: URL | RequestInfo): string {
+  return input instanceof URL ? input.href : input instanceof Request ? input.url : input
 }
 
 /** A response whose body never closes until the request signal aborts (real fetch abort behavior). */
@@ -103,6 +112,49 @@ describe('ApiBridge', () => {
     bridge.handle({ type: 'dsh-fetch', id: 3, path: '/api/session.list', method: 'POST', headers: {} })
     await settle()
     expect(posted).toEqual([{ type: 'dsh-fetch-error', id: 3, message: 'ECONNREFUSED' }])
+  })
+
+  it('holds a prompt relay behind the ordered pre-relay barrier', async () => {
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    const fetched: string[] = []
+    const fetchImpl: typeof fetch = async (input) => {
+      fetched.push(requestHref(input))
+      return streamResponse([])
+    }
+    const { bridge } = collectingBridge(fetchImpl, RUNNING_ORIGIN, message => (
+      message.path === '/api/session.prompt' ? gate : undefined
+    ))
+
+    bridge.handle({ type: 'dsh-fetch', id: 30, path: '/api/session.prompt', method: 'POST', headers: {}, body: '{}' })
+    await settle()
+    expect(fetched).toEqual([])
+    release()
+    await settle()
+    expect(fetched).toEqual(['http://127.0.0.1:5173/api/session.prompt'])
+  })
+
+  it('does not block other methods and never fetches an aborted barrier request', async () => {
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    const fetched: string[] = []
+    const fetchImpl: typeof fetch = async (input) => {
+      fetched.push(requestHref(input))
+      return streamResponse([])
+    }
+    const { bridge, posted } = collectingBridge(fetchImpl, RUNNING_ORIGIN, message => (
+      message.path === '/api/session.prompt' ? gate : undefined
+    ))
+
+    bridge.handle({ type: 'dsh-fetch', id: 31, path: '/api/session.prompt', method: 'POST', headers: {}, body: '{}' })
+    bridge.handle({ type: 'dsh-fetch', id: 32, path: '/api/session.list', method: 'POST', headers: {}, body: '{}' })
+    await settle()
+    expect(fetched).toEqual(['http://127.0.0.1:5173/api/session.list'])
+    bridge.handle({ type: 'dsh-fetch-abort', id: 31 })
+    release()
+    await settle()
+    expect(fetched).toEqual(['http://127.0.0.1:5173/api/session.list'])
+    expect(posted.some(message => message.type === 'dsh-fetch-error' && message.id === 31)).toBe(true)
   })
 
   it('aborts an in-flight relay when the webview sends dsh-fetch-abort', async () => {

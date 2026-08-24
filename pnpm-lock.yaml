@@ -966,6 +966,9 @@ importers:
       mocha:
         specifier: ^11.8.0
         version: 11.8.0
+      playwright:
+        specifier: ^1.49.0
+        version: 1.61.1
       react:
         specifier: ^18.2.0
         version: 18.3.1

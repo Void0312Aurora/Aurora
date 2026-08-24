@@ -43,6 +43,7 @@ function defaultSchedule(fn: () => void, ms: number): { cancel: () => void } {
  */
 export class IdeContextFeed {
   private readonly lastSignature = new Map<string, string>()
+  private readonly primes = new Map<string, Promise<void>>()
   private pending: { cancel: () => void } | undefined
 
   /** @param options - client, samplers, bounds, and scheduling. */
@@ -66,11 +67,24 @@ export class IdeContextFeed {
   async sync(): Promise<void> {
     this.pending?.cancel()
     this.pending = undefined
-    await this.flush()
+    const sessionId = this.options.activeSession()
+    if (sessionId !== undefined) await this.beforeFirstPrompt(sessionId)
   }
 
-  private async flush(): Promise<void> {
-    const sessionId = this.options.activeSession()
+  /**
+   * Attempt one context admission before a session's first prompt is relayed.
+   * Concurrent active-session and prompt paths share the same attempt.
+   */
+  beforeFirstPrompt(sessionId: string): Promise<void> {
+    const current = this.primes.get(sessionId)
+    if (current !== undefined) return current
+    const prime = this.flush(sessionId)
+    this.primes.set(sessionId, prime)
+    return prime
+  }
+
+  private async flush(explicitSessionId?: string): Promise<void> {
+    const sessionId = explicitSessionId ?? this.options.activeSession()
     if (sessionId === undefined) return
     const snapshot = sampleIdeContext(this.options.readEditorState(), this.options.limits)
     if (snapshot.text === undefined) return
@@ -94,6 +108,7 @@ export class IdeContextFeed {
   /** Forget a session's last-injected signature (e.g. when it is removed). */
   forget(sessionId: string): void {
     this.lastSignature.delete(sessionId)
+    this.primes.delete(sessionId)
   }
 
   /** Cancel any pending debounced run. */

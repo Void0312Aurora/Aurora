@@ -24,11 +24,11 @@ dsh web --host 127.0.0.1 --port 0
 
 ## 原生交互
 
-在 webview 之外，扩展宿主开自己的 mux 流（一个普通回环 wire 客户端——扩展宿主不是浏览器，直接通过 `/api` 信任栅栏），把 agent 的**审批**与**问答**请求呈现为可取消的编辑器原生控件：审批使用带 Allow/Reject 的 QuickPick，问答使用 QuickPick 或输入框。审批提示会用按会话、调用 id 与工具名限定的 `tool/call` view 缓存补充“这次调用要做什么”。由于 wire 是多客户端，这与 webview 面板内的提示并存：哪个界面先应答哪个生效；请求在别处解决时，仍开着的提示会关闭且不会发送迟到应答。
+在 webview 之外，扩展宿主开自己的 mux 流（一个普通回环 wire 客户端——扩展宿主不是浏览器，直接通过 `/api` 信任栅栏），把 agent 的**审批**与**问答**请求呈现为可取消的编辑器原生控件：审批使用带 Allow/Reject 的 QuickPick，问答使用带标签的 QuickPick 加输入框。问答控件提供普通选项、Other 与显式 Skip；多选问题会在自定义文本旁保留已选选项，空白自定义输入则保持打开并显示校验提示。审批提示会用按会话、调用 id 与工具名限定的 `tool/call` view 缓存补充“这次调用要做什么”。由于 wire 是多客户端，这与 webview 面板内的提示并存：哪个界面先应答哪个生效；请求在别处解决时，仍开着的提示会关闭且不会发送迟到应答。
 
 ## 编辑器上下文注入
 
-扩展把你的编辑器上下文喂给模型，让 prompt 无需粘贴即可指代“这个文件”。在编辑器变化时（活动文件、文本、选区、诊断），一个防抖采样器构建有界读数——活动文件与范围、选区或游标窗口、错误/警告诊断——并经 `session.injectContext`（no-wakeup wire 方法）注入活动会话（它为会话的下一 step 暂存，绝不自行开启 turn）。签名与上次发送相同的读数会被抑制。会话变为活动状态时采样器立即注入；面板取得焦点期间扩展保留最后一个有效编辑器读数，因此打开面板不会丢失此前打开的文件。目标会话从 host 流跟踪（最近运行的会话，否则第一个见到的）；精确的“用户正在看的会话”选择有待 webview→host 信号。
+扩展把你的编辑器上下文喂给模型，让 prompt 无需粘贴即可指代“这个文件”。在编辑器变化时（活动文件、文本、选区、诊断），一个防抖采样器构建有界读数——活动文件与范围、选区或游标窗口、错误/警告诊断——并经 `session.injectContext`（no-wakeup wire 方法）注入活动会话（它为会话的下一 step 暂存，绝不自行开启 turn）。签名与上次发送相同的读数会被抑制。会话变为活动状态时采样器立即注入；桥也会从 `session.prompt` 提取显式 session，并把该 session 的首个请求拦到同一个 single-flight 注入尝试结算之后。面板取得焦点期间扩展保留最后一个有效编辑器读数，因此打开面板不会丢失此前打开的文件。后台编辑器 nudge 仍面向 host 跟踪的会话（最近运行，否则第一个见到的）；即使尚无 webview→host 选择信号，首个桥接 prompt 也会精确命中其显式 session。
 
 ## 命令
 
@@ -51,7 +51,7 @@ host 构建产出一个自包含的 `dist/extension.js`（workspace 运行时导
 
 ## 测试
 
-`tests/` 无密钥覆盖扩展宿主逻辑：进程事务（`runtime.spec.ts`）、重启与 origin 重绑定（`lifecycle.spec.ts`）、postMessage↔fetch 中继（`bridge.spec.ts`）、可取消原生控件（`native-ui.spec.ts`）、上下文目标、面板 HTML/CSP，以及静态 roster 一致性。`pnpm run test:vscode:electron` 在隔离的 Extension Development Host 中加载构建后的 `dist/extension.js`，对确定性的本地服务器打开已装配面板，验证此前打开的编辑器会被注入、应答一次原生审批、重启服务器，并比较用户可见结果快照。
+`tests/` 无密钥覆盖扩展宿主逻辑：进程事务（`runtime.spec.ts`）、重启与 origin 重绑定（`lifecycle.spec.ts`）、postMessage↔fetch 中继（`bridge.spec.ts`）、可取消原生控件（`native-ui.spec.ts`）、上下文目标、面板 HTML/CSP，以及静态 roster 一致性。`pnpm run test:vscode:electron` 在隔离的 Extension Development Host 中加载构建后的 `dist/extension.js`，只把 LLM 替换为录制重放并启动真实构建的 `dsh web` 组合，驱动构建后的 webview 发送真实 prompt，再断言原始 aria 快照包含 prompt、恢复后的 composer 与重放回复。产出的生产 JSONL 必须证明 `ide` 上下文位于用户 prompt 及其首个 `request/header` 之前；随后该通道重启受管服务器。
 
 ## 已知限制与后续工作
 

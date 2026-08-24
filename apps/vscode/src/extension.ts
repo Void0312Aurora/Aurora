@@ -55,6 +55,22 @@ function currentOrigin(): URL | undefined {
   return lifecycle?.origin()
 }
 
+/** Extract the explicit session from a well-formed bridged session.prompt call. */
+function promptSessionId(message: Extract<BridgeRequestMessage, { type: 'dsh-fetch' }>): string | undefined {
+  if (message.path !== '/api/session.prompt' || message.body === undefined) return undefined
+  try {
+    const request: unknown = JSON.parse(message.body)
+    if (typeof request !== 'object' || request === null) return undefined
+    const envelope = request as { type?: unknown; method?: unknown; payload?: unknown }
+    if (envelope.type !== 'client-request' || envelope.method !== 'session.prompt') return undefined
+    if (typeof envelope.payload !== 'object' || envelope.payload === null) return undefined
+    const sessionId = (envelope.payload as { sessionId?: unknown }).sessionId
+    return typeof sessionId === 'string' && sessionId.length > 0 ? sessionId : undefined
+  } catch {
+    return undefined
+  }
+}
+
 function ensureInteractions(output: vscode.OutputChannel): void {
   if (interactions !== undefined) return
   const client = new LoopbackApiClient(currentOrigin)
@@ -233,6 +249,10 @@ function openPanel(context: vscode.ExtensionContext, output: vscode.OutputChanne
   const bridge = new ApiBridge({
     origin: owner.origin,
     post: (message) => { void created.webview.postMessage(message) },
+    beforeRelay: async (message) => {
+      const sessionId = promptSessionId(message)
+      if (sessionId !== undefined) await feed?.beforeFirstPrompt(sessionId)
+    },
   })
   created.webview.html = panelHtml(panelAssets(created.webview, context.extensionUri))
   const receiving = created.webview.onDidReceiveMessage((message: BridgeRequestMessage) => {

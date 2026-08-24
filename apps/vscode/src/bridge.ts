@@ -21,6 +21,8 @@ export interface ApiBridgeOptions {
   post: (message: BridgeResponseMessage) => void
   /** Transport; defaults to global fetch. */
   fetchImpl?: typeof fetch
+  /** Optional ordered hook that must settle before a request reaches the Host. */
+  beforeRelay?: (message: Extract<BridgeRequestMessage, { type: 'dsh-fetch' }>, signal: AbortSignal) => void | Promise<void>
 }
 
 /** One panel's request relay; dispose aborts everything in flight. */
@@ -49,14 +51,16 @@ export class ApiBridge {
 
   private async relay(message: Extract<BridgeRequestMessage, { type: 'dsh-fetch' }>): Promise<void> {
     const { id } = message
-    const origin = this.options.origin()
-    if (origin === undefined) {
-      this.options.post({ type: 'dsh-fetch-error', id, message: 'dsh web is not running yet' })
-      return
-    }
     const controller = new AbortController()
     this.inflight.set(id, controller)
     try {
+      await this.options.beforeRelay?.(message, controller.signal)
+      controller.signal.throwIfAborted()
+      const origin = this.options.origin()
+      if (origin === undefined) {
+        this.options.post({ type: 'dsh-fetch-error', id, message: 'dsh web is not running yet' })
+        return
+      }
       const response = await this.fetchImpl(new URL(message.path, origin), {
         method: message.method,
         headers: message.headers,

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-12-vscode-ide-context-injection.md
-2026-08-12-vscode-ide-context-injection.md: 7ebcab0bb11a4de442955d9b41228d5ef9af0043
-2026-08-12-vscode-ide-context-injection.zh.md: fa1f9247835f3419e201b3fde0fadcbb5a91cb68
+2026-08-12-vscode-ide-context-injection.md: 1e36e1435e960334b35164e45eb9ab4d83f1e6ea
+2026-08-12-vscode-ide-context-injection.zh.md: 986cddd26019abfbb8aa20e10ebe05ca0c804772

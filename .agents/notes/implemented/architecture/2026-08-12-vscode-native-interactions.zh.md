@@ -14,7 +14,7 @@ webview GUI 已在面板内渲染审批与问答，但编辑器用户往往没�
 
 **扩展宿主驱动自己的 wire 客户端，而非第二个 webview。** `LoopbackApiClient`（`apps/vscode/src/host-client.ts`）是薄的 `AbstractApiClient` 子类，`resolveBase()` 返回受管服务器当前 origin，`doFetch` 是全局 fetch。因为扩展宿主不是浏览器，回环 Host 无需改动栅栏即可通过 `/api` 浏览器信任栅栏——与桥存在的原因相同，只是直接应用。这免费复用了全部协议不变量（rpcId、信封、zod、SSE 解码、`respond`）。
 
-**`NativeInteractions`（`apps/vscode/src/interactions.ts`）消费 mux 流并经注入的 UI 应答。** 它按会话与调用 id 缓存 `tool/call` 帧，并且只在工具名也与审批一致时使用缓存 view。应答走请求的**信封** rpcId（而非载荷字段）：审批与问答都回显流信封的 rpcId，后续 `*/resolved` 帧则按审批 id 或请求 rpcId 对应。每个打开的控件由一个 `AbortController` 所有；请求被解决或流代次断开时，控件会关闭且不发送迟到应答，替换代次只为重放的未决请求创建一个控件。`apps/vscode/src/native-ui.ts` 把审批实现为 QuickPick，把问答实现为 QuickPick 或输入框，并在接受、隐藏或 abort 时销毁 VS Code 控件与监听器。
+**`NativeInteractions`（`apps/vscode/src/interactions.ts`）消费 mux 流并经注入的 UI 应答。** 它按会话与调用 id 缓存 `tool/call` 帧，并且只在工具名也与审批一致时使用缓存 view。应答走请求的**信封** rpcId（而非载荷字段）：审批与问答都回显流信封的 rpcId，后续 `*/resolved` 帧则按审批 id 或请求 rpcId 对应。每个打开的控件由一个 `AbortController` 所有；请求被解决或流代次断开时，控件会关闭且不发送迟到应答，替换代次只为重放的未决请求创建一个控件。`apps/vscode/src/native-ui.ts` 把审批实现为 QuickPick。问答使用带标签的普通选项/Other/Skip；Other 打开有校验的输入框，多选会在自定义文本旁保留普通选项，任何合成标签都不会进入 Host 答案。控件与监听器会在接受、隐藏或 abort 时销毁。
 
 ## 考虑过的替代方案
 
@@ -24,4 +24,4 @@ webview GUI 已在面板内渲染审批与问答，但编辑器用户往往没�
 
 ## 后果
 
-`NativeInteractions` 随面板自动运行；审批与问答成为面板内提示旁的原生提示。`interactions.spec.ts` 覆盖会话限定的缓存增强、工具名核对、信封 rpcId 应答、别处解决即关闭、dismissed 不发送与重连重放。`native-ui.spec.ts` 以假的 VS Code 控件演练取消。组装后的 `@vscode/test-electron` 通道加载构建后的扩展入口，在重启受管服务器前应答一次真实原生审批。
+`NativeInteractions` 随面板自动运行；审批与问答成为面板内提示旁的原生提示。`interactions.spec.ts` 覆盖会话限定的缓存增强、工具名核对、信封 rpcId 应答、别处解决即关闭、dismissed 不发送与重连重放。`native-ui.spec.ts` 以假的 VS Code 控件演练取消，以及仅选项、仅自定义、选项加自定义、显式跳过和空白重试等答案形状。组装后的 `@vscode/test-electron` 通道负责生产 CLI/webview 往返；原生控件协议一致性留在确定性的宿主侧套件中。

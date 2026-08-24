@@ -11,6 +11,15 @@ interface ApprovalItem extends vscode.QuickPickItem {
   outcome: 'allowed-once' | 'rejected'
 }
 
+interface QuestionItem extends vscode.QuickPickItem {
+  answerKind: 'option' | 'custom' | 'skip'
+}
+
+interface QuestionPick {
+  selected: string[]
+  custom: boolean
+}
+
 /** Render a cached tool call as the approval prompt's operation detail. */
 function approvalDetail(prompt: ApprovalPrompt): string {
   const call = prompt.call
@@ -59,19 +68,24 @@ function pickQuestion(
   window: NativeUiWindow,
   item: AskUserQuestionItem,
   signal: AbortSignal,
-): Promise<string[] | undefined> {
+): Promise<QuestionPick | undefined> {
   return new Promise((resolve) => {
-    const picker = window.createQuickPick()
+    const picker = window.createQuickPick<QuestionItem>()
     picker.title = item.question
     if (item.detail !== undefined) picker.placeholder = item.detail
     picker.canSelectMany = item.multiSelect ?? false
-    picker.items = (item.options ?? []).map(option => ({
-      label: option.label,
-      ...option.description === undefined ? {} : { description: option.description },
-    }))
+    picker.items = [
+      ...(item.options ?? []).map(option => ({
+        answerKind: 'option' as const,
+        label: option.label,
+        ...option.description === undefined ? {} : { description: option.description },
+      })),
+      { answerKind: 'custom', label: 'Other…', description: 'Enter a custom answer' },
+      { answerKind: 'skip', label: 'Skip', description: 'Answer without a selection' },
+    ]
     let done = false
     const subscriptions: vscode.Disposable[] = []
-    const settle = (selected: string[] | undefined): void => {
+    const settle = (selected: QuestionPick | undefined): void => {
       if (done) return
       done = true
       signal.removeEventListener('abort', onAbort)
@@ -82,7 +96,22 @@ function pickQuestion(
     }
     const onAbort = (): void => { settle(undefined) }
     subscriptions.push(
-      picker.onDidAccept(() => { settle(picker.selectedItems.map(selected => selected.label)) }),
+      picker.onDidAccept(() => {
+        const picked = picker.selectedItems
+        const skip = picked.some(selected => selected.answerKind === 'skip')
+        if (skip && picked.length > 1) {
+          picker.placeholder = 'Skip cannot be combined with another answer.'
+          return
+        }
+        if (picked.length === 0) {
+          picker.placeholder = 'Choose an option, Other, or Skip.'
+          return
+        }
+        settle({
+          selected: picked.filter(selected => selected.answerKind === 'option').map(selected => selected.label),
+          custom: picked.some(selected => selected.answerKind === 'custom'),
+        })
+      }),
       picker.onDidHide(() => { settle(undefined) }),
     )
     signal.addEventListener('abort', onAbort, { once: true })
@@ -114,7 +143,14 @@ function inputQuestion(
     }
     const onAbort = (): void => { settle(undefined) }
     subscriptions.push(
-      input.onDidAccept(() => { settle(input.value) }),
+      input.onDidAccept(() => {
+        const value = input.value.trim()
+        if (value.length === 0) {
+          input.validationMessage = 'Enter an answer or cancel.'
+          return
+        }
+        settle(value)
+      }),
       input.onDidHide(() => { settle(undefined) }),
     )
     signal.addEventListener('abort', onAbort, { once: true })
@@ -131,15 +167,15 @@ export function createNativeUi(window: NativeUiWindow): NativeUi {
       const answers: AskUserQuestionAnswer['answers'] = []
       for (const item of items) {
         if (signal.aborted) return undefined
-        if ((item.options ?? []).length === 0) {
+        const picked = await pickQuestion(window, item, signal)
+        if (picked === undefined) return undefined
+        if (picked.custom) {
           const custom = await inputQuestion(window, item, signal)
           if (custom === undefined) return undefined
-          answers.push({ id: item.id, selected: [], custom })
+          answers.push({ id: item.id, selected: picked.selected, custom })
           continue
         }
-        const selected = await pickQuestion(window, item, signal)
-        if (selected === undefined) return undefined
-        answers.push({ id: item.id, selected })
+        answers.push({ id: item.id, selected: picked.selected })
       }
       return { answers }
     },
