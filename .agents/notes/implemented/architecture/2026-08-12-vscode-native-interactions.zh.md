@@ -25,4 +25,4 @@ webview GUI 已在面板内渲染审批、问答与工具 diff。但编辑器用
 
 ## 后果
 
-`NativeInteractions` 在[协议门禁](2026-08-12-wire-protocol-version-and-ide-context-injection.md)通过后随面板自动运行；审批与问答成为面板内提示旁的原生提示。`interactions.spec.ts` 覆盖按会话隔离的缓存增强与 turn 结束清除、工具名核对、信封 rpcId 应答、别处解决即关闭、dismissed 不发送、一代流结束重置与重连重放。`native-ui.spec.ts` 以假的 VS Code 控件演练取消，以及仅选项、仅自定义、选项加自定义、显式跳过和空白重试等答案形状。组装后的 `@vscode/test-electron` 通道负责生产 CLI/webview 往返；原生控件协议一致性留在确定性的宿主侧套件中。IDE 上下文注入在[上下文注入阶段](2026-08-12-vscode-ide-context-injection.md)骑乘同一宿主客户端。
+`NativeInteractions` 在[协议门禁](2026-08-12-wire-protocol-version-and-ide-context-injection.md)通过后随面板自动运行；审批与问答成为面板内提示旁的原生提示。`interactions.spec.ts` 覆盖按会话隔离的缓存增强与 turn 结束清除、工具名核对、信封 rpcId 应答、别处解决即关闭、dismissed 不发送、一代流结束重置与重连重放。`native-ui.spec.ts` 以假的 VS Code 控件演练取消，以及仅选项、仅自定义、选项加自定义、显式跳过和空白重试等答案形状。原生 diff 编辑器与跳转动作完整推迟到工具卡“在编辑器中打开”信号拥有生产消费者之时；不提前交付无消费者的解析器。组装后的 `@vscode/test-electron` 通道负责生产 CLI/webview 往返，原生控件协议一致性留在确定性的宿主侧套件中。IDE 上下文注入在[上下文注入阶段](2026-08-12-vscode-ide-context-injection.md)骑乘同一宿主客户端。

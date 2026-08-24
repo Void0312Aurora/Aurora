@@ -42,6 +42,6 @@ Status: implemented
 
 施加紧凑尺度后，259px 的侧栏在 hero、会话窗格与设置模态上报告零个横向溢出元素、零个横向滚动容器，其中包括携带完整控件集（附件、权限、模型、发送）的 composer。设置模态从内容列仅剩约 23px——视口钳制后的面板里塞着 188px 导航轨——变成占满整个界面。另有两处会溢出自身容器的钳制被当作纯逻辑修掉，而非样式问题：slash 菜单的 260px 下限与 trajectory 详情面板的 320px 下限，现在会在容器比下限本身更窄时让步。
 
-组装后的浏览器快照通过生产 CSP，以 259px 宽度针对无密钥 fixture（测试前置数据）启动构建出的 webview，并通过 Web 通道共享的稳定 ARIA／golden helper 记录会话页、问答与审批 composer，以及代表性的 Bash 和 Web Search 行。shell 没有根级横向滚动或未收束的溢出；一个 Markdown 表格保留了一处有意的内容级横向滚动容器。浏览器启动失败会先关闭测试服务器再向上传播。在编辑器宿主通道出现之前，Extension Development Host 内的真实提供方轮次仍需手动核验。
+组装后的浏览器快照通过生产 CSP，以 259px 宽度针对无密钥 fixture（测试前置数据）启动构建出的 webview，并通过 Web 通道共享的稳定 ARIA／golden helper 记录会话页、问答与审批 composer，以及代表性的 Bash 和 Web Search 行。shell 没有根级横向滚动或未收束的溢出；一个 Markdown 表格保留了一处有意的内容级横向滚动容器。浏览器启动失败会先关闭测试服务器再向上传播。另有 fixture 支撑的 Extension Host 通道验证激活和原生集成；编辑器中的真实提供方轮次仍需手工核验。
 
 bundle 重量未变：它由完整插件 roster 与 `ui-primitives` 的 Markdown/KaTeX/shiki 栈主导，而后者是 web shell seed 里的平台单例。给它瘦身与布局是两个问题，本次改动刻意不碰。

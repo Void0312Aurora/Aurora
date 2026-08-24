@@ -29,18 +29,6 @@ packages:
 linkWorkspacePackages: true
 preferWorkspacePackages: true
 
-# linkWorkspacePackages alone is not enough to hold that invariant. Every
-# harness package declares `cordis: ^4.0.0-rc.7`, and the registry now carries
-# a HIGHER prerelease (rc.8) that the range also matches, so any dependency
-# re-resolution (`pnpm add`, `pnpm deploy`) silently swaps the workspace link
-# for a registry copy and two framework instances end up in one graph. These
-# overrides pin the vendored names to the workspace sources unconditionally,
-# making `verify-vendored-links` an invariant the resolver enforces rather than
-# one a gate discovers afterwards.
-overrides:
-  cordis: workspace:*
-  cosmokit: workspace:*
-
 peerDependencyRules:
   allowedVersions:
     typescript: '>=5 <7'

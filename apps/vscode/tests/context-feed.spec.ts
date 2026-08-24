@@ -29,15 +29,15 @@ function manualScheduler() {
 function feedWith(options: {
   editor: () => EditorState
   session: () => string | undefined
-  respond?: (sessionId: string) => InjectResult | Promise<InjectResult>
+  respond?: (sessionId: string, signal: AbortSignal | undefined) => InjectResult | Promise<InjectResult>
 }) {
   const scheduler = manualScheduler()
   const injected: { sessionId: string; text: string }[] = []
   const client = {
     sessions: {
-      injectContext: (payload: { sessionId: string; content: { type: string; text?: string }[] }) => {
+      injectContext: (payload: { sessionId: string; content: { type: string; text?: string }[] }, signal?: AbortSignal) => {
         injected.push({ sessionId: payload.sessionId, text: payload.content[0]?.text ?? '' })
-        const result = options.respond?.(payload.sessionId)
+        const result = options.respond?.(payload.sessionId, signal)
           ?? { rpcId: 'r' as never, result: { ok: true as const, value: { accepted: true as const } } }
         return Promise.resolve(result)
       },
@@ -219,5 +219,29 @@ describe('IdeContextFeed', () => {
     scheduler.tick()
     await settle()
     expect(injected).toHaveLength(0)
+  })
+
+  it('aborts an in-flight send and fences dirty trailing work after dispose', async () => {
+    let session = 's1'
+    let editorReads = 0
+    let release!: (result: InjectResult) => void
+    let observedSignal: AbortSignal | undefined
+    const deferred = new Promise<InjectResult>((resolve) => { release = resolve })
+    const { feed, scheduler, injected } = feedWith({
+      editor: () => { editorReads++; return { path: `${session}.ts`, diagnostics: [] } },
+      session: () => session,
+      respond: (_sessionId, signal) => { observedSignal = signal; return deferred },
+    })
+
+    feed.nudge(); scheduler.tick(); await settle()
+    expect(injected.map(item => item.sessionId)).toEqual(['s1'])
+    session = 's2'
+    feed.nudge(); scheduler.tick(); await settle()
+    feed.dispose()
+    expect(observedSignal?.aborted).toBe(true)
+    release({ rpcId: 'r' as never, result: { ok: true, value: { accepted: true } } })
+    await settle()
+    expect(injected.map(item => item.sessionId)).toEqual(['s1'])
+    expect(editorReads).toBe(1)
   })
 })

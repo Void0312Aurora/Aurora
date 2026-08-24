@@ -12,8 +12,8 @@ import type { HostFrame, RpcRequest } from '@deepseek-ai/dsh-host-apiproxy/api'
 
 /** Wiring the tracker needs; the client is injected for tests. */
 export interface ActiveSessionOptions {
-  /** The host wire client (only the host event stream is used). */
-  client: Pick<IApiClient, 'events'>
+  /** The host wire client: list is reconnect authority, events are increments. */
+  client: { events: IApiClient['events']; sessions: Pick<IApiClient['sessions'], 'list'> }
   /** Diagnostic line sink. */
   log: (line: string) => void
   /** Called synchronously after the active session id changes. */
@@ -54,15 +54,66 @@ export class ActiveSessionTracker {
       const abort = new AbortController()
       this.streamAbort = abort
       try {
-        for await (const envelope of this.options.client.events.host({}, abort.signal)) {
-          this.handle(envelope)
-        }
+        await this.runGeneration(abort)
       } catch (error) {
-        if (abort.signal.aborted) return
+        if (this.isStopped()) return
         this.options.log(`host stream dropped: ${error instanceof Error ? error.message : String(error)}`)
       }
-      if (abort.signal.aborted) return
+      if (this.isStopped()) return
       await new Promise(resolve => setTimeout(resolve, reconnectMs))
+    }
+  }
+
+  /** Read stop state after awaits without stale control-flow narrowing. */
+  private isStopped(): boolean {
+    return this.stopped
+  }
+
+  /** Open the increment stream first, then establish and replay over its list baseline. */
+  private async runGeneration(abort: AbortController): Promise<void> {
+    const buffered: Array<RpcRequest<HostFrame>> = []
+    let live = false
+    const isLive = (): boolean => live
+    const pump = (async (): Promise<{ ok: true } | { ok: false; error: Error }> => {
+      try {
+        for await (const envelope of this.options.client.events.host({}, abort.signal)) {
+          if (isLive()) this.handle(envelope)
+          else buffered.push(envelope)
+        }
+        return { ok: true }
+      } catch (error) {
+        abort.abort()
+        return { ok: false, error: error instanceof Error ? error : new Error(String(error)) }
+      }
+    })()
+    const list = this.options.client.sessions.list({}, abort.signal)
+
+    try {
+      const first = await Promise.race([
+        list.then(response => ({ type: 'list' as const, response })),
+        pump.then(outcome => ({ type: 'stream' as const, outcome })),
+      ])
+      if (first.type === 'stream') {
+        abort.abort()
+        await list.catch(() => undefined)
+        if (!first.outcome.ok) throw first.outcome.error
+        return
+      }
+      const response = first.response
+      if (!response.result.ok) {
+        throw new Error(`session.list rejected: ${response.result.error.code}`)
+      }
+      const items = response.result.value.items
+      const baseline = items.find(item => item.running) ?? items[0]
+      this.setActive(baseline?.sessionId)
+      for (const envelope of buffered) this.handle(envelope)
+      live = true
+      const outcome = await pump
+      if (!outcome.ok) throw outcome.error
+    } catch (error) {
+      abort.abort()
+      await pump
+      throw error instanceof Error ? error : new Error(String(error))
     }
   }
 

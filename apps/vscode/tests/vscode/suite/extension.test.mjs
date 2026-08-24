@@ -173,7 +173,7 @@ suite('built DeepSeek Harness extension', () => {
     await extension.activate()
     const document = await vscode.workspace.openTextDocument(vscode.Uri.joinPath(workspace.uri, 'seed.ts'))
     await vscode.window.showTextDocument(document)
-    await vscode.commands.executeCommand('dsh.openPanel')
+    await vscode.commands.executeCommand('dsh.focus')
     await writeFile(driverReady, 'ready\n')
 
     const expectedSnapshot = await readFile(snapshotPath, 'utf8')

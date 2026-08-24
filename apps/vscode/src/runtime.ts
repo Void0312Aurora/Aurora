@@ -193,13 +193,21 @@ export class ServerRuntime {
       attempt.detach?.()
       const child = attempt.child
       if (this.attempt === attempt) {
-        this.attempt = undefined
         this.urlValue = undefined
       }
-      if (child?.pid !== undefined && !childExited(child)) {
-        const killTree = this.options.killTree
-          ?? ((pid: number) => killProcessTree(pid, { logger: (message) => { this.options.log(`killTree ${message}`) } }))
-        await killTree(child.pid)
+      try {
+        if (child?.pid !== undefined && !childExited(child)) {
+          const killTree = this.options.killTree
+            ?? ((pid: number) => killProcessTree(pid, { logger: (message) => { this.options.log(`killTree ${message}`) } }))
+          await killTree(child.pid)
+        }
+      } finally {
+        // Keep the generation discoverable while its process tree is still
+        // draining so every concurrent disposer shares this cleanup promise.
+        if (this.attempt === attempt) {
+          this.attempt = undefined
+          this.urlValue = undefined
+        }
       }
     })()
     return attempt.cleanup

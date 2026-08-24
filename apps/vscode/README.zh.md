@@ -87,10 +87,9 @@ pnpm --filter dsh-vscode run package    # packs a vsix for the host platform
 
 ## Known Limitations and Deferred Work
 
-- **原生 diff 编辑器与跳转有基础但尚无触发**——[`src/locations.ts`](src/locations.ts) 把工具 view 的模型面路径解析为绝对编辑器目标，并从 wire 提取一致的双栏 diff 材料（编辑对比两侧携带的 hunk 片段；create 用空左栏对比整个新文件——**不**把磁盘整文件左栏与 hunk 右栏混搭）。打开原生 `vscode.diff` 或跳转到某位置需要来自工具卡的客户端"在编辑器中打开"信号，那是一处客户端插件改动，推迟到专门的 UI 阶段；真正的整文件视图（把 hunk 应用到磁盘）随该触发一并落地。
 - **上下文注入面向启发式会话**——活动会话在 host 侧跟踪（最近运行，否则第一个见到）；当有多个会话附着时，在 webview→host 活动会话信号出现前，注入可能命中与面板所显示不同的会话。
 - **原生审批提示与面板内提示并存**——两个界面都会显示每个审批/问答；v1 不抑制任何一个。按窗口开关推迟到扩展有设置面后。
 - **自包含打包假定 VS Code 的 Node 在 harness 引擎范围内**——内嵌闭包在 VS Code 的 Electron-as-Node 下运行，其必须满足 harness `node ^22.19 || >=24` 范围。若某 VS Code 构建携带的 Node 越界，则需改用基于 PATH 的 vsix（不含 `deploy/`，依赖已装的 `dsh`）；为目标 VS Code 版本确认该范围是一个发布关卡。
 - **vsix 单独签名/发布**——`package` 按平台产出未签名 vsix；marketplace 签名与发布（`vsce publish`）是发布步骤，本地打包不需要，故 `keytar`/`vsce-sign` 原生构建被拒绝。
 - **每窗口一个视图**——扩展只承载单个侧栏视图；不支持同时多个 GUI 界面。
-- **真实提供方的编辑器 transcript（文本记录）仍需手动核验**——组装后的浏览器快照证明，构建出的 webview 可在 259px 下渲染 fixture 助手内容、交互 composer 与工具行，且没有根级横向滚动或未收束的溢出。一个 Markdown 表格保留了一处有意的内容级横向滚动容器。在编辑器宿主通道出现之前，Extension Development Host 内的真实提供方轮次仍需手动核验。
+- **真实提供方的编辑器 transcript（文本记录）仍需手动核验**——浏览器快照证明，构建出的 webview 可在 259px 下渲染 fixture 助手内容、交互 composer 与工具行且没有根级横向溢出；Extension Host 通道则用 fixture 服务器证明激活和原生集成。两者都没有在编辑器中执行真实提供方轮次。

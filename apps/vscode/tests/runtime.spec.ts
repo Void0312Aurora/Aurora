@@ -133,6 +133,28 @@ describe('ServerRuntime', () => {
     expect(order).toEqual(['spawn', 'kill:4321', 'spawn'])
   })
 
+  it('keeps dispose pending while a failed-start process tree is still draining', async () => {
+    const child = new FakeChild()
+    Object.defineProperty(child, 'stdout', { value: null })
+    let releaseKill!: () => void
+    let signalKillStarted!: () => void
+    const killStarted = new Promise<void>((resolve) => { signalKillStarted = resolve })
+    const killGate = new Promise<void>((resolve) => { releaseKill = resolve })
+    const { runtime } = runtimeWith(child, {
+      killTree: async () => { signalKillStarted(); await killGate },
+    })
+
+    const failing = runtime.start()
+    await killStarted
+    let disposed = false
+    const disposal = runtime.dispose().then(() => { disposed = true })
+    await settle()
+    expect(disposed).toBe(false)
+    releaseKill()
+    await disposal
+    await expect(failing).rejects.toThrow(/without its stdout\/stderr pipes/)
+  })
+
   it('fires onExit when a started server exits on its own', async () => {
     const child = new FakeChild()
     const exits: Array<[number | null, NodeJS.Signals | null]> = []
