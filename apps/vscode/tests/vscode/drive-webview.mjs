@@ -201,7 +201,10 @@ async function driveQuestionRound(browser, frame, options) {
   const question = await findNativeQuestion(browser)
   const snapshot = await captureStableSnapshot(question, options.temporary)
   await writeFile(options.milestone, JSON.stringify({ prompt: PROMPT, snapshot, workspacePicker }))
-  await frame.getByText(FINAL, { exact: true }).waitFor({ timeout: 60_000 })
+  // The chat keeps virtualized copies of prior content mounted but hidden.
+  // Scope completion to the visible markdown paragraph instead of relying on
+  // DOM order, which differs between the pinned CI VS Code and local builds.
+  await frame.locator('p:visible').filter({ hasText: FINAL }).waitFor({ timeout: 60_000 })
   const richSnapshot = await captureStableSnapshot(frame.locator('#root').first(), options.temporary)
   await writeFile(options.result, JSON.stringify({ final: FINAL, snapshot: richSnapshot }))
 }
