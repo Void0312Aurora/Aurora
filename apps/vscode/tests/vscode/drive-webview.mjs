@@ -149,7 +149,10 @@ async function ensureWorkspace(frame, workspace) {
     if (!await dialog.isVisible().catch(() => false)) {
       const addWorkspace = frame.getByText('Add workspace…', { exact: true })
       await addWorkspace.waitFor({ timeout: 15_000 })
-      await addWorkspace.click()
+      // The workspace list is rebuilt when the initial session catalog lands;
+      // dispatch the structurally located action so a detached list row cannot
+      // make the fixture setup fail between Playwright's actionability checks.
+      await addWorkspace.evaluate(element => element.click())
     }
     await dialog.waitFor({ timeout: 15_000 })
     if (await serverStarting.isVisible().catch(() => false)) {
