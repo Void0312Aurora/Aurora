@@ -208,12 +208,16 @@ async function driveQuestionRound(browser, frame, options) {
   // This avoids relying on version-specific workbench focus commands while
   // still exercising the production NativeInteractions response path.
   const answer = question.getByRole('option', { name: 'Yes', exact: true })
-  await answer.click()
-  // Pinned VS Code builds can select a Quick Pick item without dispatching
-  // onDidAccept for the mouse activation. Submit the still-visible picker
-  // through its normal keyboard affordance; when the click already accepted,
-  // the picker is hidden and this branch is skipped.
-  if (await question.isVisible().catch(() => false)) await question.press('Enter')
+  // The first option is selected when this picker opens. Submit through the
+  // native Quick Pick input so the pinned VS Code build cannot interpret a
+  // pointer activation as a hide-only event.
+  await question.getByRole('textbox').press('Enter')
+  // Keep a visible-control fallback for builds that do not accept the default
+  // selection from the input; this remains an ordinary native UI interaction.
+  if (await question.isVisible().catch(() => false)) {
+    await answer.click()
+    if (await question.isVisible().catch(() => false)) await question.press('Enter')
+  }
   // The chat keeps virtualized copies of prior content mounted but hidden.
   // Scope completion to the visible markdown paragraph instead of relying on
   // DOM order, which differs between the pinned CI VS Code and local builds.
