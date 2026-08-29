@@ -97,15 +97,7 @@ function lastRichTurnSnapshot(snapshot, prompt) {
   )
 }
 
-async function answerNativeQuestion(sessionsRoot, expectedResults) {
-  for (let attempt = 0; attempt < 20; attempt++) {
-    await vscode.commands.executeCommand('workbench.action.focusQuickOpen')
-    await vscode.commands.executeCommand('workbench.action.quickOpenSelectNext')
-    await vscode.commands.executeCommand('workbench.action.acceptSelectedQuickOpenItem')
-    const logs = await sessionEventLogs(sessionsRoot)
-    if (toolResultCount(logs) >= expectedResults) return
-    await delay(100)
-  }
+async function waitForNativeQuestionAnswer(sessionsRoot, expectedResults) {
   await waitForSessionEvents(
     sessionsRoot,
     logs => toolResultCount(logs) >= expectedResults,
@@ -180,7 +172,7 @@ suite('built DeepSeek Harness extension', () => {
     assert.equal(`${String(firstMilestone.snapshot)}\n`, expectedSnapshot)
     assert.equal(firstMilestone.workspacePicker, 'browse-dialog')
     assert.equal(await readFile(personalMarker, 'utf8'), 'personal overlay active\n')
-    await answerNativeQuestion(sessionsRoot, 1)
+    await waitForNativeQuestionAnswer(sessionsRoot, 1)
     const firstResult = await waitForDriverFile(driverResult, driverFailure)
     assert.equal(firstResult.final, "Great, let's move forward. BANANA!")
     assert.equal(`${String(firstResult.snapshot)}\n`, expectedWebviewSnapshot)
@@ -189,7 +181,7 @@ suite('built DeepSeek Harness extension', () => {
     await writeFile(restartReady, 'ready\n')
     const replacementMilestone = await waitForDriverFile(restartMilestone, driverFailure)
     assert.equal(`${String(replacementMilestone.snapshot)}\n`, expectedSnapshot)
-    await answerNativeQuestion(sessionsRoot, 2)
+    await waitForNativeQuestionAnswer(sessionsRoot, 2)
     const replacementResult = await waitForDriverFile(restartResult, driverFailure)
     assert.equal(replacementResult.final, "Great, let's move forward. BANANA!")
     assert.equal(

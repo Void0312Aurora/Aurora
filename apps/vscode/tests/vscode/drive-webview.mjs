@@ -204,6 +204,10 @@ async function driveQuestionRound(browser, frame, options) {
   const question = await findNativeQuestion(browser)
   const snapshot = await captureStableSnapshot(question, options.temporary)
   await writeFile(options.milestone, JSON.stringify({ prompt: PROMPT, snapshot, workspacePicker }))
+  // Answer through the same visible Quick Pick that produced the milestone.
+  // This avoids relying on version-specific workbench focus commands while
+  // still exercising the production NativeInteractions response path.
+  await question.getByRole('option', { name: 'Yes', exact: true }).click()
   // The chat keeps virtualized copies of prior content mounted but hidden.
   // Scope completion to the visible markdown paragraph instead of relying on
   // DOM order, which differs between the pinned CI VS Code and local builds.
