@@ -98,6 +98,16 @@ function lastRichTurnSnapshot(snapshot, prompt) {
 }
 
 async function waitForNativeQuestionAnswer(sessionsRoot, expectedResults) {
+  const deadline = Date.now() + 30_000
+  while (Date.now() < deadline) {
+    const logs = await sessionEventLogs(sessionsRoot)
+    if (toolResultCount(logs) >= expectedResults) return
+    // Quick Pick opens with the first option selected. Use the workbench's
+    // normal accept command so the pinned VS Code build dispatches
+    // QuickPick.onDidAccept instead of treating a pointer event as hide-only.
+    await vscode.commands.executeCommand('workbench.action.acceptSelectedQuickOpenItem').catch(() => undefined)
+    await delay(100)
+  }
   await waitForSessionEvents(
     sessionsRoot,
     logs => toolResultCount(logs) >= expectedResults,
