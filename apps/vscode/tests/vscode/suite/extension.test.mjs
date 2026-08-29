@@ -79,6 +79,24 @@ function toolResultCount(logs) {
   return logs.flat().filter(event => event.type === 'tool/result').length
 }
 
+/**
+ * Return the current turn's rich transcript plus composer chrome. A restarted
+ * runtime restores the same session, so the root may also contain earlier
+ * turns and cumulative stats; compare the stable last-turn projection instead
+ * of treating that retained history as a rendering failure.
+ */
+function lastRichTurnSnapshot(snapshot, prompt) {
+  const marker = `- text: ${prompt} {{clock}}`
+  const promptStart = snapshot.lastIndexOf(marker)
+  if (promptStart < 0) throw new Error('rich webview snapshot omitted the current user prompt')
+  const start = snapshot.indexOf('- button "Think ', promptStart)
+  if (start < 0) throw new Error('rich webview snapshot omitted the current assistant/tool flow')
+  return snapshot.slice(start).replace(
+    /- text: \d+ turns · \d+ steps Tool call \{\{duration\}\} Cache hit \d+% Input [\d.]+K tok · Output [\d.]+ tok/g,
+    '- text: {{turn-stats}}',
+  )
+}
+
 async function answerNativeQuestion(sessionsRoot, expectedResults) {
   for (let attempt = 0; attempt < 20; attempt++) {
     await vscode.commands.executeCommand('workbench.action.focusQuickOpen')
@@ -174,7 +192,10 @@ suite('built DeepSeek Harness extension', () => {
     await answerNativeQuestion(sessionsRoot, 2)
     const replacementResult = await waitForDriverFile(restartResult, driverFailure)
     assert.equal(replacementResult.final, "Great, let's move forward. BANANA!")
-    assert.equal(`${String(replacementResult.snapshot)}\n`, expectedWebviewSnapshot)
+    assert.equal(
+      lastRichTurnSnapshot(String(replacementResult.snapshot), firstMilestone.prompt),
+      lastRichTurnSnapshot(String(firstResult.snapshot), firstMilestone.prompt),
+    )
 
     const logs = await waitForSessionEvents(
       sessionsRoot,
