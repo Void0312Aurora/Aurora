@@ -19,7 +19,7 @@ export interface ManagedServer {
 export interface RuntimeLifecycleOptions {
   /** Create one fresh managed-server generation. */
   createRuntime: () => ManagedServer
-  /** Start native consumers; they resolve the origin through {@link RuntimeLifecycle.origin}. */
+  /** Start native consumers after the runtime publishes a ready origin. */
   startNative: () => void
   /** Stop native consumers before their server generation is disposed. */
   stopNative: () => void
@@ -58,12 +58,16 @@ export class RuntimeLifecycle {
   private async startGeneration(): Promise<void> {
     if (this.disposed) return
     const current = this.owner ??= this.createOwner()
-    this.options.startNative()
     try {
       // Teardown must not depend on a server generation reaching readiness.
       // Revocation releases this transaction even when start() remains
       // pending; disposeOwned() independently tears down the exact runtime.
       await Promise.race([current.runtime.start().then(() => undefined), current.revoked])
+      // The native clients resolve the current origin when they connect. Do
+      // not start them before runtime.start() publishes that origin: an early
+      // stream attempt has no endpoint and can miss the first interaction
+      // frame while the server is still booting.
+      if (this.owns(current)) this.options.startNative()
     } catch (error) {
       // A restart or deactivate may dispose a generation while start awaits
       // readiness. Its rejection belongs to teardown, not the replacement.

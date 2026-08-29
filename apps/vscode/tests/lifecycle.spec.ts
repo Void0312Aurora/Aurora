@@ -17,6 +17,29 @@ async function settle(): Promise<void> {
 }
 
 describe('RuntimeLifecycle', () => {
+  it('starts native consumers only after the runtime is ready', async () => {
+    const runtime = new FakeRuntime(new URL('http://127.0.0.1:5051/'))
+    let resolveStart: ((url: URL) => void) | undefined
+    runtime.start.mockImplementation(() => new Promise<URL>((resolve) => { resolveStart = resolve }))
+    const native: string[] = []
+    const lifecycle = new RuntimeLifecycle({
+      createRuntime: () => runtime,
+      startNative: () => { native.push('start') },
+      stopNative: () => { native.push('stop') },
+      onStartFailure: () => {},
+    })
+
+    lifecycle.start()
+    await settle()
+    expect(runtime.start).toHaveBeenCalledTimes(1)
+    expect(native).toEqual([])
+
+    resolveStart?.(runtime.url!)
+    await settle()
+    expect(native).toEqual(['start'])
+    await lifecycle.dispose()
+  })
+
   it('restarts with a replacement generation and routes retained bridge traffic to it', async () => {
     const first = new FakeRuntime(new URL('http://127.0.0.1:5101/'))
     const second = new FakeRuntime(new URL('http://127.0.0.1:5102/'))
