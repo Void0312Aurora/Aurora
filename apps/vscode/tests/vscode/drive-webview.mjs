@@ -212,6 +212,7 @@ async function driveQuestionRound(browser, frame, options) {
     .find(page => page.url().startsWith('vscode-file://'))
   if (!workbench) throw new Error('VS Code workbench page not found while answering native question')
   await workbench.bringToFront()
+  await question.getByRole('textbox').focus()
   await workbench.keyboard.press('Enter')
   // The chat keeps virtualized copies of prior content mounted but hidden.
   // Scope completion to the visible markdown paragraph instead of relying on
