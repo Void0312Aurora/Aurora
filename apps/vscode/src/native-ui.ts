@@ -87,8 +87,9 @@ function pickQuestion(
     // A QuickPick shown from a WebviewPanel can be visible before VS Code has
     // published its first active row. Set the same default a user sees in the
     // native list so a keyboard accept has a deterministic single-select item.
-    if (!picker.canSelectMany && questionItems.length > 0) {
-      picker.activeItems = [questionItems[0]]
+    const firstQuestionItem = questionItems[0]
+    if (!picker.canSelectMany && firstQuestionItem !== undefined) {
+      picker.activeItems = [firstQuestionItem]
     }
     let done = false
     const subscriptions: vscode.Disposable[] = []
