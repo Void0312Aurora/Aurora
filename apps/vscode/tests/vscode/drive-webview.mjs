@@ -204,6 +204,15 @@ async function driveQuestionRound(browser, frame, options) {
   const question = await findNativeQuestion(browser)
   const snapshot = await captureStableSnapshot(question, options.temporary)
   await writeFile(options.milestone, JSON.stringify({ prompt: PROMPT, snapshot, workspacePicker }))
+  // Submit through the visible native control. This exercises the same
+  // QuickPick event path a user uses, while avoiding the panel's workbench
+  // command-focus context (which is not shared with a WebviewPanel).
+  const answer = question.getByRole('option', { name: 'Yes', exact: true })
+  await question.getByRole('textbox').press('Enter')
+  if (await question.isVisible().catch(() => false)) {
+    await answer.click()
+    if (await question.isVisible().catch(() => false)) await question.press('Enter')
+  }
   // The chat keeps virtualized copies of prior content mounted but hidden.
   // Scope completion to the visible markdown paragraph instead of relying on
   // DOM order, which differs between the pinned CI VS Code and local builds.
