@@ -9,6 +9,7 @@ class FakeControl<T extends vscode.QuickPickItem = vscode.QuickPickItem> {
   placeholder: string | undefined
   prompt: string | undefined
   validationMessage: string | undefined
+  ignoreFocusOut = false
   value = ''
   canSelectMany = false
   items: readonly T[] = []
@@ -76,6 +77,7 @@ describe('createNativeUi', () => {
     const ui = createNativeUi(fake.window)
     const abort = new AbortController()
     const result = ui.askQuestions([{ id: 'q1', question: 'Choose', options: [{ label: 'A' }] }], abort.signal)
+    expect(fake.quickPicks[0]?.ignoreFocusOut).toBe(true)
     abort.abort()
     await expect(result).resolves.toBeUndefined()
     expect(fake.quickPicks[0]?.hide).toHaveBeenCalledTimes(1)
