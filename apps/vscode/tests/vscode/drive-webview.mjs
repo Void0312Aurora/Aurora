@@ -212,6 +212,10 @@ async function driveQuestionRound(browser, frame, options) {
     .find(page => page.url().startsWith('vscode-file://'))
   if (!workbench) throw new Error('VS Code workbench page not found while answering native question')
   await workbench.bringToFront()
+  // VS Code's WebviewElement defers focus restoration by 50ms. Let that
+  // handoff settle before focusing the QuickPick input, otherwise the
+  // workbench can route Enter back to the panel in older builds.
+  await delay(100)
   await question.getByRole('textbox').focus()
   await workbench.keyboard.press('Enter')
   // The chat keeps virtualized copies of prior content mounted but hidden.
