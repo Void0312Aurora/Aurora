@@ -98,16 +98,6 @@ function lastRichTurnSnapshot(snapshot, prompt) {
 }
 
 async function waitForNativeQuestionAnswer(sessionsRoot, expectedResults) {
-  const deadline = Date.now() + 30_000
-  while (Date.now() < deadline) {
-    const logs = await sessionEventLogs(sessionsRoot)
-    if (toolResultCount(logs) >= expectedResults) return
-    // VS Code 1.125 exposes the generic Quick Input accept command for
-    // extension-owned QuickPick controls. The older Quick Open command does
-    // not target a WebviewPanel's native question picker.
-    await vscode.commands.executeCommand('quickInput.accept').catch(() => undefined)
-    await delay(100)
-  }
   await waitForSessionEvents(
     sessionsRoot,
     logs => toolResultCount(logs) >= expectedResults,
