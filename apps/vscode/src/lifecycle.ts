@@ -20,7 +20,7 @@ export interface RuntimeLifecycleOptions {
   /** Create one fresh managed-server generation. */
   createRuntime: () => ManagedServer
   /** Start native consumers after the runtime publishes a ready origin. */
-  startNative: () => void
+  startNative: () => void | Promise<void>
   /** Stop native consumers before their server generation is disposed. */
   stopNative: () => void
   /** Report a startup failure that still belongs to the current generation. */
@@ -67,7 +67,7 @@ export class RuntimeLifecycle {
       // not start them before runtime.start() publishes that origin: an early
       // stream attempt has no endpoint and can miss the first interaction
       // frame while the server is still booting.
-      if (this.owns(current)) this.options.startNative()
+      if (this.owns(current)) await this.options.startNative()
     } catch (error) {
       // A restart or deactivate may dispose a generation while start awaits
       // readiness. Its rejection belongs to teardown, not the replacement.
