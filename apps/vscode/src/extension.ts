@@ -44,6 +44,20 @@ function panelAssets(webview: vscode.Webview, extensionUri: vscode.Uri): Paramet
 
 let lifecycle: RuntimeLifecycle | undefined
 let panel: vscode.WebviewPanel | undefined
+let panelWebviewReady = false
+let hostReady = false
+
+/** Deliver host readiness once the current panel has installed its listener. */
+function postHostReady(): void {
+  if (hostReady && panelWebviewReady) void panel?.webview.postMessage({ type: 'dsh-host-ready' })
+}
+
+/** Message sent by the webview before it starts the client graph. */
+interface WebviewReadyMessage {
+  type: 'dsh-webview-ready'
+}
+
+type PanelMessage = BridgeRequestMessage | WebviewReadyMessage
 
 /** Working directory for the managed server: the window's first workspace folder. */
 function workspaceCwd(): string | undefined {
@@ -217,8 +231,13 @@ function ensureLifecycle(context: vscode.ExtensionContext, output: vscode.Output
     startNative: () => {
       ensureInteractions(output)
       ensureContextFeed(output)
+      hostReady = true
+      postHostReady()
     },
-    stopNative: disposeNativeLayer,
+    stopNative: () => {
+      hostReady = false
+      disposeNativeLayer()
+    },
     onStartFailure: (error) => {
       const message = error instanceof Error ? error.message : String(error)
       logRuntime(`dsh web failed to start: ${message}`)
@@ -239,6 +258,7 @@ function openPanel(context: vscode.ExtensionContext, output: vscode.OutputChanne
     return
   }
 
+  panelWebviewReady = false
   const created = vscode.window.createWebviewPanel(
     'dshPanel',
     'DeepSeek Harness',
@@ -260,14 +280,25 @@ function openPanel(context: vscode.ExtensionContext, output: vscode.OutputChanne
       if (sessionId !== undefined) await feed?.beforeFirstPrompt(sessionId)
     },
   })
-  created.webview.html = panelHtml(panelAssets(created.webview, context.extensionUri))
-  const receiving = created.webview.onDidReceiveMessage((message: BridgeRequestMessage) => {
+  // Install the receiver before assigning HTML so the webview-ready signal
+  // cannot be lost if a cached panel document loads synchronously.
+  const receiving = created.webview.onDidReceiveMessage((message: PanelMessage) => {
+    if (message.type === 'dsh-webview-ready') {
+      panelWebviewReady = true
+      postHostReady()
+      return
+    }
     bridge.handle(message)
   })
+  created.webview.html = panelHtml(panelAssets(created.webview, context.extensionUri))
+  postHostReady()
   created.onDidDispose(() => {
     receiving.dispose()
     bridge.dispose()
-    if (panel === created) panel = undefined
+    if (panel === created) {
+      panel = undefined
+      panelWebviewReady = false
+    }
   })
 }
 

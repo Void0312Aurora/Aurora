@@ -14,16 +14,34 @@ import type {
 } from '@deepseek-ai/dsh-client-connection/client'
 import { staticBootGraph, staticPlugins } from './roster.ts'
 
+/** Signals exchanged around client boot so the bridge never races the host. */
+interface WebviewReadyMessage {
+  type: 'dsh-webview-ready'
+}
+
+interface WebviewHostReadyMessage {
+  type: 'dsh-host-ready'
+}
+
+type PanelMessage = BridgeResponseMessage | WebviewHostReadyMessage
+
 /** The VS Code webview messaging face (acquireVsCodeApi is call-once). */
 interface VsCodeWebviewApi {
-  postMessage(message: BridgeRequestMessage): void
+  postMessage(message: BridgeRequestMessage | WebviewReadyMessage): void
 }
 
 declare function acquireVsCodeApi(): VsCodeWebviewApi
 
 const vscodeApi = acquireVsCodeApi()
 const listeners = new Set<(message: BridgeResponseMessage) => void>()
-window.addEventListener('message', (event: MessageEvent<BridgeResponseMessage>) => {
+let resolveHostReady: (() => void) | undefined
+const hostReady = new Promise<void>((resolve) => { resolveHostReady = resolve })
+window.addEventListener('message', (event: MessageEvent<PanelMessage>) => {
+  if (event.data?.type === 'dsh-host-ready') {
+    resolveHostReady?.()
+    resolveHostReady = undefined
+    return
+  }
   for (const listener of [...listeners]) listener(event.data)
 })
 
@@ -38,6 +56,11 @@ globalThis.__DSH_WEBVIEW_BRIDGE__ = {
 }
 ;(globalThis as unknown as DshWindow).__DSH_BOOT__ = staticBootGraph()
 
+// The extension host responds with dsh-host-ready only after its managed
+// server is accepting HTTP. Keeping this handshake before AppWebEntry boots
+// removes the initial connection-lost/retry race from panel startup.
+vscodeApi.postMessage({ type: 'dsh-webview-ready' })
+
 const root = document.getElementById('root')
 if (root === null) throw new Error('dsh webview: #root missing from the panel HTML')
-void new AppWebEntry(root, { staticPlugins }).run()
+void hostReady.then(() => new AppWebEntry(root, { staticPlugins }).run())
