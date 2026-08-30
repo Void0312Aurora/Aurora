@@ -74,7 +74,7 @@ function pickQuestion(
     picker.title = item.question
     if (item.detail !== undefined) picker.placeholder = item.detail
     picker.canSelectMany = item.multiSelect ?? false
-    picker.items = [
+    const questionItems: QuestionItem[] = [
       ...(item.options ?? []).map(option => ({
         answerKind: 'option' as const,
         label: option.label,
@@ -83,6 +83,13 @@ function pickQuestion(
       { answerKind: 'custom', label: 'Other…', description: 'Enter a custom answer' },
       { answerKind: 'skip', label: 'Skip', description: 'Answer without a selection' },
     ]
+    picker.items = questionItems
+    // A QuickPick shown from a WebviewPanel can be visible before VS Code has
+    // published its first active row. Set the same default a user sees in the
+    // native list so a keyboard accept has a deterministic single-select item.
+    if (!picker.canSelectMany && questionItems.length > 0) {
+      picker.activeItems = [questionItems[0]]
+    }
     let done = false
     const subscriptions: vscode.Disposable[] = []
     const settle = (selected: QuestionPick | undefined): void => {

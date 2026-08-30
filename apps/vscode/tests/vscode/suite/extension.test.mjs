@@ -107,9 +107,6 @@ async function waitForNativeQuestionAnswer(sessionsRoot, expectedResults) {
     // focusing the workbench control keeps this a native-host interaction and
     // avoids pointer-driven hide-only behavior.
     await vscode.commands.executeCommand('workbench.action.focusQuickOpen').catch(() => undefined)
-    // Move through the active item once so VS Code materializes a selection;
-    // accepting with no selectedItems only updates the picker placeholder.
-    await vscode.commands.executeCommand('workbench.action.quickOpenSelectNext').catch(() => undefined)
     await vscode.commands.executeCommand('workbench.action.acceptSelectedQuickOpenItem').catch(() => undefined)
     await delay(100)
   }

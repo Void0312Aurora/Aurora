@@ -172,7 +172,7 @@ describe('createNativeUi', () => {
     const picker = fake.quickPicks[0]
     const option = picker?.items.find(item => item.label === 'A')
     if (picker === undefined || option === undefined) throw new Error('expected option')
-    picker.activeItems = [option]
+    expect(picker.activeItems).toEqual([option])
     picker.fireAccept()
     await expect(result).resolves.toEqual({ answers: [{ id: 'q1', selected: ['A'] }] })
   })
