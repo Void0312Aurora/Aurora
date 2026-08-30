@@ -97,7 +97,13 @@ function pickQuestion(
     const onAbort = (): void => { settle(undefined) }
     subscriptions.push(
       picker.onDidAccept(() => {
-        const picked = picker.selectedItems
+        // For a single-select Quick Pick, the workbench's accept command can
+        // fire with no selectedItems while the active row is already the
+        // user's choice. Treat that active row as the selection; multi-select
+        // remains explicit and must use selectedItems.
+        const picked = picker.canSelectMany || picker.selectedItems.length > 0
+          ? picker.selectedItems
+          : picker.activeItems
         const skip = picked.some(selected => selected.answerKind === 'skip')
         if (skip && picked.length > 1) {
           picker.placeholder = 'Skip cannot be combined with another answer.'

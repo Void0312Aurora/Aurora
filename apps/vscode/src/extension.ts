@@ -11,7 +11,7 @@ import type { BridgeRequestMessage } from '@deepseek-ai/dsh-client-connection/cl
 import { ActiveSessionTracker } from './active-session.ts'
 import { ApiBridge } from './bridge.ts'
 import { IdeContextFeed } from './context-feed.ts'
-import { LoopbackApiClient } from './host-client.ts'
+import { LoopbackApiClient, verifyHostProtocol } from './host-client.ts'
 import type { EditorState, IdeDiagnostic } from './ide-context.ts'
 import { NativeInteractions } from './interactions.ts'
 import { RuntimeLifecycle } from './lifecycle.ts'
@@ -44,6 +44,38 @@ function panelAssets(webview: vscode.Webview, extensionUri: vscode.Uri): Paramet
 
 let lifecycle: RuntimeLifecycle | undefined
 let panel: vscode.WebviewPanel | undefined
+let panelWebviewReady = false
+let hostReady = false
+let nativeStarted = false
+let nativeEpoch = 0
+
+/** Deliver host readiness once the current panel has installed its listener. */
+function postHostReady(): void {
+  if (hostReady && panelWebviewReady) void panel?.webview.postMessage({ type: 'dsh-host-ready' })
+}
+
+/** Start native consumers only after the managed host passes its protocol gate. */
+async function startNativeLayer(output: vscode.OutputChannel): Promise<void> {
+  if (nativeStarted) return
+  const epoch = nativeEpoch
+  const check = await verifyHostProtocol(new LoopbackApiClient(currentOrigin))
+  if (epoch !== nativeEpoch) return
+  if (!check.ok) {
+    throw new Error(`incompatible dsh host: ${check.reason}`)
+  }
+  ensureInteractions(output)
+  ensureContextFeed(output)
+  nativeStarted = true
+  hostReady = true
+  postHostReady()
+}
+
+/** Message sent by the webview before it starts the client graph. */
+interface WebviewReadyMessage {
+  type: 'dsh-webview-ready'
+}
+
+type PanelMessage = BridgeRequestMessage | WebviewReadyMessage
 
 /** Working directory for the managed server: the window's first workspace folder. */
 function workspaceCwd(): string | undefined {
@@ -188,6 +220,9 @@ function disposeContextFeed(): void {
 
 /** Tear down both native consumers before their server generation. */
 function disposeNativeLayer(): void {
+  nativeEpoch++
+  nativeStarted = false
+  hostReady = false
   interactions?.dispose()
   interactions = undefined
   disposeContextFeed()
@@ -214,10 +249,7 @@ function ensureLifecycle(context: vscode.ExtensionContext, output: vscode.Output
         },
       })
     },
-    startNative: () => {
-      ensureInteractions(output)
-      ensureContextFeed(output)
-    },
+    startNative: () => startNativeLayer(output),
     stopNative: disposeNativeLayer,
     onStartFailure: (error) => {
       const message = error instanceof Error ? error.message : String(error)
@@ -239,6 +271,7 @@ function openPanel(context: vscode.ExtensionContext, output: vscode.OutputChanne
     return
   }
 
+  panelWebviewReady = false
   const created = vscode.window.createWebviewPanel(
     'dshPanel',
     'DeepSeek Harness',
@@ -260,14 +293,25 @@ function openPanel(context: vscode.ExtensionContext, output: vscode.OutputChanne
       if (sessionId !== undefined) await feed?.beforeFirstPrompt(sessionId)
     },
   })
-  created.webview.html = panelHtml(panelAssets(created.webview, context.extensionUri))
-  const receiving = created.webview.onDidReceiveMessage((message: BridgeRequestMessage) => {
+  // Install the receiver before assigning HTML so the webview-ready signal
+  // cannot be lost if a cached panel document loads synchronously.
+  const receiving = created.webview.onDidReceiveMessage((message: PanelMessage) => {
+    if (message.type === 'dsh-webview-ready') {
+      panelWebviewReady = true
+      postHostReady()
+      return
+    }
     bridge.handle(message)
   })
+  created.webview.html = panelHtml(panelAssets(created.webview, context.extensionUri))
+  postHostReady()
   created.onDidDispose(() => {
     receiving.dispose()
     bridge.dispose()
-    if (panel === created) panel = undefined
+    if (panel === created) {
+      panel = undefined
+      panelWebviewReady = false
+    }
   })
 }
 

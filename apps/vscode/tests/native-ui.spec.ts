@@ -12,6 +12,7 @@ class FakeControl<T extends vscode.QuickPickItem = vscode.QuickPickItem> {
   value = ''
   canSelectMany = false
   items: readonly T[] = []
+  activeItems: readonly T[] = []
   selectedItems: readonly T[] = []
   readonly show = vi.fn()
   readonly hide = vi.fn(() => { this.fireHide() })
@@ -162,6 +163,18 @@ describe('createNativeUi', () => {
       { id: 'q1', selected: ['A'] },
       { id: 'q2', selected: [] },
     ] })
+  })
+
+  it('uses the active row when a single-select accept has no selectedItems', async () => {
+    const fake = fakeWindow()
+    const ui = createNativeUi(fake.window)
+    const result = ui.askQuestions([{ id: 'q1', question: 'Choose', options: [{ label: 'A' }] }], new AbortController().signal)
+    const picker = fake.quickPicks[0]
+    const option = picker?.items.find(item => item.label === 'A')
+    if (picker === undefined || option === undefined) throw new Error('expected option')
+    picker.activeItems = [option]
+    picker.fireAccept()
+    await expect(result).resolves.toEqual({ answers: [{ id: 'q1', selected: ['A'] }] })
   })
 
   it('supports multi selected-only and multi custom-only answers in order', async () => {
