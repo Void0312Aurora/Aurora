@@ -90,13 +90,6 @@ function pickQuestion(
       { answerKind: 'skip', label: 'Skip', description: 'Answer without a selection' },
     ]
     picker.items = questionItems
-    // A QuickPick shown from a WebviewPanel can be visible before VS Code has
-    // published its first active row. Set the same default a user sees in the
-    // native list so a keyboard accept has a deterministic single-select item.
-    const firstQuestionItem = questionItems[0]
-    if (!picker.canSelectMany && firstQuestionItem !== undefined) {
-      picker.activeItems = [firstQuestionItem]
-    }
     let done = false
     const subscriptions: vscode.Disposable[] = []
     const settle = (selected: QuestionPick | undefined): void => {
@@ -136,7 +129,17 @@ function pickQuestion(
     )
     signal.addEventListener('abort', onAbort, { once: true })
     if (signal.aborted) onAbort()
-    else picker.show()
+    else {
+      picker.show()
+      // A QuickPick shown from a WebviewPanel can be visible before VS Code
+      // has published its first active row. Set the same default a user sees
+      // in the native list after show() so older workbench builds apply the
+      // focus update while the picker is already visible.
+      const firstQuestionItem = questionItems[0]
+      if (!picker.canSelectMany && firstQuestionItem !== undefined) {
+        picker.activeItems = [firstQuestionItem]
+      }
+    }
   })
 }
 
