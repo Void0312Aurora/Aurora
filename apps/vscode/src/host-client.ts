@@ -8,6 +8,7 @@
  */
 
 import { AbstractApiClient } from '@deepseek-ai/dsh-host-apiproxy/client'
+import { API_PROTOCOL_VERSION } from '@deepseek-ai/dsh-host-apiproxy/api'
 
 /** Wire client whose base origin follows the managed server across restarts. */
 export class LoopbackApiClient extends AbstractApiClient {
@@ -26,4 +27,32 @@ export class LoopbackApiClient extends AbstractApiClient {
   protected doFetch(input: URL, init?: RequestInit): Promise<Response> {
     return fetch(input, init)
   }
+}
+
+/** Outcome of the independently released extension/host protocol probe. */
+export type ProtocolCheck =
+  | { ok: true; hostVersion: string }
+  | { ok: false; reason: string }
+
+/**
+ * Verify the host wire version before opening native event streams. The
+ * extension can reach a user-selected DSH_BIN, so a ready HTTP port alone is
+ * not sufficient to establish that the native client and host agree.
+ * @param client - a loopback client whose origin is already ready.
+ * @param signal - optional cancellation signal.
+ * @returns the compatibility result.
+ */
+export async function verifyHostProtocol(
+  client: Pick<AbstractApiClient, 'host'>,
+  signal?: AbortSignal,
+): Promise<ProtocolCheck> {
+  const response = await client.host.describe({}, signal)
+  if (!response.result.ok) {
+    return { ok: false, reason: `host.describe failed: ${response.result.error.code}` }
+  }
+  const { protocolVersion, version } = response.result.value
+  if (protocolVersion !== API_PROTOCOL_VERSION) {
+    return { ok: false, reason: `host protocolVersion ${String(protocolVersion)} != client ${API_PROTOCOL_VERSION}` }
+  }
+  return { ok: true, hostVersion: version }
 }

@@ -11,7 +11,7 @@ import type { BridgeRequestMessage } from '@deepseek-ai/dsh-client-connection/cl
 import { ActiveSessionTracker } from './active-session.ts'
 import { ApiBridge } from './bridge.ts'
 import { IdeContextFeed } from './context-feed.ts'
-import { LoopbackApiClient } from './host-client.ts'
+import { LoopbackApiClient, verifyHostProtocol } from './host-client.ts'
 import type { EditorState, IdeDiagnostic } from './ide-context.ts'
 import { NativeInteractions } from './interactions.ts'
 import { RuntimeLifecycle } from './lifecycle.ts'
@@ -46,10 +46,28 @@ let lifecycle: RuntimeLifecycle | undefined
 let panel: vscode.WebviewPanel | undefined
 let panelWebviewReady = false
 let hostReady = false
+let nativeStarted = false
+let nativeEpoch = 0
 
 /** Deliver host readiness once the current panel has installed its listener. */
 function postHostReady(): void {
   if (hostReady && panelWebviewReady) void panel?.webview.postMessage({ type: 'dsh-host-ready' })
+}
+
+/** Start native consumers only after the managed host passes its protocol gate. */
+async function startNativeLayer(output: vscode.OutputChannel): Promise<void> {
+  if (nativeStarted) return
+  const epoch = nativeEpoch
+  const check = await verifyHostProtocol(new LoopbackApiClient(currentOrigin))
+  if (epoch !== nativeEpoch) return
+  if (!check.ok) {
+    throw new Error(`incompatible dsh host: ${check.reason}`)
+  }
+  ensureInteractions(output)
+  ensureContextFeed(output)
+  nativeStarted = true
+  hostReady = true
+  postHostReady()
 }
 
 /** Message sent by the webview before it starts the client graph. */
@@ -202,6 +220,9 @@ function disposeContextFeed(): void {
 
 /** Tear down both native consumers before their server generation. */
 function disposeNativeLayer(): void {
+  nativeEpoch++
+  nativeStarted = false
+  hostReady = false
   interactions?.dispose()
   interactions = undefined
   disposeContextFeed()
@@ -228,16 +249,8 @@ function ensureLifecycle(context: vscode.ExtensionContext, output: vscode.Output
         },
       })
     },
-    startNative: () => {
-      ensureInteractions(output)
-      ensureContextFeed(output)
-      hostReady = true
-      postHostReady()
-    },
-    stopNative: () => {
-      hostReady = false
-      disposeNativeLayer()
-    },
+    startNative: () => startNativeLayer(output),
+    stopNative: disposeNativeLayer,
     onStartFailure: (error) => {
       const message = error instanceof Error ? error.message : String(error)
       logRuntime(`dsh web failed to start: ${message}`)
