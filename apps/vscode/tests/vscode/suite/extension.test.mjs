@@ -98,6 +98,21 @@ function lastRichTurnSnapshot(snapshot, prompt) {
 }
 
 async function waitForNativeQuestionAnswer(sessionsRoot, expectedResults) {
+  const deadline = Date.now() + 30_000
+  while (Date.now() < deadline) {
+    const logs = await sessionEventLogs(sessionsRoot)
+    if (toolResultCount(logs) >= expectedResults) return
+    // Focus the Quick Pick before accepting it. The pinned VS Code build does
+    // not dispatch QuickPick.onDidAccept for an unfocused accept command;
+    // focusing the workbench control keeps this a native-host interaction and
+    // avoids pointer-driven hide-only behavior.
+    await vscode.commands.executeCommand('workbench.action.focusQuickOpen').catch(() => undefined)
+    // Move through the active item once so VS Code materializes a selection;
+    // accepting with no selectedItems only updates the picker placeholder.
+    await vscode.commands.executeCommand('workbench.action.quickOpenSelectNext').catch(() => undefined)
+    await vscode.commands.executeCommand('workbench.action.acceptSelectedQuickOpenItem').catch(() => undefined)
+    await delay(100)
+  }
   await waitForSessionEvents(
     sessionsRoot,
     logs => toolResultCount(logs) >= expectedResults,

@@ -37,9 +37,6 @@ function confirmApproval(
     const picker = window.createQuickPick<ApprovalItem>()
     picker.title = `DeepSeek Harness wants to run ${prompt.toolName}`
     picker.placeholder = approvalDetail(prompt)
-    // WebviewPanel focus restoration is asynchronous in VS Code. Without
-    // this guard it can blur and dismiss a still-pending native prompt.
-    picker.ignoreFocusOut = true
     picker.items = [
       { label: 'Allow once', description: 'Run this operation once', outcome: 'allowed-once' },
       { label: 'Reject', description: 'Do not run this operation', outcome: 'rejected' },
@@ -77,10 +74,7 @@ function pickQuestion(
     picker.title = item.question
     if (item.detail !== undefined) picker.placeholder = item.detail
     picker.canSelectMany = item.multiSelect ?? false
-    // Keep the prompt alive while the panel's iframe completes its focus
-    // handoff; the user can still dismiss it explicitly with Escape.
-    picker.ignoreFocusOut = true
-    const questionItems: QuestionItem[] = [
+    picker.items = [
       ...(item.options ?? []).map(option => ({
         answerKind: 'option' as const,
         label: option.label,
@@ -89,7 +83,6 @@ function pickQuestion(
       { answerKind: 'custom', label: 'Other…', description: 'Enter a custom answer' },
       { answerKind: 'skip', label: 'Skip', description: 'Answer without a selection' },
     ]
-    picker.items = questionItems
     let done = false
     const subscriptions: vscode.Disposable[] = []
     const settle = (selected: QuestionPick | undefined): void => {
@@ -129,17 +122,7 @@ function pickQuestion(
     )
     signal.addEventListener('abort', onAbort, { once: true })
     if (signal.aborted) onAbort()
-    else {
-      picker.show()
-      // A QuickPick shown from a WebviewPanel can be visible before VS Code
-      // has published its first active row. Set the same default a user sees
-      // in the native list after show() so older workbench builds apply the
-      // focus update while the picker is already visible.
-      const firstQuestionItem = questionItems[0]
-      if (!picker.canSelectMany && firstQuestionItem !== undefined) {
-        picker.activeItems = [firstQuestionItem]
-      }
-    }
+    else picker.show()
   })
 }
 

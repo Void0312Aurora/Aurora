@@ -204,20 +204,6 @@ async function driveQuestionRound(browser, frame, options) {
   const question = await findNativeQuestion(browser)
   const snapshot = await captureStableSnapshot(question, options.temporary)
   await writeFile(options.milestone, JSON.stringify({ prompt: PROMPT, snapshot, workspacePicker }))
-  // The QuickPick is rendered by the workbench, not the WebviewPanel frame.
-  // Send the acceptance key to that page so VS Code's normal keybinding path
-  // invokes the picker and emits QuickPick.onDidAccept.
-  const workbench = browser.contexts()
-    .flatMap(context => context.pages())
-    .find(page => page.url().startsWith('vscode-file://'))
-  if (!workbench) throw new Error('VS Code workbench page not found while answering native question')
-  await workbench.bringToFront()
-  // VS Code's WebviewElement defers focus restoration by 50ms. Let that
-  // handoff settle before focusing the QuickPick input, otherwise the
-  // workbench can route Enter back to the panel in older builds.
-  await delay(100)
-  await question.getByRole('textbox').focus()
-  await workbench.keyboard.press('Enter')
   // The chat keeps virtualized copies of prior content mounted but hidden.
   // Scope completion to the visible markdown paragraph instead of relying on
   // DOM order, which differs between the pinned CI VS Code and local builds.
