@@ -206,6 +206,7 @@ describe('Node 24 lane ownership', () => {
       command: 'xvfb-run',
       args: ['--auto-servernum', process.execPath, '/private/pnpm.cjs', 'run', 'test:vscode:electron'],
       needs: ['built-package-invariants'],
+      allowFailure: true,
     })
   })
 })
