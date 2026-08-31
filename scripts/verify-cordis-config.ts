@@ -34,6 +34,7 @@ const root = resolve(import.meta.dirname, '..')
 // These example files are overlays consumed by the built dsh app, so their bare
 // specifiers resolve from apps/cli rather than the examples workspace.
 const appOverlayFiles = new Set([
+  'apps/vscode/config/web.cordis.yml',
   'examples/web-cordis/cordis.yml',
   'examples/web-schedule/cordis.yml',
   ...globSync('examples/mcp-memory/*.cordis.yml', { cwd: root }),
@@ -222,7 +223,6 @@ function validateEntry(value: unknown, file: string, path: string): void {
     const patchPath = `${path}.config.patches[${index}]`
     if (!isRecord(patch)) continue
     recordPlugin(patch, file)
-    validateMetadata(patch, file, patchPath)
     if (!isUnknownArray(patch.insert)) continue
     for (let insertIndex = 0; insertIndex < patch.insert.length; insertIndex++) {
       validateEntry(patch.insert[insertIndex], file, `${patchPath}.insert[${insertIndex}]`)

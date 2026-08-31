@@ -203,9 +203,9 @@ export interface ClientModuleLoader {
    */
   import(specifier: string, parentURL: string, attrs: Record<string, unknown>): Promise<unknown>
   /**
-   * Register a shell-own module (app-shell — code that ships inside the shell
-   * bundle and never arrives as a plugin bundle).
-   * @param id - entry name (shell-owned pseudo id).
+   * Register a statically supplied module. Kernel modules ship inside the
+   * shell; an embedder may instead supply a validated host-graph row.
+   * @param id - kernel pseudo id or host-graph entry name.
    * @param module - the statically imported module namespace.
    */
   registerStatic(id: string, module: unknown): void

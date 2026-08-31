@@ -372,6 +372,17 @@ export interface SessionsApi {
   Promise<RpcResponse<{ attachment: ImageAttachmentRef; data: string }>>
 
   /**
+   * Appends model-facing context to an ordinary session without waking the
+   * model (`Agent.inject` on the wire): the content becomes a durable
+   * `user/message` with the `ide-context` source that the next admitted step
+   * drains; on an idle session it appends immediately without opening a turn.
+   * Never dispatches slash commands. Session-backed subagents reject with
+   * `agent-busy`.
+   */
+  injectContext(request: RpcRequest<{ sessionId: SessionId; content: ContentBlock[] }>):
+  Promise<RpcResponse<{ accepted: true }>>
+
+  /**
    * Edits, removes, or strictly steers one pending queued occurrence on an ordinary session.
    * Session-backed subagents reject with `agent-busy`.
    */

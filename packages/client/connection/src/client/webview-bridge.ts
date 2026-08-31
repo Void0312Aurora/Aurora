@@ -8,7 +8,7 @@
  * SSE streams alike.
  */
 
-import { AbstractApiClient } from './api.ts'
+import { AbstractApiClient, API_PROTOCOL_VERSION } from './api.ts'
 
 /** Webview → extension host: one request start, or the abort of one in flight. */
 export type BridgeRequestMessage =
@@ -35,6 +35,11 @@ export type BridgeResponseMessage =
 export type BridgeMessageParseResult<T> =
   | { ok: true; message: T }
   | { ok: false; id?: number; reason: string }
+
+/** Result of the webview's pre-boot host protocol handshake. */
+export type WebviewProtocolCheck =
+  | { ok: true; hostVersion: string }
+  | { ok: false; reason: string }
 
 function recordOf(value: unknown): Record<string, unknown> | undefined {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -275,5 +280,38 @@ export class PostMessageApiClient extends AbstractApiClient {
         fail(error instanceof Error ? error : new Error(String(error)))
       }
     })
+  }
+}
+
+/**
+ * Probe an embedder bridge before the client plugin graph starts. Only
+ * `host.describe` crosses the port during this check; callers must not publish
+ * the port to the connection plugin unless the versions match.
+ * @param port - the embedder bridge port.
+ * @param signal - optional cancellation for the handshake.
+ * @returns compatibility with this client's API protocol.
+ */
+export async function verifyWebviewBridgeProtocol(
+  port: WebviewBridgePort,
+  signal?: AbortSignal,
+): Promise<WebviewProtocolCheck> {
+  try {
+    const response = await new PostMessageApiClient(port).host.describe({}, signal)
+    if (!response.result.ok) {
+      return { ok: false, reason: `host.describe failed: ${response.result.error.code}` }
+    }
+    const { protocolVersion, version } = response.result.value
+    if (protocolVersion !== API_PROTOCOL_VERSION) {
+      return {
+        ok: false,
+        reason: `host protocolVersion ${String(protocolVersion)} != client ${String(API_PROTOCOL_VERSION)}`,
+      }
+    }
+    return { ok: true, hostVersion: version }
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `host.describe returned an incompatible response: ${error instanceof Error ? error.message : String(error)}`,
+    }
   }
 }

@@ -1,0 +1,47 @@
+- banner:
+  - navigation "Session hierarchy":
+    - button "Use the ask_user_question tool to" [disabled]
+  - tablist:
+    - tab "Chat" [selected]
+    - tab "Trajectory"
+- button "Context injection":
+  - img
+  - img
+  - text: Context injection
+- text: Use the ask_user_question tool to ask me exactly one question with id "checkpoint", question "Ready to continue?", header "Checkpoint", and options labeled "Yes" and "No". After I answer, reply with one short sentence acknowledging my answer and stop. {{clock}}
+- button "Copy":
+  - img
+- button "Branch into a new conversation" [disabled]:
+  - img
+- text: Available only on the last message of a completed turn
+- button "Context injection":
+  - img
+  - img
+  - text: Context injection
+- button "Think The user wants me to use the ask_user_question tool to ask them a specific question with the given parameters. Let me do exactly that.":
+  - img
+  - img
+  - text: Think The user wants me to use the ask_user_question tool to ask them a specific question with the given parameters. Let me do exactly that.
+- button "Ask question 1/1 answered":
+  - img
+  - img
+  - text: Ask question 1/1 answered
+- button "Think The user selected \"Yes\" and wants me to include the word \"BANANA\" in my final reply. Let me acknowledge their answer.":
+  - img
+  - img
+  - text: Think The user selected "Yes" and wants me to include the word "BANANA" in my final reply. Let me acknowledge their answer.
+- paragraph: Great, let's move forward. BANANA!
+- button "Copy":
+  - img
+- button "Branch into a new conversation":
+  - img
+- text: {{clock}}
+- textbox "Message the agent"
+- button "Commands":
+  - img
+- 'button "Access mode, current: Full access"': Full access
+- button "Select model, current deepseek-v4-flash":
+  - text: deepseek-v4-flash
+  - img
+- button "Send message" [disabled]
+- text: 1 turns · 2 steps Tool call {{duration}} Cache hit 98% Input 15.8K tok · Output 156 tok

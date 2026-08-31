@@ -376,9 +376,10 @@ function dynamicToken(name: string): ThemeTokenInspection {
 export const inject = ['slots', 'locale', 'connection', 'remote', 'settingsScope']
 
 /**
- * Client plugin body: provide the theme service and register the
- * feature-owned Appearance preference row into the General section's item
- * slot (a feature owns its settings surface).
+ * Client plugin body: provide the theme service, seat the presenter that puts
+ * resolved snapshots on the document, and register the feature-owned
+ * Appearance preference row into the General section's item slot (a feature
+ * owns its settings surface).
  * @param ctx - client cordis context.
  */
 export function apply(ctx: ClientContext): void {

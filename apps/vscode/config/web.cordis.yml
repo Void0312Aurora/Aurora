@@ -1,0 +1,8 @@
+# A VS Code webview cannot safely open a host OS chooser: the interaction
+# belongs inside the embedded panel. Replace the adaptive row with the browse
+# backend so the server capability and statically bundled client flow agree.
+- id: directory-picker
+  disabled: true
+- insert:
+    - id: vscode-directory-picker-browse
+      name: '@deepseek-ai/dsh-host-directory-picker-browse'

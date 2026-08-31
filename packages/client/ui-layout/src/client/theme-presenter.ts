@@ -7,7 +7,13 @@
  * DOM writes, no React involvement; the presenter only ever retracts what it
  * wrote itself, so foreign attributes, metadata, and inline styles survive.
  */
-import type { ThemeSnapshot } from '@deepseek-ai/dsh-client-ui-theme/client'
+/** Minimal resolved-theme shape consumed by the DOM presenter. */
+interface ThemeSnapshot {
+  active: {
+    colorScheme: 'light' | 'dark'
+    tokens: Record<string, string>
+  }
+}
 
 /** Body attribute selecting the dark base palette in the token stylesheets. */
 export const DARK_ATTRIBUTE = 'data-ds-dark-theme'

@@ -8,9 +8,9 @@ import { z } from 'zod'
 import {
   contentBlockSchema, sessionCancelRequestSchema, sessionCancelValueSchema, sessionCreateRequestSchema,
   sessionCreateValueSchema, sessionEventSchema, sessionHistoryRequestSchema, sessionHistoryValueSchema,
-  sessionIdSchema, sessionListRequestSchema, sessionListValueSchema, sessionModelsRequestSchema,
+  sessionIdSchema, sessionInjectContextRequestSchema, sessionInjectContextValueSchema,
+  sessionListRequestSchema, sessionListValueSchema, sessionModelsRequestSchema,
   sessionModelsValueSchema, sessionPromptRequestSchema, sessionPromptValueSchema,
-  sessionInjectContextRequestSchema, sessionInjectContextValueSchema,
   sessionSearchRequestSchema, sessionSearchValueSchema, sessionSelectModelRequestSchema,
   sessionSelectModelValueSchema, sessionSummarySchema,
   sessionUpdateQueueRequestSchema, sessionUpdateQueueValueSchema,
@@ -267,6 +267,11 @@ describe('sessions domain schemas', () => {
       sessionId: 's1', mode: 'queue', content: [],
     }).clientTimeZone).toBeUndefined()
     expect(() => sessionPromptRequestSchema.parse({ sessionId: 's1', mode: 'inject', content: [] })).toThrow()
+    const inject = sessionInjectContextRequestSchema.parse({ sessionId: 's1', content: [{ type: 'text', text: 'ctx' }] })
+    expect(inject.sessionId).toBe('s1')
+    // Context injection carries content only — no mode, and never an empty batch.
+    expect(() => sessionInjectContextRequestSchema.parse({ sessionId: 's1', content: [] })).toThrow()
+    expect(sessionInjectContextValueSchema.parse({ accepted: true }).accepted).toBe(true)
     expect(sessionPromptValueSchema.parse({ accepted: true }).accepted).toBe(true)
     // The command slot appears only when the prompt dispatched a slash command.
     const dispatched = sessionPromptValueSchema.parse({ accepted: true, command: { kind: 'success', text: 'Goal set' } })

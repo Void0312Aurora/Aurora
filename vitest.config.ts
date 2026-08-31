@@ -17,6 +17,10 @@ const uncoveredLocationsReporter = fileURLToPath(new URL('./scripts/coverage-unc
 // map applies to every test file. paths must win over package exports so built
 // lib/ never loads a second module-singleton copy.
 const pathsPlugin = (): ReturnType<typeof tsconfigPaths> => tsconfigPaths({ projects: ['./tsconfig.base.json'] })
+const sourceAliases = [{
+  find: /^@deepseek-ai\/dsh-host-directory-picker-browse\/client$/,
+  replacement: fileURLToPath(new URL('./packages/host/directory-picker-browse/src/client/index.ts', import.meta.url)),
+}]
 
 const windowsUnsupportedPackages = process.platform === 'win32'
   ? [
@@ -84,7 +88,8 @@ const pwshCoverageExclusions = spawnSync(resolvePwshPath(), ['-NoLogo', '-NoProf
 
 const testIncludes = [
   'packages/*/*/tests/**/*.spec.{ts,tsx}',
-  'apps/*/tests/**/*.spec.ts',
+  // .tsx: apps carry component specs too (the VS Code sidebar shell).
+  'apps/*/tests/**/*.spec.{ts,tsx}',
   'examples/*/tests/**/*.spec.ts',
   'scripts/**/*.spec.ts',
 ]
@@ -118,6 +123,9 @@ const processBoundTests = [
   'packages/subagent/subagent-acp/tests/subagent-acp.spec.ts',
   'packages/subprocess/subprocess-local/tests/process-exit.spec.ts',
   'packages/subprocess/subprocess-local/tests/spawn.spec.ts',
+  // cross-spawn's Windows PATH/PATHEXT resolution must run in a real process;
+  // a Vitest worker thread reports a false ENOENT for an existing .cmd shim.
+  'packages/util/web-launcher/tests/spawn.spec.ts',
   'packages/context/time-context/tests/time-context.spec.ts',
   'packages/llm/llm-pi-ai/tests/adapter.spec.ts',
   'packages/boot/app-boot/tests/app-boot.spec.ts',

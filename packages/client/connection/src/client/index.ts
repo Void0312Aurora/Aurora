@@ -45,8 +45,10 @@ export type {
   BridgeMessageParseResult,
   BridgeRequestMessage,
   BridgeResponseMessage,
+  WebviewProtocolCheck,
   WebviewBridgePort,
 } from './webview-bridge.ts'
+export { verifyWebviewBridgeProtocol } from './webview-bridge.ts'
 
 // Connection loop types are public through ConnectionHandle.start; the
 // controller remains package-internal.
@@ -72,7 +74,7 @@ export const inject: string[] = []
 export interface ConnectionHandle {
   /** Shared api client (fixture or real, decided at boot from the page URL). */
   readonly api: IApiClient
-  /** Whether the current page authority is loopback; non-browser contexts default to true. */
+  /** Whether the selected transport can use Host capabilities restricted to loopback clients. */
   readonly isLoopback: boolean
   /** Generation-scoped Host facts, including native path-open capability. */
   readonly hostDescription: HostDescriptionSource
@@ -91,6 +93,9 @@ export interface ConnectionHandle {
 
 /**
  * Client plugin body: pick the api by page mode and provide ctx.connection.
+ * Selection order: an embedder webview bridge port (filled by the hosting
+ * bootstrap before boot) wins, then the `?fixture` page switch, then the
+ * same-origin HTTP client.
  * @param ctx - client cordis context.
  */
 export function apply(ctx: Context): void {

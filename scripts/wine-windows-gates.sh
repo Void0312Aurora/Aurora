@@ -279,4 +279,8 @@ report 'build (Host tsc/tsdown, Client tsc/tsdown)' "$build_status" \
   "$scratch/logs/client-tsdown.log"
 report 'production site (vitepress build)' "$site_status" "$scratch/logs/site.log"
 if (( build_status != 0 )); then exit "$build_status"; fi
+shim_status=0
+wine_node "$scratch/logs/windows-command-shim.log" scripts/windows-command-shim-smoke.mjs || shim_status=$?
+report 'Windows command shim' "$shim_status" "$scratch/logs/windows-command-shim.log"
+if (( shim_status != 0 )); then exit "$shim_status"; fi
 exit "$site_status"

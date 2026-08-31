@@ -54,7 +54,7 @@ External packages that a workspace package resolves at runtime. The tier covers 
 | [`chokidar`](https://github.com/paulmillr/chokidar) | MIT |
 | [`clsx`](https://github.com/lukeed/clsx) | MIT |
 | [`commander`](https://github.com/tj/commander.js) | MIT |
-| [`cross-spawn`](https://github.com/git@github.com:moxystudio/node-cross-spawn) | MIT |
+| [`cross-spawn`](https://github.com/moxystudio/node-cross-spawn) | MIT |
 | [`diff`](https://github.com/kpdecker/jsdiff) | BSD-3-Clause |
 | [`e2b`](https://github.com/e2b-dev/e2b) | MIT |
 | [`eventsource-parser`](https://github.com/rexxars/eventsource-parser) | MIT |
@@ -124,7 +124,7 @@ External packages **directly declared** only by repository tooling, test infrast
 | [`@modelcontextprotocol/server-everything`](https://github.com/modelcontextprotocol/servers) | MIT / Apache-2.0 |
 | [`@modelcontextprotocol/server-filesystem`](https://github.com/modelcontextprotocol/servers) | MIT / Apache-2.0 |
 | [`@openai/codex`](https://github.com/openai/codex) | Apache-2.0 |
-| [`@resvg/resvg-js`](https://github.com/git@github.com:yisibl/resvg-js) | MPL-2.0 |
+| [`@resvg/resvg-js`](https://github.com/yisibl/resvg-js) | MPL-2.0 |
 | [`@stylistic/eslint-plugin`](https://github.com/eslint-stylistic/eslint-stylistic) | MIT |
 | [`@testing-library/dom`](https://github.com/testing-library/dom-testing-library) | MIT |
 | [`@testing-library/react`](https://github.com/testing-library/react-testing-library) | MIT |
@@ -142,6 +142,7 @@ External packages **directly declared** only by repository tooling, test infrast
 | [`@types/ws`](https://github.com/DefinitelyTyped/DefinitelyTyped) | MIT |
 | [`@vitejs/plugin-react`](https://github.com/vitejs/vite-plugin-react) | MIT |
 | [`@vitest/coverage-v8`](https://github.com/vitest-dev/vitest) | MIT |
+| [`@vscode/test-electron`](https://github.com/Microsoft/vscode-test) | MIT |
 | [`@vscode/vsce`](https://github.com/Microsoft/vsce) | MIT |
 | [`@yarnpkg/cli-dist`](https://github.com/yarnpkg/berry) | BSD-2-Clause |
 | [`cytoscape`](https://github.com/cytoscape/cytoscape.js) | MIT |
@@ -161,6 +162,7 @@ External packages **directly declared** only by repository tooling, test infrast
 | [`lefthook`](https://github.com/evilmartians/lefthook) | MIT |
 | [`lightningcss`](https://github.com/parcel-bundler/lightningcss) | MPL-2.0 |
 | [`mermaid`](https://github.com/mermaid-js/mermaid) | MIT |
+| [`mocha`](https://github.com/mochajs/mocha) | MIT |
 | [`oxlint`](https://github.com/oxc-project/oxc) | MIT |
 | [`oxlint-tsgolint`](https://github.com/oxc-project/tsgolint) | MIT |
 | [`playwright`](https://github.com/microsoft/playwright) | Apache-2.0 |

@@ -95,6 +95,7 @@ describe('minimal agent preset', () => {
       .map(block => block.text)
       .join('')
       .replaceAll(scaffold.workspaceCwd, '{{cwd}}')
+      .replaceAll('\\', '/')
       .trimEnd()
 
     expect({

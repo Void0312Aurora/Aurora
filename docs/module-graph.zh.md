@@ -16,7 +16,9 @@ flowchart TD
     pkg_launch_environment["launch-environment"]
     pkg_native_command["native-command"]
     pkg_output_retention["output-retention"]
+    pkg_process_tree["process-tree"]
     pkg_timeout["timeout"]
+    pkg_web_launcher["web-launcher"]
   end
   subgraph group_llm["packages/llm"]
     pkg_llm["llm"]
@@ -332,7 +334,9 @@ flowchart TD
   pkg_launch_environment --> pkg_invariants
   pkg_native_command --> pkg_invariants
   pkg_output_retention --> pkg_invariants
+  pkg_process_tree --> pkg_invariants
   pkg_timeout --> pkg_invariants
+  pkg_web_launcher --> pkg_invariants
   pkg_scope --> pkg_invariants
   pkg_cmdline --> pkg_invariants
   pkg_base --> pkg_invariants
@@ -1426,7 +1430,9 @@ flowchart TD
 | [`launch-environment`](../packages/util/launch-environment) | `util` | [`invariants`](../packages/runtime-diagnostics/invariants) |
 | [`native-command`](../packages/util/native-command) | `util` | [`invariants`](../packages/runtime-diagnostics/invariants) |
 | [`output-retention`](../packages/util/output-retention) | `util` | [`invariants`](../packages/runtime-diagnostics/invariants) |
+| [`process-tree`](../packages/util/process-tree) | `util` | [`invariants`](../packages/runtime-diagnostics/invariants) |
 | [`timeout`](../packages/util/timeout) | `util` | [`invariants`](../packages/runtime-diagnostics/invariants) |
+| [`web-launcher`](../packages/util/web-launcher) | `util` | [`invariants`](../packages/runtime-diagnostics/invariants) |
 | [`scope`](../packages/core/scope) | `core` | [`invariants`](../packages/runtime-diagnostics/invariants) |
 | [`cmdline`](../packages/boot/cmdline) | `boot` | [`invariants`](../packages/runtime-diagnostics/invariants) |
 | [`base`](../packages/bundle/base) | `bundle` | [`invariants`](../packages/runtime-diagnostics/invariants) |

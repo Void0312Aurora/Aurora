@@ -8,12 +8,24 @@
  * presenter, which projects ctx.theme snapshots onto document.body.
  */
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
-import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
 import type { PanelActions } from './service.ts'
 import { AppFrame } from './AppFrame.tsx'
 import { createLayoutStore } from './stores.ts'
 import { LayoutController } from './service.ts'
 import { ThemePresenter } from './theme-presenter.ts'
+
+interface ThemeServiceLike {
+  getTheme(): ThemeSnapshotLike
+}
+
+interface ThemeSnapshotLike {
+  active: { colorScheme: 'light' | 'dark'; tokens: Record<string, string> }
+}
+
+interface ThemeContext {
+  theme: ThemeServiceLike
+  on(name: 'theme/change', listener: (snapshot: ThemeSnapshotLike) => void): () => void
+}
 
 // Contract exports only (export-convergence rule: cross-package consumers
 // keep a symbol exported; test-only/package-internal symbols live off /src).
@@ -142,12 +154,14 @@ export function apply(ctx: ClientContext): void {
     }
   }, 'ui-layout: service + root registration')
 
-  // Theme presentation: pure DOM writes from resolved snapshots — initial
-  // state through the getter once, then event-driven only; no React path.
+  // Theme presentation is shell-owned so every hosting surface receives the
+  // same resolved palette without coupling the theme feature to one shell.
   ctx.effect(() => {
     const presenter = new ThemePresenter()
-    presenter.apply(ctx.theme.getTheme())
-    const off = ctx.on('theme/change', (snapshot) => { presenter.apply(snapshot) })
+    const themed = ctx as unknown as ThemeContext
+    const theme = themed.theme
+    presenter.apply(theme.getTheme())
+    const off = themed.on('theme/change', (snapshot) => { presenter.apply(snapshot) })
     return () => {
       off()
       presenter.dispose()

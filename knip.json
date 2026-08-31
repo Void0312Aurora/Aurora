@@ -15,12 +15,19 @@
   ],
   "ignoreWorkspaces": [
     "vendor/*",
-    "python/sdk-runtime"
+    "python/sdk-runtime",
+    "apps/desktop/closure",
+    "apps/vscode/closure"
   ],
   "ignoreDependencies": [
     "@yarnpkg/cli-dist",
     "lightningcss"
   ],
+  "ignoreIssues": {
+    "apps/vscode/webview/roster.ts": [
+      "exports"
+    ]
+  },
   "workspaces": {
     ".": {
       "entry": [
@@ -738,6 +745,40 @@
       ],
       "ignoreDependencies": [
         "@deepseek-ai/.+"
+      ]
+    },
+    "apps/desktop": {
+      "entry": [
+        "src/reaper.ts",
+        "tests/**/*.spec.ts"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "tests/**/*.ts",
+        "scripts/**/*.mjs"
+      ]
+    },
+    "apps/vscode": {
+      "entry": [
+        "webview/main.ts",
+        "webview/theme.ts",
+        "webview/route-bridge.ts",
+        "webview/shell/index.ts",
+        "webview/node-module-stub.ts",
+        "webview/loader-config-utils-stub.ts",
+        "tests/**/*.spec.ts",
+        "tests/**/*.spec.tsx",
+        "tests/**/*.e2e.ts",
+        "tests/**/*.snapshot.ts",
+        "tests/vscode/**/*.mjs",
+        "scripts/**/*.mjs"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "webview/**/*.{ts,tsx}",
+        "tests/**/*.{ts,tsx}",
+        "tests/vscode/**/*.mjs",
+        "scripts/**/*.mjs"
       ]
     },
     "packages/client/modules": {

@@ -167,6 +167,8 @@ export type ResponseValue<K> =
 
 ### 帧（server→client，具名 union）
 
+剩余方法（`session.create`/`session.history`/`session.rename`/`session.injectContext`/`session.prompt`/`session.cancel`/`host.describe`）不在此重复——签名以源代码为准；见 `api/sessions.ts`、`api/host.ts` 和 `RpcMethodMap`。协议版本门控与 IDE 上下文注入见 [协议版本与 IDE 上下文注入笔记](2026-08-12-wire-protocol-version-and-ide-context-injection.md)。
+
 两条逻辑流：mux 流（`/api/events.mux`，全 session 聚合）与 host 流（`/api/events.host`，host 级事件）。浏览器通过每流一条下行 WebSocket 消费，进程内 fetch 载体以 SSE 保持同构；物理边界见 [WebSocket 下行载体](2026-08-04-websocket-downlink-carrier.md)。帧示例一行：
 
 | 帧 type | 载荷 | 何时发 |

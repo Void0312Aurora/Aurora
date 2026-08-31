@@ -89,7 +89,8 @@
     "build:host": "tsdown",
     "build:webview": "vite build --config webview/vite.config.ts",
     "deploy:closure": "node -e \"require('node:fs').rmSync('deploy',{recursive:true,force:true})\" && pnpm --filter dsh-vscode-closure deploy --prod --config.node-linker=hoisted --config.inject-workspace-packages=true --config.allow-unused-patches=true --config.strict-dep-builds=false deploy && node -e \"for (const f of ['pnpm-lock.yaml','pnpm-workspace.yaml']) require('node:fs').rmSync('deploy/'+f,{force:true})\"",
-    "package": "pnpm -w run build:lib && pnpm -w run build:web && pnpm run deploy:closure && pnpm run build && node scripts/package-vsix.mjs"
+    "package": "pnpm -w run build:lib && pnpm -w run build:web && pnpm run deploy:closure && pnpm run build && node scripts/package-vsix.mjs",
+    "test:electron": "node scripts/verify-webview-csp.mjs && node tests/vscode/run.mjs"
   },
   "dependencies": {
     "@deepseek-ai/dsh-process-tree": "workspace:^",
@@ -141,6 +142,8 @@
     "@types/react": "~18.3.1",
     "@types/vscode": "^1.100.0",
     "@vitejs/plugin-react": "^4.0.0",
+    "@vscode/test-electron": "^3.1.0",
+    "mocha": "^11.8.0",
     "@vscode/vsce": "^3.6.2",
     "playwright": "^1.61.1",
     "react": "^18.2.0",

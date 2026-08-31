@@ -50,9 +50,16 @@ import './base.css'
 /** Module transport hook the shell passes through (jsdom tests replace the <script> path). */
 export type BootSeams = Pick<ClientModuleSystemOptions, 'loadBundle'>
 
-/** Boot options supplied by a hosting shell, including statically bundled plugin rows. */
+/** Boot options: the transport seams plus the hosting shell's static plugin table. */
 export type BootOptions = BootSeams & {
-  /** Graph-row plugin implementations bundled by an embedder webview. */
+  /**
+   * Graph-row plugin implementations the hosting shell bundled statically
+   * (embedder webviews whose CSP or origin cannot fetch bundles from the
+   * server). Keys are manifest row ids; each registers through the module
+   * system's statics table, so import resolves without any fetch/execute
+   * round and `prefetch` short-circuits. Unknown rows and the kernel-owned
+   * app-shell/modules ids are rejected before boot creates any runtime state.
+   */
   staticPlugins?: Record<string, unknown>
 }
 
@@ -97,7 +104,7 @@ export class AppWebEntry {
    * Run the boot chain to settlement. Boot-chain failures resolve (not
    * reject): the loading page stays up and renders the failure report (the
    * fail-loud surface the kernel owns). Rejects only when the boot manifest
-   * is missing or malformed — there is nothing to boot against.
+   * or static plugin table is malformed — there is nothing to boot against.
    * @returns resolves once the UI settled or the failure report rendered.
    */
   async run(): Promise<void> {

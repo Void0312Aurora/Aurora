@@ -240,11 +240,15 @@ interface OlderLoadAnchor {
 }
 
 function clampDetailsWidth(width: number, splitWidth: number): number {
+  // The design floor, except where the split itself is narrower than it (an
+  // editor sidebar is ~260-400px): holding 320 there would push the pane past
+  // its own container instead of merely being cramped.
+  const floor = Math.min(DETAILS_MIN_WIDTH, splitWidth)
   const maxWidth = Math.max(
-    DETAILS_MIN_WIDTH,
+    floor,
     Math.min(DETAILS_MAX_WIDTH, splitWidth - TABLE_MIN_WIDTH),
   )
-  return Math.round(Math.min(Math.max(width, DETAILS_MIN_WIDTH), maxWidth))
+  return Math.round(Math.min(Math.max(width, floor), maxWidth))
 }
 
 function defaultToolRequestWidth(splitWidth: number): number {

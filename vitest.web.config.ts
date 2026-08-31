@@ -26,6 +26,10 @@ export default defineConfig({
     include: [
       'apps/web/tests/**/*.e2e.ts',
       'apps/web/tests/**/*.snapshot.ts',
+      // The VS Code panel's bundle is browser output too, and only a real
+      // browser under the real CSP proves it boots.
+      'apps/vscode/tests/**/*.e2e.ts',
+      'apps/vscode/tests/**/*.snapshot.ts',
     ],
     // Browser boot + real-model turns are slow; files share one browser, run serial.
     testTimeout: 180_000,

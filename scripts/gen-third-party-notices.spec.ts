@@ -10,6 +10,7 @@ import {
   isPermissive,
   type Manifest,
   manifestPatterns,
+  normalizeRepo,
   parsePyprojectRequirements,
   parseVendoredRows,
   render,
@@ -28,6 +29,13 @@ describe('THIRD_PARTY_NOTICES.md', () => {
     const generated = render()
     expect(generated).toContain('It depends on the third-party software listed below.')
     expect(readFileSync(resolve(root, 'THIRD_PARTY_NOTICES.md'), 'utf8'), 'stale notices — run `pnpm run gen-third-party-notices`').toBe(generated)
+  })
+})
+
+describe('normalizeRepo', () => {
+  it('normalizes SCP-style GitHub repository URLs', () => {
+    expect(normalizeRepo('git@github.com:moxystudio/node-cross-spawn.git'))
+      .toBe('https://github.com/moxystudio/node-cross-spawn')
   })
 })
 

@@ -42,6 +42,8 @@
     "test:web": "npm run build && npm run test:web:built",
     "test:web:refresh": "npm run build && DSH_SNAPSHOT=refresh vitest run --config vitest.web.config.ts",
     "test:web:built": "vitest run --config vitest.web.config.ts",
+    "test:vscode:electron": "pnpm --filter dsh-vscode --fail-if-no-match run test:electron",
+    "test:windows-command-shim": "node scripts/windows-command-shim-smoke.mjs",
     "test:artifacts": "pnpm run build:lib && pnpm run test:artifacts:contracts-ready",
     "test:artifacts:contracts-ready": "pnpm --filter @deepseek-ai/dsh-desktop run build && pnpm --filter dsh-vscode run build && vitest run --config vitest.artifacts.config.ts",
     "test:web:perf": "npm run build && npm run test:web:perf:built",

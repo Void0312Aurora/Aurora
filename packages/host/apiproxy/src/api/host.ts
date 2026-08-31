@@ -36,6 +36,7 @@ export interface DirectoryListing {
 export interface HostApi {
   /**
    * One-shot host snapshot. Empty payload uses the literal `{}` (extend in place when fields arrive).
+   * protocolVersion = {@link API_PROTOCOL_VERSION}, the independently-released-client gate;
    * version = the host app's (apps/cli) package.json version; cwd = the host process working
    * directory (root for session persistence and tool execution); provider/model = the defaults
    * applied when a new agent doesn't specify them explicitly, absent when the host configures

@@ -13,10 +13,12 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { spawnSync } from 'node:child_process'
-import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { createRequire } from 'node:module'
+import { dirname, extname, isAbsolute, join, resolve } from 'node:path'
 import lefthookPackage from 'lefthook/package.json' with { type: 'json' }
 
 const MINIMUM_GIT = [2, 26, 0]
+const LEFTHOOK_PACKAGE = 'lefthook'
 const HOOKS_DIRECTORY = 'dsh-hooks'
 const OWNERSHIP_MARKER = '.dsh-lefthook-owned'
 const OWNERSHIP_MARKER_VERSION = 1
@@ -551,14 +553,30 @@ function environmentWithoutCommandGitConfig() {
   return env
 }
 
+function resolveLefthookExecutable(root) {
+  const requireFromRoot = createRequire(join(root, 'package.json'))
+  let packagePath
+  try {
+    packagePath = requireFromRoot.resolve(`${LEFTHOOK_PACKAGE}/package.json`)
+  } catch (error) {
+    if (errorCode(error) === 'MODULE_NOT_FOUND') return undefined
+    throw error
+  }
+  const { getExePath } = requireFromRoot(join(dirname(packagePath), 'get-exe.js'))
+  const executable = getExePath()
+  if (!existsSync(executable)) {
+    throw new Error(`Lefthook package resolved a missing platform executable: ${executable}`)
+  }
+  return executable
+}
+
 function runLefthook(root, lefthook) {
   const args = ['install', '--force']
   const env = environmentWithoutCommandGitConfig()
-  // Node refuses to spawn Windows `.cmd` shims directly; the quoted path is
-  // re-parsed by cmd.exe, while POSIX can execute its extensionless shim.
-  const result = process.platform === 'win32'
-    ? spawnSync(`"${lefthook}"`, args, { cwd: root, env, stdio: 'inherit', shell: true })
-    : spawnSync(lefthook, args, { cwd: root, env, stdio: 'inherit' })
+  const isNodeScript = ['.cjs', '.js', '.mjs'].includes(extname(lefthook))
+  const command = isNodeScript ? process.execPath : lefthook
+  const commandArgs = isNodeScript ? [lefthook, ...args] : args
+  const result = spawnSync(command, commandArgs, { cwd: root, env, stdio: 'inherit' })
   if (result.status !== 0) throw commandFailure(lefthook, args, result)
 }
 
@@ -694,9 +712,8 @@ async function main() {
   const probe = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' })
   if (probe.status !== 0) return
   const root = stripGitLineTerminator(probe.stdout)
-  const isWindows = process.platform === 'win32'
-  const lefthook = join(root, 'node_modules', '.bin', isWindows ? 'lefthook.cmd' : 'lefthook')
-  if (!existsSync(lefthook)) return
+  const lefthook = resolveLefthookExecutable(root)
+  if (lefthook === undefined) return
 
   assertSupportedGit(root)
   const gitDirectory = stripGitLineTerminator(git(['rev-parse', '--absolute-git-dir'], root).stdout)

@@ -311,7 +311,8 @@
    Read-only; the chip gap widened to 12 so the pill chips read as separate
    controls. */
 .tools {
-  gap: 16px;
+  gap: var(--dsh-composer-tools-gap-host, 16px);
+  flex-wrap: var(--dsh-composer-row-wrap-host, nowrap);
 }
 
 .modes {
@@ -349,7 +350,9 @@
 /* Plan / Read-only / model — native <select>, chip-like closed chrome
    (figma ToggleButton: 13/20 medium secondary, 12px chevron). */
 .select {
-  max-width: 220px;
+  /* The model name is the widest thing in the toolbar; a narrow host caps it
+     harder and lets the native control ellipsize. */
+  max-width: var(--dsh-composer-select-max-width-host, 220px);
   height: 28px;
   padding: 0 20px 0 8px;
   border: none;

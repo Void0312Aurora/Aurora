@@ -232,6 +232,7 @@ export function gatesForMode(selected: Mode): Gate[] {
         pnpmScript('build', 'build'),
         productArtifactsGate(['build']),
         pnpmScript('build:web', 'build:web'),
+        vscodeBuiltEntryGate(),
         ...hygieneLeafGates({ artifactNeeds: ['build'] }),
         ...docSyncLeafGates({
           docTypecheckNeeds: ['build'],
@@ -286,6 +287,7 @@ function ciPrimaryGates(): Gate[] {
     }),
     builtPackageInvariantsGate(['build']),
     builtBinSmokeGate(),
+    vscodeBuiltEntryGate(),
   ]
 }
 
@@ -388,6 +390,7 @@ function ciArtifactGates(): Gate[] {
     }),
     builtPackageInvariantsGate(['build']),
     builtBinSmokeGate(),
+    vscodeBuiltEntryGate(),
   ]
 }
 
@@ -415,6 +418,7 @@ function ciConsumerGates(): Gate[] {
       needs: validatedBuild,
     }),
     builtBinSmokeGate(validatedBuild),
+    vscodeBuiltEntryGate(validatedBuild),
   ]
 }
 
@@ -440,6 +444,10 @@ function ciWindowsBlockingGates(): Gate[] {
   return [
     pnpmScript('windows-build', 'build', { label: 'build' }),
     pnpmScript('windows-site', 'docs:build', { label: 'production site' }),
+    pnpmScript('windows-command-shim', 'test:windows-command-shim', {
+      label: 'Windows command shim',
+      needs: ['windows-build'],
+    }),
   ]
 }
 
@@ -469,6 +477,7 @@ function ciWindowsObservationalGates(): Gate[] {
     }),
     builtPackageInvariantsGate(['build']),
     builtBinSmokeGate(),
+    vscodeBuiltEntryGate(),
   ]
 }
 
@@ -656,6 +665,18 @@ function builtBinSmokeGate(needs: string[] = ['build']): Gate {
     label: 'built-bin smoke',
     needs,
     env: { DSH_EXAMPLE_MODE: 'lib' },
+  })
+}
+
+function vscodeBuiltEntryGate(needs: string[] = ['build']): Gate {
+  return pnpmExec('vscode-built-entry', [
+    'vitest',
+    'run',
+    '--config',
+    'vitest.vscode-artifact.config.ts',
+  ], {
+    label: 'VS Code built-entry smoke',
+    needs,
   })
 }
 

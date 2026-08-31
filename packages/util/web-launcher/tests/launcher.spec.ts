@@ -196,6 +196,32 @@ describe('waitForReadyLine', () => {
     await new Promise(resolve => setTimeout(resolve, 20))
   })
 
+  it('reports an onChunk failure and keeps draining later chunks', async () => {
+    const forwarded: string[] = []
+    const reported = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const url = await waitForReadyLine(streamOf([
+        'dsh web: http://127.0.0.1:1234\n',
+        'callback failure\n',
+        'later output\n',
+      ]), {
+        onChunk: (chunk) => {
+          if (chunk.includes('callback failure')) throw new Error('log sink failed')
+          forwarded.push(chunk)
+        },
+      })
+
+      expect(url.href).toBe('http://127.0.0.1:1234/')
+      await vi.waitFor(() => { expect(forwarded).toContain('later output\n') })
+      expect(reported).toHaveBeenCalledWith(
+        'dsh-web-launcher: onChunk callback failed:',
+        expect.objectContaining({ message: 'log sink failed' }),
+      )
+    } finally {
+      reported.mockRestore()
+    }
+  })
+
   it('destroys the stream on timeout so the consumption loop cannot leak', async () => {
     const stream = new PassThrough()
     stream.write('nothing useful\n')

@@ -61,6 +61,11 @@ import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-agent'
 import { provideCmdline } from '@deepseek-ai/dsh-cmdline'
+import {
+  captureStableAria as captureStableLocatorAria,
+  compareOrRefreshTextGolden,
+  normalizeAriaSnapshot,
+} from '../../test-support/snapshot.ts'
 import { REPO_ROOT, requireDist } from './support.ts'
 
 // Host-side web e2e cannot import a browser package: doing so would pull that
@@ -701,13 +706,17 @@ export function fixtureUserPrompts(fixtureText: string): string[] {
  * @returns the realized fixture text.
  */
 export function realizeSeedFixture(scaffold: WebScaffold, fixtureText: string, id: string): string {
+  // Seed fixtures are JSONL. Replace path tokens with the JSON-string escaped
+  // spelling so Windows backslashes remain data rather than invalid escapes
+  // when the realized first line is parsed below.
+  const escapedCwd = JSON.stringify(scaffold.workspaceCwd).slice(1, -1)
   const realized = fixtureText
     .split('{{sessionId}}').join(id)
-    .split('{{cwd}}').join(scaffold.workspaceCwd)
+    .split('{{cwd}}').join(escapedCwd)
   const fixtureCwd = (JSON.parse(realized.split('\n', 1)[0]!) as { cwd?: string }).cwd
   return fixtureCwd === undefined
     ? realized
-    : realized.split(fixtureCwd).join(scaffold.workspaceCwd)
+    : realized.split(JSON.stringify(fixtureCwd).slice(1, -1)).join(escapedCwd)
 }
 
 export async function seedSession(
@@ -776,47 +785,6 @@ async function persistSeedSession(
 }
 
 /**
- * Normalize an aria snapshot: uuid, cwd, workspace-basename, duration,
- * decode-throughput, and path-sensitive compaction estimates collapse to
- * stable tokens.
- *
- * Throughput needs a token for the same reason durations do, and no fixture
- * can supply one: the figure divides a replayed step's output tokens by the
- * wall time the local run took to stream them, so it moves between two runs
- * on one machine (measured 69 → 70 tok/s) and swings wildly on a fast replay
- * (26333 tok/s for a 3 ms stream).
- */
-function normalizeAria(snapshot: string, workspaceCwd: string): string {
-  // The session heading renders the workspace's basename, not the full
-  // path, so both spellings must collapse to the token.
-  const base = workspaceCwd.split('/').pop()!
-  return snapshot
-    .split(workspaceCwd).join('{{cwd}}')
-    .split(base).join('{{workspace}}')
-    .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '{{uuid}}')
-    // The optional space in `\d+m ?\d+s` covers both minute spellings: the
-    // stats line's compact `2m42s` and the message-chrome template's `2m 42s`.
-    .replace(
-      /~\d+(?:y(?: \d+mo)?|mo(?: \d+d)?)|\b(?:\d+d(?: \d+h(?: \d+m \d+s)?)?|\d+h \d+m \d+s|\d+m ?\d+s|\d+(?:\.\d+)?s|\d+(?:\.\d+)?ms)\b/g,
-      duration => duration.startsWith('~') ? duration : '{{duration}}',
-    )
-    .replace(
-      /约\d+(?:年(?:\d+个月)?|个月(?:\d+天)?)|\d+(?:天(?:\d+小时(?:\d+分\d+秒)?)?|小时\d+分\d+秒|分\d+秒|(?:\.\d+)?秒)/g,
-      duration => duration.startsWith('约') ? duration : '{{duration}}',
-    )
-    .replace(/\d+(?:\.\d+)?(?= tok\/s(?!\w))/g, '{{throughput}}')
-    // Seeded compaction prices realized file paths, whose length differs
-    // between local worktrees and CI scratch directories.
-    .replace(/(Compacted \d+ history items \(~)\d+( tokens\))/g, '$1{{tokens}}$2')
-    // Message IconActions clocks widen by calendar day/year; collapse every
-    // format so goldens stay stable across midnight and year changes.
-    .replace(/\d{4}年\d{1,2}月\d{1,2}日 \d{2}:\d{2}/g, '{{clock}}')
-    .replace(/\d{1,2}月\d{1,2}日 \d{2}:\d{2}/g, '{{clock}}')
-    .replace(/(?<!\d)\d{1,2}:\d{2}:\d{2}(?:\.\d+)?(?:\s*[AP]M)?(?!\d)/gi, '{{clock}}')
-    .replace(/(?<!\d)\d{2}:\d{2}(?!\d)/g, '{{clock}}')
-}
-
-/**
  * Capture the region's aria snapshot at a settled milestone: poll until two
  * consecutive normalized captures are equal — a single-shot capture races the
  * last React commits.
@@ -826,15 +794,10 @@ function normalizeAria(snapshot: string, workspaceCwd: string): string {
  * @returns the stable normalized snapshot.
  */
 export async function captureStableAria(page: Page, selector: string, workspaceCwd: string): Promise<string> {
-  const region = page.locator(selector).first()
-  let previous = normalizeAria(await region.ariaSnapshot(), workspaceCwd)
-  await expect.poll(async () => {
-    const current = normalizeAria(await region.ariaSnapshot(), workspaceCwd)
-    const stable = current === previous
-    previous = current
-    return stable
-  }, { timeout: 5_000, message: 'aria snapshot did not stabilize' }).toBe(true)
-  return previous
+  return captureStableLocatorAria(
+    page.locator(selector).first(),
+    snapshot => normalizeAriaSnapshot(snapshot, workspaceCwd),
+  )
 }
 
 /**
@@ -846,15 +809,12 @@ export async function captureStableAria(page: Page, selector: string, workspaceC
  * @param mode - the active snapshot mode.
  */
 export async function compareOrRefreshGolden(goldenPath: string, actual: string, mode: WebSnapshotMode): Promise<void> {
-  const payload = `${actual}\n`
-  if (mode === 'refresh') {
-    await writeFile(goldenPath, payload)
-    return
-  }
-  if (!existsSync(goldenPath)) {
-    throw new Error(`missing golden ${goldenPath} — run DSH_SNAPSHOT=refresh pnpm run test:web to generate it`)
-  }
-  expect(payload).toBe(await readFile(goldenPath, 'utf8'))
+  await compareOrRefreshTextGolden({
+    path: goldenPath,
+    actual,
+    refresh: mode === 'refresh',
+    missingMessage: `missing golden ${goldenPath} — run DSH_SNAPSHOT=refresh pnpm run test:web to generate it`,
+  })
 }
 
 /**

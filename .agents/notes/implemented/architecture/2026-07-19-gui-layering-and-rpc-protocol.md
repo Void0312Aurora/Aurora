@@ -165,7 +165,7 @@ One example row (the table structure is the reading key):
 |---|---|---|---|
 | `session.list` | `{ cursor?: string }` (cursor is a reserved seat, unimplemented) | `{ items: SessionSummary[] }` | persisted sessions, updatedAt descending; v1 builds no index |
 
-The remaining methods (`session.create`/`session.history`/`session.rename`/`session.prompt`/`session.cancel`/`host.describe`) are not re-copied here — signatures are the source of truth; see `api/sessions.ts`, `api/host.ts`, and `RpcMethodMap`.
+The remaining methods (`session.create`/`session.history`/`session.rename`/`session.injectContext`/`session.prompt`/`session.cancel`/`host.describe`) are not re-copied here — signatures are the source of truth; see `api/sessions.ts`, `api/host.ts`, and `RpcMethodMap`. Protocol-version gating and IDE context injection are specified in the [wire protocol version and IDE context injection note](2026-08-12-wire-protocol-version-and-ide-context-injection.md).
 
 ### Frames (server→client, named unions)
 

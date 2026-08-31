@@ -26,8 +26,13 @@ describe('dsh badge assembled snapshot', () => {
       tsconfigPath,
     })
     const disabledSnapshot = JSON.parse(disabled.stdout) as unknown
+    // The path is embedded inside JSON strings. JSON.stringify escapes the
+    // Windows separators, so normalize both the encoded and raw spellings.
+    const encodedBadgeAssetsPath = JSON.stringify(badgeAssetsPath).slice(1, -1)
     const enabledSnapshot = JSON.parse(
-      enabled.stdout.replaceAll(badgeAssetsPath, '{{badgeAssetsPath}}'),
+      enabled.stdout
+        .replaceAll(encodedBadgeAssetsPath, '{{badgeAssetsPath}}')
+        .replaceAll(badgeAssetsPath, '{{badgeAssetsPath}}'),
     ) as unknown
 
     expect(disabled.stderr).toBe('')

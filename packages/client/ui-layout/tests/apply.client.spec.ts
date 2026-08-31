@@ -37,7 +37,8 @@ async function bench() {
 
 describe('ui-layout client apply', () => {
   it('declares its service dependencies', () => {
-    expect(inject).toEqual(['slots', 'theme'])
+    // Theme is deliberately not an edge: its presenter is ui-theme's own.
+    expect(inject).toEqual(['slots'])
   })
 
   it('provides ctx.layout and registers AppFrame into root with the three child declarations', async () => {

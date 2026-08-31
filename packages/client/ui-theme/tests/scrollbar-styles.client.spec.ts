@@ -26,7 +26,7 @@ const read = (name: string): string => readFileSync(fileURLToPath(new URL(name, 
 const platformCss = read('design-platform.css')
 const scrollbarCss = read('scrollbar.css')
 
-/** Body attribute selecting the dark palette; ui-layout's ThemePresenter sets it. */
+/** Body attribute selecting the dark palette; this package's ThemePresenter sets it. */
 const DARK_ATTRIBUTE = '[data-ds-dark-theme]'
 /** Alias tokens under test: the prefix the elevation pairs share. */
 const TOKEN_PREFIX = '--dsw-alias-scrollbar-'

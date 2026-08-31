@@ -187,7 +187,7 @@ export function parseReadyLine(line: string): URL | undefined {
 export interface ReadyLineOptions {
   /** How long to wait for the readiness line before failing. */
   timeoutMs?: number
-  /** Receives every raw chunk, for logging. */
+  /** Receives every raw chunk; thrown errors are reported and do not stop draining. */
   onChunk?: (chunk: string) => void
 }
 
@@ -228,7 +228,11 @@ export function waitForReadyLine(stdout: AsyncIterable<string>, options: ReadyLi
           const result = await iterator.next()
           if (result.done) break
           const chunk = result.value
-          options.onChunk?.(chunk)
+          try {
+            options.onChunk?.(chunk)
+          } catch (error) {
+            console.error('dsh-web-launcher: onChunk callback failed:', error)
+          }
           if (resolved) continue
           buffer += chunk
           const lines = buffer.split(/\r?\n/)
@@ -308,7 +312,8 @@ export async function waitForHttpOk(url: URL, options: HttpOkOptions = {}): Prom
       if (aborted()) throw new Error(`dsh-web-launcher: readiness poll for ${url.href} was aborted`)
       lastError = error
     }
-    await new Promise(resolve => setTimeout(resolve, pollIntervalMs))
+    const sleepMs = Math.min(pollIntervalMs, deadline - Date.now())
+    if (sleepMs > 0) await new Promise(resolve => setTimeout(resolve, sleepMs))
   }
   throw new Error(`dsh-web-launcher: server not reachable at ${url.href} within ${timeoutMs}ms (last error: ${String(lastError)})`)
 }
