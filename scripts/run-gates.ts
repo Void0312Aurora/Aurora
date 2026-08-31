@@ -228,6 +228,7 @@ export function gatesForMode(selected: Mode): Gate[] {
         snapshotGate(),
         pnpmScript('build', 'build'),
         pnpmScript('build:web', 'build:web'),
+        vscodeBuiltEntryGate(),
         ...hygieneLeafGates({ artifactNeeds: ['build'] }),
         ...docSyncLeafGates({
           docTypecheckNeeds: ['build'],
@@ -266,6 +267,7 @@ function ciPrimaryGates(): Gate[] {
     }),
     builtPackageInvariantsGate(['build']),
     builtBinSmokeGate(),
+    vscodeBuiltEntryGate(),
   ]
 }
 
@@ -369,6 +371,7 @@ function ciArtifactGates(): Gate[] {
     }),
     builtPackageInvariantsGate(['build']),
     builtBinSmokeGate(),
+    vscodeBuiltEntryGate(),
   ]
 }
 
@@ -387,6 +390,10 @@ function ciConsumerGates(): Gate[] {
     snapshotGate(validatedBuild),
     webSnapshotGate(validatedBuild),
     desktopElectronLifecycleGate(validatedBuild),
+    // Keep the assembled VS Code lane visible without blocking the stacked
+    // migration while its VS Code 1.125/Linux acceptance path is tracked in
+    // https://github.com/Void0312Aurora/Aurora/issues/13.
+    { ...vscodeElectronLifecycleGate(validatedBuild), allowFailure: true },
     pnpmScript('doc-typecheck', 'doc-typecheck', {
       needs: validatedBuild,
       env: { DSH_DOC_TYPECHECK_USE_BUILD_OUTPUT: '1' },
@@ -396,6 +403,7 @@ function ciConsumerGates(): Gate[] {
       needs: validatedBuild,
     }),
     builtBinSmokeGate(validatedBuild),
+    vscodeBuiltEntryGate(validatedBuild),
   ]
 }
 
@@ -405,6 +413,18 @@ function desktopElectronLifecycleGate(needs: string[]): Gate {
     id: 'desktop-electron-lifecycle',
     label: 'desktop Electron lifecycle',
     displayCommand: 'xvfb-run --auto-servernum pnpm run test:desktop:electron',
+    command: 'xvfb-run',
+    args: ['--auto-servernum', invocation.command, ...invocation.args],
+    needs,
+  }
+}
+
+function vscodeElectronLifecycleGate(needs: string[]): Gate {
+  const invocation = pnpmInvocation(['run', 'test:vscode:electron'])
+  return {
+    id: 'vscode-electron-lifecycle',
+    label: 'VS Code extension lifecycle',
+    displayCommand: 'xvfb-run --auto-servernum pnpm run test:vscode:electron',
     command: 'xvfb-run',
     args: ['--auto-servernum', invocation.command, ...invocation.args],
     needs,
@@ -424,6 +444,10 @@ function ciWindowsBlockingGates(): Gate[] {
   return [
     pnpmScript('windows-build', 'build', { label: 'build' }),
     pnpmScript('windows-site', 'docs:build', { label: 'production site' }),
+    pnpmScript('windows-command-shim', 'test:windows-command-shim', {
+      label: 'Windows command shim',
+      needs: ['windows-build'],
+    }),
   ]
 }
 
@@ -436,6 +460,10 @@ function ciWindowsCompleteGates(): Gate[] {
   return [
     pnpmScript('build', 'build'),
     pnpmScript('windows-site', 'docs:build', { label: 'production site' }),
+    pnpmScript('windows-command-shim', 'test:windows-command-shim', {
+      label: 'Windows command shim',
+      needs: ['build'],
+    }),
     ...observational,
   ]
 }
@@ -452,6 +480,7 @@ function ciWindowsObservationalGates(): Gate[] {
     }),
     builtPackageInvariantsGate(['build']),
     builtBinSmokeGate(),
+    vscodeBuiltEntryGate(),
   ]
 }
 
@@ -620,6 +649,18 @@ function builtBinSmokeGate(needs: string[] = ['build']): Gate {
     label: 'built-bin smoke',
     needs,
     env: { DSH_EXAMPLE_MODE: 'lib' },
+  })
+}
+
+function vscodeBuiltEntryGate(needs: string[] = ['build']): Gate {
+  return pnpmExec('vscode-built-entry', [
+    'vitest',
+    'run',
+    '--config',
+    'vitest.vscode-artifact.config.ts',
+  ], {
+    label: 'VS Code built-entry smoke',
+    needs,
   })
 }
 

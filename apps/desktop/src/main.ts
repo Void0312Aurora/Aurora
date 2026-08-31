@@ -6,11 +6,11 @@
  * child and exits.
  */
 
-import { spawn, type ChildProcess } from 'node:child_process'
+import { spawn as nodeSpawn, type ChildProcess } from 'node:child_process'
 import { join } from 'node:path'
 import { killProcessTree } from '@deepseek-ai/dsh-process-tree'
+import { resolveWebLaunch, spawnWebLaunch, waitForHttpOk, waitForReadyLine, childExited, requireWebLaunchPipes } from '@deepseek-ai/dsh-web-launcher'
 import { app, BrowserWindow, dialog, Menu, nativeImage, shell, Tray } from './electron-api.ts'
-import { resolveWebLaunch, waitForHttpOk, waitForReadyLine, childExited } from './launcher.ts'
 
 const APP_ID = 'ai.deepseek.dsh-desktop'
 const WINDOW_TITLE = 'DSH Desktop'
@@ -226,20 +226,12 @@ async function boot(): Promise<void> {
     console.warn(`[dsh-desktop] Windows has no harness confinement backend; using ${launch.env.DSH_PERMISSION_MODE} permission mode (approval prompts are disabled). Set DSH_PERMISSION_MODE to override.`)
   }
   console.log(`[dsh-desktop] launching dsh web (${launch.source}): ${launch.command} ${launch.args.join(' ')}`)
-  const child = spawn(launch.command, launch.args, {
-    cwd: launch.cwd,
-    env: { ...process.env, ...launch.env },
-    stdio: ['ignore', 'pipe', 'pipe'],
-    windowsHide: true,
-    // POSIX: detaching makes the child a process-group leader so both killTree
-    // and the reaper can signal the whole tree with a negated PID; Windows
-    // stays attached and tree-kills with taskkill /T instead.
-    detached: process.platform !== 'win32',
-  })
+  const child = spawnWebLaunch(launch, { env: process.env })
   server = child
+  const { stdout, stderr } = requireWebLaunchPipes(child)
   let ready = false
   let stderrTail = ''
-  child.stderr.on('data', (chunk: Buffer) => {
+  stderr.on('data', (chunk: Buffer) => {
     stderrTail = (stderrTail + chunk.toString()).slice(-STDERR_TAIL_LIMIT)
   })
   child.on('error', (error) => {
@@ -269,7 +261,7 @@ async function boot(): Promise<void> {
   // must live outside Electron's process group: a terminal Ctrl+C signals the
   // group, and taking the reaper with it would kill the hard-kill cleanup
   // exactly when it is needed (detached + unref below).
-  spawn(process.execPath, [join(runDir(), 'lib', 'types', 'reaper.js'), String(process.pid), String(child.pid ?? 0)], {
+  nodeSpawn(process.execPath, [join(runDir(), 'lib', 'types', 'reaper.js'), String(process.pid), String(child.pid ?? 0)], {
     env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
     stdio: 'ignore',
     windowsHide: true,
@@ -287,10 +279,10 @@ async function boot(): Promise<void> {
     .unref()
   // Readable stream: yield strings, and a multibyte character split across
   // chunks is reassembled by the decoder instead of mojibaked.
-  child.stdout.setEncoding('utf8')
+  stdout.setEncoding('utf8')
   let url: URL | undefined
   try {
-    url = await waitForReadyLine(child.stdout, {
+    url = await waitForReadyLine(stdout, {
       onChunk: (chunk) => { process.stdout.write(`[dsh web] ${chunk}`) },
     })
     await waitForHttpOk(url)

@@ -7,19 +7,21 @@ DeepSeek Harness Web GUI 的 Electron 外壳：它启动 `dsh web`，等待服�
 
 ## 从检出目录运行
 
-先构建仓库——`pnpm run build` 产出 CLI lib、web dist 与本包的 lib（`build:lib` 步骤会自动把 tree-kill 原语编译进 `lib/process-tree/`）。只有在想运行嵌入闭包而非检出分支时才需要 `deploy:closure`（见下文）：
+先构建仓库——`pnpm run build` 产出 CLI lib、web dist 与本包的 lib（`build:lib` 步骤会自动把 tree-kill 与 web-launcher 原语编译进 `lib/process-tree/` 与 `lib/web-launcher/`）。只有在想运行嵌入闭包而非检出分支时才需要 `deploy:closure`（见下文）：
 
 ```sh
 pnpm run deploy:closure
 pnpm --filter @deepseek-ai/dsh-desktop dev
 ```
 
-启动器按以下顺序解析 `dsh web`：
+启动器（共享的 [`@deepseek-ai/dsh-web-launcher`](../../packages/util/web-launcher/README.md) 原语）按以下顺序解析 `dsh web`：
 
 1. `DSH_BIN` —— 显式指定的可执行文件路径（适合自定义 CLI 构建）；
 2. 嵌入闭包 `deploy/node_modules/@deepseek-ai/dsh/lib/bin.js`（只要 `deploy/` 已物化——打包版必然有，dev 检出目录在 `deploy:closure` 之后也会有；见「打包」）；
 3. 本检出目录的 CLI —— 有构建产物 `apps/cli/lib/bin.js` 时用它，否则用根 `pnpm run dsh` 脚本所用的 tsx 源码启动（`node --import tsx/esm apps/cli/src/bin.ts`）；
 4. `PATH` 上的 `dsh`。
+
+共享 spawn 边界无需启用通用 shell，也无需另行指定 JavaScript 入口点，即可运行由 `DSH_BIN` 或 `PATH` 解析到的 Windows npm 命令 shim。
 
 服务器始终监听 `127.0.0.1` 的 OS 分配端口（`--port 0`），因此永远不会与现有 `dsh web` 冲突；从 stdout 解析就绪行 `dsh web: http://127.0.0.1:<port>`，然后轮询 HTTP 200。回环请求默认通过 /api 浏览器信任栅栏，因此无需额外标志。若 `deploy/` 已物化（运行过 `deploy:closure` 或 `dist`），嵌入闭包会遮蔽检出目录分支——CLI 改动后需重新运行 `deploy:closure`，或设置 `DSH_BIN` 强制指定启动方式。
 
@@ -46,4 +48,4 @@ pnpm --filter @deepseek-ai/dsh-desktop dist:dir    # unpacked dir only, for a qu
 
 ## 测试
 
-`tests/launcher.spec.ts` 覆盖纯启动器逻辑——命令解析、就绪行解析与就绪轮询——无密钥、不启动 Electron。
+纯启动器逻辑——命令解析、兼容 Windows 的 spawn、就绪行解析与就绪轮询——位于 [`@deepseek-ai/dsh-web-launcher`](../../packages/util/web-launcher/README.md)，自带无密钥测试套件；本包的测试覆盖构建产物 import 图与装配后的 Electron 生命周期。

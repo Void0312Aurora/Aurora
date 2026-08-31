@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url'
 import tsconfigPaths from 'vite-tsconfig-paths'
 import { defineConfig } from 'vitest/config'
 import { vitestExecArgv } from './vitest.shared.ts'
@@ -8,6 +9,10 @@ import { COVERAGE_EXEMPT_ENV, coverageExemptHeavySuites } from './scripts/covera
 // map applies to every test file. paths must win over package exports so built
 // lib/ never loads a second module-singleton copy.
 const pathsPlugin = (): ReturnType<typeof tsconfigPaths> => tsconfigPaths({ projects: ['./tsconfig.base.json'] })
+const sourceAliases = [{
+  find: /^@deepseek-ai\/dsh-host-directory-picker-browse\/client$/,
+  replacement: fileURLToPath(new URL('./packages/host/directory-picker-browse/src/client/index.ts', import.meta.url)),
+}]
 
 const windowsUnsupportedPackages = process.platform === 'win32'
   ? [
@@ -34,16 +39,18 @@ const windowsCoverageExclusions = process.platform === 'win32'
 
 const testIncludes = [
   'packages/*/*/tests/**/*.spec.{ts,tsx}',
-  'apps/*/tests/**/*.spec.ts',
+  // .tsx: apps carry component specs too (the VS Code sidebar shell).
+  'apps/*/tests/**/*.spec.{ts,tsx}',
   'examples/*/tests/**/*.spec.ts',
   'scripts/**/*.spec.ts',
 ]
 
-// These specs consume emitted desktop files and belong only to the artifact
-// lane, whose dedicated config runs after the build.
-const desktopArtifactTests = [
+// These specs consume emitted shell files and belong only to artifact lanes,
+// whose dedicated configs run after the build.
+const artifactTests = [
   'apps/desktop/tests/built-entry.spec.ts',
   'apps/desktop/tests/electron-lifecycle.spec.ts',
+  'apps/vscode/tests/built-entry.spec.ts',
 ]
 
 // The instrumented coverage gate sets this env; the exempt heavy suites then
@@ -62,6 +69,9 @@ const coverageExemptExcludes = coverageExemptRaw === '1'
 // Keep the narrow exception in forks while the rest of the inventory avoids per-file processes.
 const processBoundTests = [
   'packages/subprocess/subprocess-local/tests/spawn.spec.ts',
+  // cross-spawn's Windows PATH/PATHEXT resolution must run in a real process;
+  // a Vitest worker thread reports a false ENOENT for an existing .cmd shim.
+  'packages/util/web-launcher/tests/spawn.spec.ts',
   'packages/context/time-context/tests/time-context.spec.ts',
   'packages/llm/llm-pi-ai/tests/adapter.spec.ts',
   'packages/ui/app-boot/tests/app-boot.spec.ts',
@@ -70,13 +80,16 @@ const processBoundTests = [
 
 export default defineConfig({
   plugins: [pathsPlugin()],
+  resolve: {
+    alias: sourceAliases,
+  },
   test: {
     setupFiles: ['./scripts/test-invariants.ts'],
     // .tsx: client component specs (jsdom via per-file @vitest-environment pragma).
     include: testIncludes,
     exclude: [
       ...windowsUnsupportedPackages.map(path => `${path}/tests/**/*.spec.ts`),
-      ...desktopArtifactTests,
+      ...artifactTests,
     ],
     // One coverage invocation aggregates both projects. Regular suites fork on
     // POSIX for Node stability and use threads on Windows; process-bound suites
@@ -84,6 +97,7 @@ export default defineConfig({
     projects: [
       {
         plugins: [pathsPlugin()],
+        resolve: { alias: sourceAliases },
         test: {
           name: 'thread-safe',
           execArgv: vitestExecArgv,
@@ -98,13 +112,14 @@ export default defineConfig({
           exclude: [
             ...windowsUnsupportedPackages.map(path => `${path}/tests/**/*.spec.ts`),
             ...processBoundTests,
-            ...desktopArtifactTests,
+            ...artifactTests,
             ...coverageExemptExcludes,
           ],
         },
       },
       {
         plugins: [pathsPlugin()],
+        resolve: { alias: sourceAliases },
         test: {
           name: 'process-bound',
           execArgv: vitestExecArgv,

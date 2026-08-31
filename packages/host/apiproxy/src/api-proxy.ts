@@ -33,6 +33,7 @@ import type {
   SessionSummary, SettingsNamespaceView, SubagentAddress, ToolEventView,
   WorkspaceId, WorkspaceView,
 } from './api/index.ts'
+import { API_PROTOCOL_VERSION } from './api/host.ts'
 import {
   SESSION_SEARCH_RESULT_LIMIT,
   SESSION_SEARCH_SNIPPET_MAX_CODE_POINTS,
@@ -1895,6 +1896,23 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         return ok(request, { accepted: true as const })
       },
 
+      async injectContext(request) {
+        const { sessionId, content } = request.payload
+        const found = await agentFor(sessionId)
+        if ('error' in found) return err(request, found.error)
+        const agent = found.agent
+        // Provenance: the ide-context member of MessageSourceMap (api/sessions.ts) —
+        // plugin-kind for the model face, rpcId for durable audit/reconciliation.
+        const source: MessageSource = { kind: 'plugin', plugin: 'ide', rpcId: request.rpcId }
+        try {
+          agent.inject(createUserMessage({ content, source }))
+        } catch (error: unknown) {
+          // A synchronous throw from inject means disposed or invalid input; surface as agent-busy with the reason attached.
+          return err(request, { code: 'agent-busy', message: 'context injection rejected', details: { reason: String(error) } })
+        }
+        return ok(request, { accepted: true as const })
+      },
+
       updateQueue(request) {
         const { sessionId, itemId, action } = request.payload
         const agent = ctx.agents.get(sessionId)
@@ -2202,6 +2220,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
       describe(request) {
         // TODO(step2): version should read apps/cli's package.json; placeholder for now.
         return Promise.resolve(ok(request, {
+          protocolVersion: API_PROTOCOL_VERSION,
           version: '0.0.1',
           // Same source as session.create's fallback: the UI's default project
           // must match where an unspecified-cwd session actually lands.

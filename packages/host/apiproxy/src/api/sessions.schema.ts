@@ -262,6 +262,17 @@ export const sessionPromptValueSchema = z.object({
   }).optional(),
 }) satisfies z.ZodType<Wire<ResponseValue<'session.prompt'>>>
 
+/** session.injectContext request payload. */
+export const sessionInjectContextRequestSchema = z.object({
+  sessionId: sessionIdSchema,
+  content: z.array(contentBlockSchema).min(1),
+}) as unknown as z.ZodType<RequestPayload<'session.injectContext'>>
+
+/** session.injectContext response value. */
+export const sessionInjectContextValueSchema = z.object({
+  accepted: z.literal(true),
+}) satisfies z.ZodType<Wire<ResponseValue<'session.injectContext'>>>
+
 /** session.updateQueue request payload. */
 export const sessionUpdateQueueRequestSchema = z.object({
   sessionId: sessionIdSchema,

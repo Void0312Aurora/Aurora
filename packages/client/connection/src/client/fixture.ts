@@ -34,6 +34,7 @@ import type {
   ToolCallView, ToolEventView, ToolResultView, WorkspaceId, WorkspaceView,
 } from './api.ts'
 import type { RequestPayload, ResponseValue, RpcMethodMap } from '@deepseek-ai/dsh-host-apiproxy/api'
+import { API_PROTOCOL_VERSION } from '@deepseek-ai/dsh-host-apiproxy/api'
 import { AbstractApiClient, RpcId, SESSION_SEARCH_RESULT_LIMIT } from './api.ts'
 
 /** The fake carrier mints like a real one (business code never mints). */
@@ -1894,6 +1895,23 @@ export function createFixtureApi(options: FixtureOptions = {}): ApiProxy {
         )
         return ok(request, { accepted: true as const })
       },
+      injectContext: (request) => {
+        const { sessionId: id, content } = request.payload
+        const summary = summaryOf(id)
+        if (summary === undefined) {
+          return err(request, { code: 'session-not-found', message: `no session ${id}`, details: { sessionId: id } })
+        }
+        summary.updatedAt = Date.now()
+        // Injection appends a plugin-sourced user/message without opening a
+        // turn (the host's Agent.inject idle-append arm); no reply starts and
+        // `blank` stays untouched — context alone never starts a conversation.
+        append(id, {
+          type: 'user/message',
+          surfaceOp: 'append',
+          data: userMessage(content, { kind: 'plugin', plugin: 'ide', rpcId: request.rpcId }),
+        })
+        return ok(request, { accepted: true as const })
+      },
       updateQueue: request => err(request, {
         code: 'queue-item-not-found',
         message: 'fixture has no pending queue item',
@@ -1924,7 +1942,7 @@ export function createFixtureApi(options: FixtureOptions = {}): ApiProxy {
       })),
     },
     host: {
-      describe: request => ok(request, { version: '0.0.0-fixture', cwd: '/tmp/fixture', attachedSessions }),
+      describe: request => ok(request, { protocolVersion: API_PROTOCOL_VERSION, version: '0.0.0-fixture', cwd: '/tmp/fixture', attachedSessions }),
       // Deterministic native pick: the keyless lanes drive the full
       // pick-then-adopt path without an OS chooser (design-mock content,
       // same tree the browse primitives serve).
@@ -2431,6 +2449,7 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'session.rename': return this.api.sessions.rename(request)
       case 'session.fork': return this.api.sessions.fork(request)
       case 'session.prompt': return this.api.sessions.prompt(request)
+      case 'session.injectContext': return this.api.sessions.injectContext(request)
       case 'session.updateQueue': return this.api.sessions.updateQueue(request)
       case 'session.cancel': return this.api.sessions.cancel(request)
       case 'subagent.list': return this.api.subagents.list(request)

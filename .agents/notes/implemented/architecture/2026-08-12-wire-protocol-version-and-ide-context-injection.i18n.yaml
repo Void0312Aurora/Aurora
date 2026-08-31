@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-12-wire-protocol-version-and-ide-context-injection.md
+2026-08-12-wire-protocol-version-and-ide-context-injection.md: bb230bb471a8b0721a80ebd93421430e32b12d60
+2026-08-12-wire-protocol-version-and-ide-context-injection.zh.md: c2e43511f8be6baf5499cc7ec2b3097a670cfca0

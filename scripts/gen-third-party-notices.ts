@@ -201,10 +201,11 @@ function installedMetadata(name: string): { license: string; repo: string } {
 }
 
 /** Normalize a manifest repository/homepage value to a browsable https URL. */
-function normalizeRepo(raw: string | undefined): string | undefined {
+export function normalizeRepo(raw: string | undefined): string | undefined {
   if (raw === undefined || raw === '') return undefined
   let url = raw
     .replace(/^git\+ssh:\/\/git@/, 'https://')
+    .replace(/^git@([^:]+):/, 'https://$1/')
     .replace(/^git\+/, '')
     .replace(/^git:\/\//, 'https://')
     .replace(/^github:/, 'https://github.com/')

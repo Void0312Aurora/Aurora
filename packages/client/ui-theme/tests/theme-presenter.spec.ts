@@ -3,9 +3,13 @@
 // follow active.colorScheme only, token variables replace the previous apply's
 // set, and dispose retracts everything the presenter wrote.
 
+import { Context } from 'cordis'
 import { beforeEach, describe, expect, it } from 'vitest'
-import type { ThemeSnapshot } from '@deepseek-ai/dsh-client-ui-theme/client'
-import { DARK_ATTRIBUTE, ThemePresenter } from '@deepseek-ai/dsh-client-ui-layout/src/client/theme-presenter.ts'
+import { SlotsService } from '@deepseek-ai/dsh-client-runtime/client'
+import { LocaleService } from '@deepseek-ai/dsh-client-locale/client'
+import type { ThemeService, ThemeSnapshot } from '../src/client/index.ts'
+import { apply, inject } from '../src/client/index.ts'
+import { DARK_ATTRIBUTE, ThemePresenter } from '../src/client/theme-presenter.ts'
 
 function snapshot(colorScheme: 'light' | 'dark', tokens: Record<string, string> = {}): ThemeSnapshot {
   // The presenter must key off colorScheme, not the id — keep them distinct.
@@ -57,5 +61,34 @@ describe('ThemePresenter', () => {
     expect(document.body.hasAttribute(DARK_ATTRIBUTE)).toBe(false)
     expect(document.body.style.getPropertyValue('--dsw-alias-bg')).toBe('')
     expect(document.body.style.getPropertyValue('--foreign')).toBe('kept')
+  })
+})
+
+describe('the plugin seats the presenter itself', () => {
+  // The shell occupying 'root' is replaceable (the VS Code sidebar ships its
+  // own), so the palette must reach the document from this plugin's own apply.
+  it('applies the initial snapshot, follows theme/change, and unwinds on dispose', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SlotsService).await()
+    ctx.provide('locale', new LocaleService(ctx))
+    const fiber = ctx.plugin({ inject: [...inject], apply })
+    await fiber.await()
+
+    // Initial getter application: jsdom has no matchMedia, system resolves light.
+    expect(document.documentElement.style.colorScheme).toBe('light')
+    expect(document.body.hasAttribute(DARK_ATTRIBUTE)).toBe(false)
+
+    const theme = ctx.get('theme') as ThemeService
+    theme.setTheme('dark')
+    expect(document.documentElement.style.colorScheme).toBe('dark')
+    expect(document.body.hasAttribute(DARK_ATTRIBUTE)).toBe(true)
+
+    await fiber.dispose()
+    expect(document.documentElement.style.colorScheme).toBe('')
+    expect(document.body.hasAttribute(DARK_ATTRIBUTE)).toBe(false)
+    // Listener is off: further theme changes no longer reach the document.
+    theme.setTheme('light')
+    theme.setTheme('dark')
+    expect(document.documentElement.style.colorScheme).toBe('')
   })
 })

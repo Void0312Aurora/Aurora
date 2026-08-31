@@ -200,6 +200,55 @@
   overflow-y: auto;
 }
 
+/* Narrow viewport (an editor sidebar is ~260-400px): the 188px nav rail beside
+   a 800px panel leaves the content column nothing, so the rail becomes a
+   horizontal strip above the content and the panel fills the surface. The
+   modal is viewport-anchored, which is why this reads the viewport directly
+   rather than a host variable like the in-column composer does. */
+@media (max-width: 600px) {
+  .panel {
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    max-width: calc(100vw - 16px);
+    max-height: calc(100vh - 16px);
+    border-radius: 16px;
+  }
+
+  .nav {
+    flex-direction: row;
+    gap: 4px;
+    width: auto;
+    padding: 10px 8px 0;
+    overflow-x: auto;
+  }
+
+  /* The panel's own header already says where the user is. */
+  .navTitle {
+    display: none;
+  }
+
+  .navList {
+    flex-direction: row;
+    gap: 4px;
+  }
+
+  .navCell {
+    flex: none;
+    height: 32px;
+    padding: 6px 12px;
+  }
+
+  .header {
+    height: 40px;
+    padding: 8px 8px 4px;
+  }
+
+  .options {
+    padding: 0 12px 8px;
+  }
+}
+
 /* Visually-hidden text seat (close button accessible name from slot content). */
 .hiddenLabel {
   position: absolute;

@@ -2436,3 +2436,4 @@ Imported as libraries by other packages; a `cordis.yml` cannot load them.
 - `@deepseek-ai/dsh-telemetry` ([`packages/sdk/telemetry/src/index.ts`](../packages/sdk/telemetry/src/index.ts))
 - `@deepseek-ai/dsh-timeout` ([`packages/util/timeout/src/index.ts`](../packages/util/timeout/src/index.ts))
 - `@deepseek-ai/dsh-typert-generator` ([`packages/typert/generator/src/index.ts`](../packages/typert/generator/src/index.ts))
+- `@deepseek-ai/dsh-web-launcher` ([`packages/util/web-launcher/src/index.ts`](../packages/util/web-launcher/src/index.ts))

@@ -57,14 +57,17 @@ describe('tsdown client artifact', () => {
     return { handoff: handoff!, surface }
   }
 
-  it.skipIf(code === undefined)('hands off with the manifest id and a DI-require factory', async () => {
+  // The first execution pays the cold cost of importing the real client
+  // runtime into jsdom (~6s on a slow Windows checkout), which overruns the
+  // 5s default; the bound is per-test, not global.
+  it.skipIf(code === undefined)('hands off with the manifest id and a DI-require factory', { timeout: 20_000 }, async () => {
     const { handoff, surface } = await loadArtifact()
     expect(handoff.id).toBe(PLUGIN_ID)
     expect(surface.apply).toBeTypeOf('function')
     expect(surface.inject).toEqual(['slots', 'conversation', 'sessionHistory'])
   })
 
-  it.skipIf(code === undefined)('mounted as an object plugin, apply registers the view tab on the real ring', async () => {
+  it.skipIf(code === undefined)('mounted as an object plugin, apply registers the view tab on the real ring', { timeout: 20_000 }, async () => {
     const { surface } = await loadArtifact()
     const ctx = new Context()
     const slots = new SlotsService(ctx)

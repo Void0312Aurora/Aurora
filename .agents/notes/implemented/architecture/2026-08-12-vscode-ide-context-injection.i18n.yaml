@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-08-12-vscode-ide-context-injection.md
+2026-08-12-vscode-ide-context-injection.md: 757c510ca4f9c70b6a67ed3d28212d58522db9a4
+2026-08-12-vscode-ide-context-injection.zh.md: 34fff3af28e259abf443e51451ec7020e33ab6b6

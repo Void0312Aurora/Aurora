@@ -1,0 +1,20 @@
+- toolbar
+- text: Ready to continue?
+- toolbar
+- textbox "Ready to continue?":
+  - /placeholder: ""
+- text: 4 Results
+- toolbar
+- listbox "Ready to continue?":
+  - option "Yes":
+    - text: "Yes"
+    - toolbar
+  - option "No":
+    - text: "No"
+    - toolbar
+  - option "Other…, Enter a custom answer":
+    - text: Other…Enter a custom answer
+    - toolbar
+  - option "Skip, Answer without a selection":
+    - text: SkipAnswer without a selection
+    - toolbar

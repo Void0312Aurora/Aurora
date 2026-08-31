@@ -21,7 +21,6 @@
 // llm seam post-boot with installLlmReplay on the settled root ctx
 // (the plugin-row path discards the ReplayHandle; the direct install keeps
 // assertConsumed for the teardown fixture-consumption check).
-import { existsSync } from 'node:fs'
 import { mkdtemp, readFile, readdir, realpath, rm, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -54,6 +53,11 @@ import * as ToolCordis from '@deepseek-ai/dsh-tool-cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-agent'
 import { prepareWebRuntimeContext } from '../../cli/src/web.ts'
+import {
+  captureStableAria as captureStableLocatorAria,
+  compareOrRefreshTextGolden,
+  normalizeAriaSnapshot,
+} from '../../test-support/snapshot.ts'
 import { DIST_INDEX, REPO_ROOT, requireDist } from './support.ts'
 
 /** Snapshot mode for the lane, from $DSH_SNAPSHOT (same vocabulary as the ACP/TUI suites). */
@@ -513,34 +517,6 @@ export async function seedSession(scaffold: WebScaffold, fixtureText: string, id
 }
 
 /**
- * Normalize an aria snapshot: uuid, cwd, workspace-basename, and duration
- * volatility collapse to stable tokens.
- */
-function normalizeAria(snapshot: string, workspaceCwd: string): string {
-  // The session heading renders the workspace's basename, not the full
-  // path, so both spellings must collapse to the token.
-  const base = workspaceCwd.split('/').pop()!
-  return snapshot
-    .split(workspaceCwd).join('{{cwd}}')
-    .split(base).join('{{workspace}}')
-    .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '{{uuid}}')
-    .replace(
-      /~\d+(?:y(?: \d+mo)?|mo(?: \d+d)?)|\b(?:\d+d(?: \d+h(?: \d+m \d+s)?)?|\d+h \d+m \d+s|\d+m \d+s|\d+(?:\.\d+)?s|\d+(?:\.\d+)?ms)\b/g,
-      duration => duration.startsWith('~') ? duration : '{{duration}}',
-    )
-    .replace(
-      /约\d+(?:年(?:\d+个月)?|个月(?:\d+天)?)|\d+(?:天(?:\d+小时(?:\d+分\d+秒)?)?|小时\d+分\d+秒|分\d+秒|(?:\.\d+)?秒)/g,
-      duration => duration.startsWith('约') ? duration : '{{duration}}',
-    )
-    // Message IconActions clocks widen by calendar day/year; collapse every
-    // shape so goldens stay stable across midnight and year boundaries.
-    .replace(/\d{4}年\d{1,2}月\d{1,2}日 \d{2}:\d{2}/g, '{{clock}}')
-    .replace(/\d{1,2}月\d{1,2}日 \d{2}:\d{2}/g, '{{clock}}')
-    .replace(/(?<!\d)\d{1,2}:\d{2}:\d{2}(?:\.\d+)?(?:\s*[AP]M)?(?!\d)/gi, '{{clock}}')
-    .replace(/(?<!\d)\d{2}:\d{2}(?!\d)/g, '{{clock}}')
-}
-
-/**
  * Capture the region's aria snapshot at a settled milestone: poll until two
  * consecutive normalized captures are equal — a single-shot capture races the
  * last React commits.
@@ -550,15 +526,10 @@ function normalizeAria(snapshot: string, workspaceCwd: string): string {
  * @returns the stable normalized snapshot.
  */
 export async function captureStableAria(page: Page, selector: string, workspaceCwd: string): Promise<string> {
-  const region = page.locator(selector).first()
-  let previous = normalizeAria(await region.ariaSnapshot(), workspaceCwd)
-  await expect.poll(async () => {
-    const current = normalizeAria(await region.ariaSnapshot(), workspaceCwd)
-    const stable = current === previous
-    previous = current
-    return stable
-  }, { timeout: 5_000, message: 'aria snapshot did not stabilize' }).toBe(true)
-  return previous
+  return captureStableLocatorAria(
+    page.locator(selector).first(),
+    snapshot => normalizeAriaSnapshot(snapshot, workspaceCwd),
+  )
 }
 
 /**
@@ -570,15 +541,12 @@ export async function captureStableAria(page: Page, selector: string, workspaceC
  * @param mode - the active snapshot mode.
  */
 export async function compareOrRefreshGolden(goldenPath: string, actual: string, mode: WebSnapshotMode): Promise<void> {
-  const payload = `${actual}\n`
-  if (mode === 'refresh') {
-    await writeFile(goldenPath, payload)
-    return
-  }
-  if (!existsSync(goldenPath)) {
-    throw new Error(`missing golden ${goldenPath} — run DSH_SNAPSHOT=refresh pnpm run test:web to generate it`)
-  }
-  expect(payload).toBe(await readFile(goldenPath, 'utf8'))
+  await compareOrRefreshTextGolden({
+    path: goldenPath,
+    actual,
+    refresh: mode === 'refresh',
+    missingMessage: `missing golden ${goldenPath} — run DSH_SNAPSHOT=refresh pnpm run test:web to generate it`,
+  })
 }
 
 /**

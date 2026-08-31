@@ -7,6 +7,10 @@ packages:
   # self-contained web closure into apps/desktop/deploy (python/sdk-runtime is
   # the same pattern for the Python runtime).
   - apps/desktop/closure
+  # dsh-vscode's dependency-only deploy root: the same self-contained web
+  # closure, materialized into apps/vscode/deploy and shipped inside the vsix
+  # so the extension host runs `dsh web` under VS Code's Electron-as-Node.
+  - apps/vscode/closure
   - website
   # The runnable demo leaves join as ONE workspace member: examples/package.json
   # declares the union of every leaf's cordis.yml plugins as workspace:*, so a
@@ -23,6 +27,7 @@ packages:
 # Vendored framework packages keep their upstream semver ranges, while local
 # builds must resolve those matching names to this workspace's pinned sources.
 linkWorkspacePackages: true
+preferWorkspacePackages: true
 
 peerDependencyRules:
   allowedVersions:
@@ -55,6 +60,11 @@ allowBuilds:
   # Transitive of electron-builder's Squirrel.Windows target, which dsh-desktop
   # never uses (nsis + portable only); its script is a no-op we deny.
   electron-winstaller: false
+  # @vscode/vsce (dsh-vscode packaging) pulls these native build scripts only
+  # for `vsce publish` (credential storage + vsix signing); `vsce package
+  # --no-dependencies` needs neither, so we deny the builds and still package.
+  keytar: false
+  '@vscode/vsce-sign': false
 
 # The Landlock launcher family is our own sibling-repo release, consumed
 # fresh (hours old at each coordinated bump) — the release-age quarantine
