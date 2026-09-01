@@ -54,23 +54,26 @@ function withEnv<T>(name: string, value: string | undefined, action: () => T): T
   }
 }
 
+/** Every mode `gatesForMode` accepts; graph-wide invariants iterate all of them. */
+const ALL_MODES = [
+  'ci-primary',
+  'ci-linux-primary',
+  'ci-static',
+  'ci-lint-contracts-ready',
+  'ci-coverage',
+  'ci-snapshot',
+  'ci-artifacts',
+  'ci-consumers',
+  'ci-windows-blocking',
+  'ci-windows-complete',
+  'ci-windows-observational',
+  'node-compat',
+  'check-all',
+  'doc-sync',
+] as const
+
 describe('gate graph validation', () => {
-  it.each([
-    'ci-primary',
-    'ci-linux-primary',
-    'ci-static',
-    'ci-lint-contracts-ready',
-    'ci-coverage',
-    'ci-snapshot',
-    'ci-artifacts',
-    'ci-consumers',
-    'ci-windows-blocking',
-    'ci-windows-complete',
-    'ci-windows-observational',
-    'node-compat',
-    'check-all',
-    'doc-sync',
-  ] as const)('constructs and executes preflight for a valid non-empty %s graph', async (mode) => {
+  it.each(ALL_MODES)('constructs and executes preflight for a valid non-empty %s graph', async (mode) => {
     const subject = withPnpmEntrypoint(() => gatesForMode(mode))
     const execute = vi.fn(async (item: Gate) => resultFor(item))
 
@@ -110,6 +113,19 @@ describe('gate graph validation', () => {
         env: { DSH_SNAPSHOT: 'replay' },
         needs: ['build'],
       })
+    }
+  })
+
+  // The VS Code smoke reads `apps/vscode/dist/`, which only the artifact gate
+  // emits. An aggregate carrying the smoke without that producer fails on a
+  // missing bundle rather than on the contract it means to check.
+  it('never schedules the VS Code built-entry smoke without its artifact producer', () => {
+    for (const mode of ALL_MODES) {
+      const ids = withPnpmEntrypoint(() => gatesForMode(mode).map(item => item.id))
+      if (!ids.includes('vscode-built-entry')) continue
+
+      expect(ids, `${mode} carries the built-entry smoke without product-artifacts`)
+        .toContain('product-artifacts')
     }
   })
 

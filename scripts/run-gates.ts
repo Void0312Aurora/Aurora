@@ -279,15 +279,7 @@ function ciPrimaryGates(): Gate[] {
     // repeats the Host contract pass. Wait for all three consumers so build
     // neither races tsbuildinfo nor replaces declarations while they are read.
     pnpmScript('build', 'build', { needs: ['typecheck', 'lint', 'doc-typecheck'] }),
-    productArtifactsGate(['build']),
-    pnpmScript('publint', 'publint', { needs: ['build'] }),
-    pnpmScript('node-next-types', 'verify-node-next-types', {
-      label: 'node-next types',
-      needs: ['build'],
-    }),
-    builtPackageInvariantsGate(['build']),
-    builtBinSmokeGate(),
-    vscodeBuiltEntryGate(['product-artifacts']),
+    ...builtTreeConsumerGates(),
   ]
 }
 
@@ -382,6 +374,20 @@ function ciStaticGates(options: { ownsBuild: boolean }): Gate[] {
 function ciArtifactGates(): Gate[] {
   return [
     pnpmScript('build', 'build'),
+    ...builtTreeConsumerGates(),
+  ]
+}
+
+/**
+ * Gates that consume a `build` gate's output tree: the product artifact build
+ * and every check that reads `lib/` or the artifacts it emits. Each aggregate
+ * that owns a plain `build` gate appends this set, so the VS Code built-entry
+ * smoke can never be scheduled into a lane that lacks its `product-artifacts`
+ * producer.
+ * @returns the ordered consumer gates for one built tree.
+ */
+function builtTreeConsumerGates(): Gate[] {
+  return [
     productArtifactsGate(['build']),
     pnpmScript('publint', 'publint', { needs: ['build'] }),
     pnpmScript('node-next-types', 'verify-node-next-types', {
@@ -390,6 +396,9 @@ function ciArtifactGates(): Gate[] {
     }),
     builtPackageInvariantsGate(['build']),
     builtBinSmokeGate(),
+    // The built-entry smoke reads the webview bundle emitted by the artifact
+    // gate; serialize it behind that producer so a high-concurrency lane
+    // cannot observe the bundle before it exists.
     vscodeBuiltEntryGate(['product-artifacts']),
   ]
 }
@@ -473,14 +482,7 @@ function ciWindowsObservationalGates(): Gate[] {
     ...ciStaticGates({ ownsBuild: true }),
     // Linux owns required lint and snapshots; Windows omits those duplicates.
     pnpmScript('duplication', 'duplication'),
-    pnpmScript('publint', 'publint', { needs: ['build'] }),
-    pnpmScript('node-next-types', 'verify-node-next-types', {
-      label: 'node-next types',
-      needs: ['build'],
-    }),
-    builtPackageInvariantsGate(['build']),
-    builtBinSmokeGate(),
-    vscodeBuiltEntryGate(),
+    ...builtTreeConsumerGates(),
   ]
 }
 

@@ -242,7 +242,8 @@ async function boot(): Promise<void> {
   console.log(`[dsh-desktop] launching dsh web (${launch.source}): ${launch.command} ${launch.args.join(' ')}`)
   const child = spawnWebLaunch(launch, { env: process.env })
   server = child
-  const { stdout, stderr } = requireWebLaunchPipes(child)
+  // `spawnWebLaunch` fixes the stdio tuple, so both pipes are non-null by type.
+  const { stdout, stderr } = child
   let ready = false
   let stderrTail = ''
   stderr.on('data', (chunk: Buffer) => {

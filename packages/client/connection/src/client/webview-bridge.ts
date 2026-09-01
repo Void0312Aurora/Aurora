@@ -201,7 +201,16 @@ export class PostMessageApiClient extends AbstractApiClient {
       let terminal = false
       let cleanupRequested = false
       let unsubscribe: (() => void) | undefined
+      // Function reads, not inline flag comparisons: both flags are mutated by
+      // the listener closure below, which a synchronous embedder can drive
+      // while `onMessage` is still installing. Static control-flow narrowing
+      // does not model that call and would treat the reads as always-false.
+      const isTerminal = (): boolean => terminal
+      const isCleanupRequested = (): boolean => cleanupRequested
       const cleanup = (): void => {
+        /* v8 ignore next -- idempotence guard per the teardown rule: every current caller
+           (fail, the end arm, the body-cancel arm) already returns early when terminal, and
+           a closed or errored stream never re-invokes cancel, so no path reaches this twice. */
         if (terminal) return
         terminal = true
         if (unsubscribe === undefined) cleanupRequested = true
@@ -282,14 +291,14 @@ export class PostMessageApiClient extends AbstractApiClient {
           }
         }
       })
-      if (cleanupRequested) {
+      if (isCleanupRequested()) {
         unsubscribe()
         unsubscribe = undefined
       }
       // A synchronous test/embedder response may have completed the request
       // while onMessage was still installing the subscription. Do not post a
       // now-terminal request into the host after that completion.
-      if (terminal) return
+      if (isTerminal()) return
       if (signal !== undefined) {
         if (signal.aborted) {
           onAbort()

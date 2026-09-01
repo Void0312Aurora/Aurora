@@ -69,6 +69,21 @@ interface PersistedLog {
   readonly header: JsonObject
 }
 
+/**
+ * Interval between the defaults server's SSE keep-alive comments, and the idle
+ * budget the fixture gives the adapter.
+ *
+ * The test proves that a comment resets the per-read idle watchdog: without
+ * comment handling the stream idles for three whole intervals and the watchdog
+ * raises `TIMEOUT`, which the default retry policy repeats — observable as a
+ * second request. So the budget must exceed one interval and stay well under
+ * three. Both values are large enough that an ordinary scheduling stall on a
+ * shared runner cannot expire the budget between two comments, which would
+ * report a runner hiccup as a broken keep-alive contract.
+ */
+const KEEP_ALIVE_INTERVAL_MS = 250
+const IDLE_BUDGET_MS = KEEP_ALIVE_INTERVAL_MS * 2
+
 interface DeepSeekDefaultsServer {
   readonly url: string
   readonly requests: JsonObject[]
@@ -89,7 +104,7 @@ async function deepseekDefaultsServer(): Promise<DeepSeekDefaultsServer> {
       const write = (): void => {
         if (keepAlives-- > 0) {
           response.write(': keep-alive\n\n')
-          setTimeout(write, 60)
+          setTimeout(write, KEEP_ALIVE_INTERVAL_MS)
           return
         }
         response.end([
@@ -99,7 +114,7 @@ async function deepseekDefaultsServer(): Promise<DeepSeekDefaultsServer> {
           '',
         ].join('\n\n'))
       }
-      setTimeout(write, 60)
+      setTimeout(write, KEEP_ALIVE_INTERVAL_MS)
     })
   })
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
@@ -534,6 +549,7 @@ describe('headless stream-json snapshots', () => {
           // launching environment, which is the whole credential plane here.
           DEEPSEEK_API_KEY: 'snapshot-key',
           DSH_SNAPSHOT_BASE_URL: server.url,
+          DSH_SNAPSHOT_IDLE_BUDGET_MS: String(IDLE_BUDGET_MS),
           NODE_OPTIONS: [process.env.NODE_OPTIONS, '--disable-warning=ExperimentalWarning'].filter(Boolean).join(' '),
         },
       })

@@ -346,6 +346,20 @@ describe('waitForHttpOk', () => {
     })).rejects.toThrow(/aborted/)
     expect(fetchImpl).toHaveBeenCalledTimes(1)
   })
+
+  it('skips the inter-attempt sleep when one attempt consumed the whole deadline', async () => {
+    // The sleep is clamped to the time left before the deadline. An attempt
+    // slower than the budget leaves a non-positive remainder, so the poll must
+    // fall straight through to the deadline check instead of sleeping past it.
+    const fetchImpl = vi.fn(async () => {
+      await new Promise(resolve => setTimeout(resolve, 40))
+      throw new Error('ECONNREFUSED')
+    })
+    await expect(waitForHttpOk(new URL('http://127.0.0.1:1/'), {
+      fetchImpl, timeoutMs: 20, pollIntervalMs: 30_000,
+    })).rejects.toThrow(/not reachable .* within 20ms/)
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('childExited', () => {
