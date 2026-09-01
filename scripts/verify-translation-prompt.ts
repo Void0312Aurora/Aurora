@@ -85,10 +85,10 @@ try {
     throw new Error('recorded frontmatter response does not preserve metadata and receive the canonical target switcher')
   }
 
-  if (mode !== '--snapshot') {
-    console.log('verify-translation-prompt: both directions render, reviewed examples assemble, and the consumed response is target-path correct.')
-  } else {
+  if (mode === '--snapshot') {
     process.stdout.write(`${JSON.stringify({ request, response: consumed }, null, 2)}\n`)
+  } else {
+    console.log('verify-translation-prompt: both directions render, reviewed examples assemble, and the consumed response is target-path correct.')
   }
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error)

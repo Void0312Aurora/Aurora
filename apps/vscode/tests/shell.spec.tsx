@@ -5,10 +5,10 @@
 // the inject hook, and the frame keeping every pane mounted while CSS selects
 // the front one.
 
-import { Context } from 'cordis'
+import { Context } from '@deepseek-ai/cordis'
 import { render } from '@testing-library/react'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
-import { SlotsService } from '@deepseek-ai/dsh-client-runtime/client'
+import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
 import { apply, inject } from '../webview/shell/index.ts'
 import { NarrowLayoutService } from '../webview/shell/service.ts'
 import { createNarrowStore, type NarrowRoute } from '../webview/shell/stores.ts'
@@ -26,8 +26,8 @@ beforeAll(() => {
 
 async function bench() {
   const ctx = new Context()
-  await ctx.plugin(SlotsService).await()
-  return { ctx, slots: ctx.get('slots') as SlotsService }
+  await ctx.plugin(SlotRegistry).await()
+  return { ctx, slots: ctx.get('slots') as SlotRegistry }
 }
 
 describe('sidebar shell apply', () => {
@@ -77,19 +77,7 @@ describe('sidebar shell apply', () => {
     expect(() => { layout.toggleSidebar() }).toThrow(/route actions not wired/)
     expect(() => { layout.openDetails() }).toThrow(/route actions not wired/)
     expect(() => { layout.closeDetails() }).toThrow(/route actions not wired/)
-  })
-
-  it('replays the latest host route after the root entry mounts', async () => {
-    const { ctx, slots } = await bench()
-    await ctx.plugin({ inject: [...inject], apply }).await()
-    const layout = ctx.get('layout') as NarrowLayoutService
-    layout.show('sessions')
-    layout.show('details')
-
-    const entry = slots.entries('root')[0]!
-    const instance = (entry.store as ReturnType<typeof createNarrowStore>).create()
-    ;(entry.inject as unknown as (a: typeof instance.actions) => object)(instance.actions)
-    expect(instance.getSnapshot().route).toBe('details')
+    expect(() => { layout.show('chat') }).toThrow(/route actions not wired/)
   })
 
   it('teardown unwinds the service, the root registration, and the child declarations', async () => {

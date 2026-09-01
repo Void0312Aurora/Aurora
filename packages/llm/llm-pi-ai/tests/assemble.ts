@@ -6,7 +6,7 @@
  */
 
 import { BlockAssembler } from '@deepseek-ai/dsh-llm'
-import type { Context } from 'cordis'
+import type { Context } from '@deepseek-ai/cordis'
 import type { FinishReason, GenerateOptions, Message, TokenUsage } from '@deepseek-ai/dsh-llm'
 
 export interface AssembledResult {
@@ -18,13 +18,13 @@ export interface AssembledResult {
 export async function assemble(ctx: Context, options: Omit<GenerateOptions, 'provider'> & { provider?: string }): Promise<AssembledResult> {
   const assembler = new BlockAssembler()
   const request = { provider: 'deepseek', ...options }
-  for await (const chunk of ctx.llm.stream(request)) { assembler.push(chunk) }
+  for await (const chunk of ctx.llm.stream(request)) assembler.push(chunk)
   return {
     message: assembler.message({
       kind: 'model',
       provider: request.provider,
       model: request.model,
-      ...assembler.replayState !== undefined ? { replayState: assembler.replayState } : {},
+      ...assembler.replayState === undefined ? {} : { replayState: assembler.replayState },
     }),
     ...assembler.usage !== undefined ? { usage: assembler.usage } : {},
     finish: assembler.finish,

@@ -4,11 +4,9 @@
  * costs the webview no pixels — so the extension host posts a route message
  * and this plugin turns it into a `ctx.layout` call.
  *
- * The bootstrap listens on `window` before the client tree starts and seats a
- * buffered route channel. The plugin subscribes once `ctx.layout` exists;
- * routing remains separate from API bridge traffic. The same page listener
- * receives managed-server readiness before bootstrap performs its protocol
- * probe; that signal does not enter the route channel.
+ * It listens on `window` directly rather than through the api client's bridge
+ * port: routing is not wire traffic, and keeping it off that channel leaves
+ * the connection package's message union untouched.
  */
 
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
@@ -33,14 +31,11 @@ export interface WebviewHostReadyMessage {
 
 /** Bootstrap-owned route channel, with latest-value replay for late subscribers. */
 export interface WebviewRouteChannel {
-  /** Accept a host message, returning whether it was a valid route command. */
   receive(data: unknown): boolean
-  /** Subscribe to route commands and synchronously replay the latest one. */
   subscribe(listener: (route: NarrowRoute) => void): () => void
 }
 
 declare global {
-  /** Seated by the webview bootstrap before the client plugin graph runs. */
   var __DSH_WEBVIEW_ROUTES__: WebviewRouteChannel | undefined
 }
 
@@ -74,13 +69,13 @@ export function createWebviewRouteChannel(): WebviewRouteChannel {
   }
 }
 
-/** Narrow an extension-host message to the route-listener readiness signal. */
+/** Narrow a webview readiness message. */
 export function isWebviewReadyMessage(data: unknown): data is WebviewReadyMessage {
   return typeof data === 'object' && data !== null
     && (data as Partial<WebviewReadyMessage>).type === 'dsh-webview-ready'
 }
 
-/** Narrow an extension-host message to the managed-server readiness signal. */
+/** Narrow a managed-server readiness message. */
 export function isWebviewHostReadyMessage(data: unknown): data is WebviewHostReadyMessage {
   return typeof data === 'object' && data !== null
     && (data as Partial<WebviewHostReadyMessage>).type === 'dsh-host-ready'

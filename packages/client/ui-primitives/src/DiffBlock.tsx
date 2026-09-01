@@ -74,7 +74,7 @@ const ROW_CLASS: Record<DiffRow['kind'], string | undefined> = {
  * @returns the body rows, the +/- totals, and the distinct-file count.
  */
 function buildRows(diffs: DiffHunk[]): { rows: DiffRow[]; added: number; removed: number; files: number } {
-  const rows: Array<DiffRow> = []
+  const rows: DiffRow[] = []
   const paths = new Set<string>()
   let added = 0
   let removed = 0

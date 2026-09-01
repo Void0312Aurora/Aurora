@@ -8,7 +8,6 @@
  * client half (see the contract module doc). Export discipline:
  * packages/client/AGENTS.md.
  */
-import { deferRegistration } from '@deepseek-ai/dsh-client-ui-slots'
 import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
@@ -38,10 +37,10 @@ const NS = 'workspace'
 /**
  * Required services (cordis fiber inject). The target slots are declared by
  * the ui-sidebar / ui-conversation applies, whose activation order relative
- * to this one is NOT constrained: dshClient.inject edges are informational
+ * to this one is NOT constrained: dsh.client.inject edges are informational
  * (loading/prefetch metadata, never apply sequencing) and neither owner
- * provides a waitable service. apply therefore registers via
- * declaration-aware deferral instead of assuming order.
+ * provides a waitable service. apply therefore depends on each slot
+ * declaration through `slots.inject()` instead of assuming order.
  */
 export const inject = ['slots', 'sessions', 'workspaces', 'locale']
 
@@ -63,14 +62,14 @@ export function apply(ctx: ClientContext): void {
   // Stable per-surface occupancy sources (the renderer's hook cache keys by
   // source identity): true while the surface's directory-flow hole is filled.
   const flowSource = (hole: 'sidebar.workspaces.directoryFlow' | 'conversation.hero.workspace.directoryFlow'): HostObservable<boolean> => ({
-    getSnapshot: () => { return ctx.slots.entries(hole).length > 0 },
+    getSnapshot: () => ctx.slots.entries(hole).length > 0,
     subscribe: listener => ctx.slots.subscribe(hole, listener),
   })
   const browserFlowSource = flowSource('sidebar.workspaces.directoryFlow')
   const pickerFlowSource = flowSource('conversation.hero.workspace.directoryFlow')
   const browserInjected = (): WorkspaceBrowserInjected => ({
-    // Explicit group actions keep their target; unscoped New Session rides
-    // the runtime's shared action (recent-Workspace projection inside).
+    // Explicit group actions keep their target; unscoped New Session inherits
+    // the current Session Workspace before the recent-Workspace fallback.
     startSession: (workspaceId) => { ctx.workspaces.startSession(workspaceId) },
     open: (sessionId) => { ctx.sessions.open(sessionId) },
     searchSessions,
@@ -92,6 +91,9 @@ export function apply(ctx: ClientContext): void {
     },
     renameWorkspace: async (workspaceId, title) => { await ctx.workspaces.rename(workspaceId, title) },
     deleteWorkspace: async (workspaceId) => { await ctx.workspaces.delete(workspaceId) },
+    insertWorkspaceBefore: async (workspaceId, beforeWorkspaceId) => {
+      await ctx.workspaces.insertBefore(workspaceId, beforeWorkspaceId)
+    },
     archiveSession: async (sessionId) => { await ctx.workspaces.archiveSession(sessionId) },
     insertSessionBefore: async (workspaceId, sessionId, beforeSessionId) => {
       await ctx.workspaces.insertSessionBefore(workspaceId, sessionId, beforeSessionId)
@@ -103,36 +105,25 @@ export function apply(ctx: ClientContext): void {
     createWorkspace: input => ctx.workspaces.create(input),
     hooks: { directoryFlow: pickerFlowSource },
   })
-  // Declaration-aware registration (deferRegistration): each owner's
-  // declaring apply may activate after this one, and a register into an
-  // undeclared slot throws; the deferral also re-registers after an HMR
-  // collapse re-declares the slot. Each registration declares its own
-  // directory-flow child hole in the same call (declaration = render
-  // authorization, one table).
-  ctx.effect(() => {
-    const deferred = [
-      deferRegistration(ctx.slots, 'sidebar.workspaces', WorkspaceBrowser, () =>
-        ctx.slots.register(
-          {
-            name: 'sidebar.workspaces',
-            children: { 'sidebar.workspaces.directoryFlow': { kind: 'single', scope: 'root' } },
-            store: createWorkspaceViewStore(),
-            inject: browserInjected,
-            locale: NS,
-          },
-          WorkspaceBrowser,
-        )),
-      deferRegistration(ctx.slots, 'conversation.hero.workspace', WorkspacePicker, () =>
-        ctx.slots.register(
-          {
-            name: 'conversation.hero.workspace',
-            children: { 'conversation.hero.workspace.directoryFlow': { kind: 'single', scope: 'root' } },
-            inject: pickerInjected,
-            locale: NS,
-          },
-          WorkspacePicker,
-        )),
-    ]
-    return () => { for (const entry of deferred) entry.dispose() }
-  }, 'ui-workspace: browser + picker registrations')
+  // Each registration declares its directory-flow child in the same call;
+  // slot injection follows both the owner and declaration HMR lifetimes.
+  ctx.slots.inject('sidebar.workspaces', () => ctx.slots.register(
+    {
+      name: 'sidebar.workspaces',
+      children: { 'sidebar.workspaces.directoryFlow': { kind: 'single', scope: 'root' } },
+      store: createWorkspaceViewStore(),
+      inject: browserInjected,
+      locale: NS,
+    },
+    WorkspaceBrowser,
+  ))
+  ctx.slots.inject('conversation.hero.workspace', () => ctx.slots.register(
+    {
+      name: 'conversation.hero.workspace',
+      children: { 'conversation.hero.workspace.directoryFlow': { kind: 'single', scope: 'root' } },
+      inject: pickerInjected,
+      locale: NS,
+    },
+    WorkspacePicker,
+  ))
 }

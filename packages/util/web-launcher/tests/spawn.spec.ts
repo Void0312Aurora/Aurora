@@ -5,9 +5,9 @@ import { delimiter, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, it } from 'vitest'
 import {
-  requireWebLaunchPipes,
   spawnWebLaunch,
   type SpawnFn,
+  type WebLaunchChild,
   type WebServerLaunch,
   WEB_ARGS,
 } from '../src/index.ts'
@@ -20,14 +20,13 @@ interface ChildResult {
 }
 
 /** Collect one short-lived launch without hiding spawn or exit failures. */
-async function collect(child: ChildProcess): Promise<ChildResult> {
-  const { stdout: childStdout, stderr: childStderr } = requireWebLaunchPipes(child)
-  childStdout.setEncoding('utf8')
-  childStderr.setEncoding('utf8')
+async function collect(child: WebLaunchChild): Promise<ChildResult> {
+  child.stdout.setEncoding('utf8')
+  child.stderr.setEncoding('utf8')
   let stdout = ''
   let stderr = ''
-  childStdout.on('data', (chunk: string) => { stdout += chunk })
-  childStderr.on('data', (chunk: string) => { stderr += chunk })
+  child.stdout.on('data', (chunk: string) => { stdout += chunk })
+  child.stderr.on('data', (chunk: string) => { stderr += chunk })
   const failed = new Promise<never>((_resolve, reject) => { child.once('error', reject) })
   const closed = once(child, 'close').then((values) => {
     const [code, signal] = values as [number | null, NodeJS.Signals | null]
@@ -85,11 +84,6 @@ describe('spawnWebLaunch', () => {
         },
       },
     ])
-  })
-
-  it('rejects a spawn implementation that omits the requested output pipes', () => {
-    const child = { stdout: null, stderr: null } as ChildProcess
-    expect(() => requireWebLaunchPipes(child)).toThrow(/without its stdout\/stderr pipes/)
   })
 
   it('uses the production compatibility spawner by default', async () => {

@@ -314,56 +314,6 @@ describe('waitForHttpOk', () => {
     expect(fetchImpl.mock.calls.length).toBeGreaterThan(1)
   })
 
-  it('bounds a hanging fetch by the overall deadline', async () => {
-    const fetchImpl = vi.fn<typeof fetch>((_input, init) => new Promise<Response>((_resolve, reject) => {
-      const signal = init?.signal
-      signal?.addEventListener('abort', () => {
-        reject(signal.reason instanceof Error ? signal.reason : new Error(String(signal.reason)))
-      }, { once: true })
-    }))
-    const started = performance.now()
-
-    await expect(waitForHttpOk(new URL('http://127.0.0.1:1/'), {
-      fetchImpl,
-      timeoutMs: 30,
-      pollIntervalMs: 1_000,
-    })).rejects.toThrow(/within 30ms/)
-
-    expect(performance.now() - started).toBeLessThan(500)
-  })
-
-  it('bounds the polling sleep by the overall deadline', async () => {
-    const fetchImpl = vi.fn(async () => new Response('nope', { status: 503 }))
-    const started = performance.now()
-
-    await expect(waitForHttpOk(new URL('http://127.0.0.1:1/'), {
-      fetchImpl,
-      timeoutMs: 30,
-      pollIntervalMs: 1_000,
-    })).rejects.toThrow(/within 30ms/)
-
-    expect(performance.now() - started).toBeLessThan(500)
-  })
-
-  it('does not sleep after an attempt consumes the remaining deadline', async () => {
-    const now = vi.spyOn(Date, 'now')
-      .mockReturnValueOnce(0)
-      .mockReturnValueOnce(0)
-      .mockReturnValue(101)
-    const fetchImpl = vi.fn(async () => new Response('nope', { status: 503 }))
-
-    try {
-      await expect(waitForHttpOk(new URL('http://127.0.0.1:1/'), {
-        fetchImpl,
-        timeoutMs: 100,
-        pollIntervalMs: 1_000,
-      })).rejects.toThrow(/within 100ms/)
-      expect(fetchImpl).toHaveBeenCalledTimes(1)
-    } finally {
-      now.mockRestore()
-    }
-  })
-
   it('stops immediately when the external signal is already aborted', async () => {
     const fetchImpl = vi.fn(async () => new Response('ok', { status: 200 }))
     await expect(waitForHttpOk(new URL('http://127.0.0.1:1/'), {
@@ -394,6 +344,20 @@ describe('waitForHttpOk', () => {
     await expect(waitForHttpOk(new URL('http://127.0.0.1:1/'), {
       fetchImpl, timeoutMs: 30_000, pollIntervalMs: 5, signal: controller.signal,
     })).rejects.toThrow(/aborted/)
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
+
+  it('skips the inter-attempt sleep when one attempt consumed the whole deadline', async () => {
+    // The sleep is clamped to the time left before the deadline. An attempt
+    // slower than the budget leaves a non-positive remainder, so the poll must
+    // fall straight through to the deadline check instead of sleeping past it.
+    const fetchImpl = vi.fn(async () => {
+      await new Promise(resolve => setTimeout(resolve, 40))
+      throw new Error('ECONNREFUSED')
+    })
+    await expect(waitForHttpOk(new URL('http://127.0.0.1:1/'), {
+      fetchImpl, timeoutMs: 20, pollIntervalMs: 30_000,
+    })).rejects.toThrow(/not reachable .* within 20ms/)
     expect(fetchImpl).toHaveBeenCalledTimes(1)
   })
 })

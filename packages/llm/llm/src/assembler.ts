@@ -59,7 +59,7 @@ export class BlockAssembler {
       }
       case 'text-delta':
       case 'reasoning-delta': {
-        const partial = this.ensure(chunk.index, chunk.type !== 'text-delta' ? 'reasoning' : 'text')
+        const partial = this.ensure(chunk.index, chunk.type === 'text-delta' ? 'text' : 'reasoning')
         if (partial.block) return // closed by block-end; ignore stragglers
         partial.text += chunk.text
         return
@@ -76,7 +76,7 @@ export class BlockAssembler {
         const partial = this.ensure(chunk.index, chunk.block.type)
         // First close wins; ignoring re-close stragglers keeps streamed output
         // and the final assembled block in agreement.
-        if (partial.block) { return }
+        if (partial.block) return
         partial.block = chunk.block
         return
       }
@@ -127,11 +127,15 @@ export class BlockAssembler {
 
   /**
    * Assemble all blocks seen so far, in stream order.
-   * @returns one block per seen index; an open block assembles from its
-   *   accumulated deltas (an unknown block type never closed by `block-end` throws).
+   * @returns one block per seen index, except that max-token truncation drops
+   *   tool calls that cannot be executed safely; an open block assembles from
+   *   its accumulated deltas (an unknown block type never closed by `block-end` throws).
    */
   blocks(): ContentBlock[] {
-    return this.order.map(index => this.assemble(this.mustGet(index), index))
+    const blocks = this.order.map(index => this.assemble(this.mustGet(index), index))
+    return this.finish.kind === 'max-tokens'
+      ? blocks.filter(block => block.type !== 'tool-call')
+      : blocks
   }
 
   /** Usage from the `usage` chunk; undefined until one arrives. */

@@ -1,7 +1,7 @@
 /** Cancellable VS Code prompt adapter for native approvals and questions. */
 
 import type * as vscode from 'vscode'
-import type { AskUserQuestionAnswer, AskUserQuestionItem } from '@deepseek-ai/dsh-user-interaction/types'
+import type { AskUserQuestionAnswer, AskUserQuestionItem } from '@deepseek-ai/dsh-user-questions/types'
 import type { ApprovalPrompt, NativeUi } from './interactions.ts'
 
 /** VS Code window operations used by the prompt adapter. */

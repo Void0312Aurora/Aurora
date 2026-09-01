@@ -1,6 +1,6 @@
 /** Package-owned LLM stream-protocol invariants. @module @deepseek-ai/dsh-llm/invariant */
 
-import type { Context } from 'cordis'
+import type { Context } from '@deepseek-ai/cordis'
 import type { InvariantFailure, InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 import type { ContentBlockType, StreamChunk } from './types.ts'
 
@@ -13,7 +13,9 @@ export const inject = ['invariants']
 
 /** Require one chunk index to be a non-negative safe integer. */
 function validateIndex(index: number, fail: InvariantFailure): void {
-  if (!Number.isSafeInteger(index) || index < 0) fail(`LLM stream block index must be a non-negative safe integer, got ${index}`)
+  if (!Number.isSafeInteger(index) || index < 0) {
+    fail(`LLM stream block index must be a non-negative safe integer, got ${index}`)
+  }
 }
 
 /** Require a delta to address an open block of its matching type. */
@@ -70,7 +72,9 @@ async function* validateStream(
         usageSeen = true
         break
       case 'finish':
-        if (open.size > 0) fail(`LLM stream finished with ${open.size} open block(s)`)
+        if (open.size > 0 && chunk.reason.kind !== 'error' && chunk.reason.kind !== 'aborted') {
+          fail(`LLM stream finished with ${open.size} open block(s)`)
+        }
         finished = true
         break
     }
@@ -81,7 +85,7 @@ async function* validateStream(
 
 /** Install validation around every provider stream. */
 const install: InvariantInstaller = (ctx, fail) => {
-  ctx.on('llm/stream', (_options, next) => { return validateStream(next(), fail) }, { global: true, prepend: true })
+  ctx.on('llm/stream', (_options, next) => validateStream(next(), fail), { global: true, prepend: true })
   ctx.on('llm/adapters-updated', () => {
     // A disposer-time emit can outlive the service-store entry during whole-
     // context teardown; only a live service promises a readable registry.

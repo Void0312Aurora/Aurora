@@ -34,9 +34,8 @@ let bridge: WebviewBridgePort | undefined
 let resolveHostReady: (() => void) | undefined
 const hostReady = new Promise<void>((resolve) => { resolveHostReady = resolve })
 
-// The listener exists before the webview-ready signal and before client boot.
-// Route messages are retained by the channel, host readiness releases the
-// protocol gate, and response messages fan out once the probe subscribes.
+// Route commands and managed-server readiness must be observed before the
+// client graph starts; API response frames are fanned out to the bridge port.
 const bridgeListeners = new Set<(message: BridgeResponseMessage) => void>()
 window.addEventListener('message', (event: MessageEvent<unknown>) => {
   if (routeChannel.receive(event.data)) return
@@ -49,8 +48,8 @@ window.addEventListener('message', (event: MessageEvent<unknown>) => {
 })
 
 // `?fixture` is the keyless runnable-example mode used by the browser snapshot.
-// Production documents acquire the one-shot VS Code API, announce route
-// readiness, then expose the bridge only after the protocol handshake passes.
+// Production documents announce readiness, then expose the bridge only after
+// the managed server has confirmed protocol compatibility.
 if (!new URLSearchParams(location.search).has('fixture')) {
   const vscodeApi = acquireVsCodeApi()
   bridge = {

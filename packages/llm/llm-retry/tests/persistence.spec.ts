@@ -2,27 +2,28 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { Context } from 'cordis'
+import { Context } from '@deepseek-ai/cordis'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
-import SessionPersistenceJsonl from '@deepseek-ai/dsh-session-persistence-jsonl'
-import SessionPersistenceSqlite from '@deepseek-ai/dsh-session-persistence-sqlite'
+import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
+import SqliteSessionPersistence from '@deepseek-ai/dsh-session-persistence-sqlite'
+import { RetryId } from '@deepseek-ai/dsh-llm-retry'
 import type {} from '../src/index.ts'
 
 const dirs: string[] = []
 
 afterEach(async () => {
-  for (const dir of dirs.splice(0)) { await rm(dir, { recursive: true, force: true }) }
+  for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true })
 })
 
 async function backend(kind: 'jsonl' | 'sqlite'): Promise<Context> {
   const ctx = new Context()
   await ctx.plugin(SessionStore)
-  if (kind !== 'jsonl') {
-    await ctx.plugin(SessionPersistenceSqlite, { path: ':memory:' })
-  } else {
+  if (kind === 'jsonl') {
     const root = await mkdtemp(join(tmpdir(), 'dsh-llm-retry-jsonl-'))
     dirs.push(root)
-    await ctx.plugin(SessionPersistenceJsonl, { root })
+    await ctx.plugin(JsonlSessionPersistence, { root })
+  } else {
+    await ctx.plugin(SqliteSessionPersistence, { path: ':memory:' })
   }
   return ctx
 }
@@ -32,14 +33,14 @@ describe.each(['jsonl', 'sqlite'] as const)('%s retry-event persistence', (kind)
     const ctx = await backend(kind)
     try {
       const session = ctx.sessions.create(SessionId(`retry-${kind}`))
-      session.append('turn/start', { turn: 1, trigger: { kind: 'message', source: { kind: 'user' } } })
+      session.append('turn/start', { turn: 1 })
       session.append('step/start', { turn: 1, step: 1 })
       session.append('request/header', {
         header: { config: { provider: 'mock', model: 'mock' } },
         reason: 'initial',
       })
-      session.append('step/end', { turn: 1, step: 1 })
       const event = session.append('llm/retry', {
+        retryId: RetryId(`retry-${kind}-chain`),
         turn: 1,
         step: 1,
         provider: 'mock',
@@ -49,13 +50,9 @@ describe.each(['jsonl', 'sqlite'] as const)('%s retry-event persistence', (kind)
         delayMs: 750,
         failure: { message: 'provider busy', code: 'RATE_LIMIT', status: 429 },
       })
-      session.append('turn/end', {
-        turn: 1,
-        reason: {
-          kind: 'error',
-          step: 1,
-          failure: { message: 'provider busy', code: 'RATE_LIMIT', status: 429 },
-        },
+      session.append('step/end', { turn: 1, step: 1 })
+      session.append('turn/end', { turn: 1, reason: { kind: 'error', error: { message: 'provider busy', code: 'RATE_LIMIT', status: 429 },
+      },
       })
 
       expect(session.deriveMessages()).toEqual([])

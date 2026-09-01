@@ -3,15 +3,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Context } from 'cordis'
-import Loader from '@cordisjs/plugin-loader'
+import { Context } from '@deepseek-ai/cordis'
+import Loader from '@deepseek-ai/cordis-plugin-loader'
 import { SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
 import { defineContentToolFixture } from '@deepseek-ai/dsh-tools'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { LocalBashExecutor } from '@deepseek-ai/dsh-bash-local'
-import LocalSubprocessService from '@deepseek-ai/dsh-subprocess-local'
+import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import * as HooksCodex from '@deepseek-ai/dsh-hooks-codex'
 import { MockAdapter, textResponse, toolCallResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
 
@@ -21,7 +21,7 @@ import { MockAdapter, textResponse, toolCallResponse } from '../../../core/agent
  * block-only decisions, and the five-event subset.
  */
 
-const dirs: Array<string> = []
+const dirs: string[] = []
 afterEach(() => { for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true }) })
 
 function configDir(): string {
@@ -43,7 +43,7 @@ async function harness(dir: string, adapter: MockAdapter, beforeHooks?: (ctx: Co
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
   await ctx.plugin(AgentLoop, { agents: [] })
-  await ctx.plugin(LocalSubprocessService)
+  await ctx.plugin(LocalSubprocessRuntime)
   await ctx.plugin(LocalBashExecutor, { timeoutMs: 10_000 })
   beforeHooks?.(ctx)
   await ctx.plugin(HooksCodex, { configPath: join(dir, 'hooks.json'), model: 'test-model' })
@@ -103,7 +103,7 @@ describe('hooks-codex bridge', () => {
 
     expect(adapter.requests).toHaveLength(2)
     expect(JSON.stringify(adapter.requests[1]!.messages)).toContain('keep going: address the goal')
-  })
+  }, 15_000) // Two real hook subprocesses and agent steps need startup and teardown headroom under load.
 
   it('turn cancellation aborts and reaps a running UserPromptSubmit hook before idle', async () => {
     const dir = configDir()
@@ -125,8 +125,9 @@ describe('hooks-codex bridge', () => {
 
     expect(() => process.kill(pid, 0)).toThrow()
     expect(adapter.requests).toHaveLength(0)
-    expect(events(agent).some(event => event.type === 'turn/start')).toBe(false)
-    expect(events(agent).some(event => event.type === 'hook/invoked' || event.type === 'hook/result')).toBe(false)
+    expect(events(agent).filter(event => event.type === 'turn/start' || event.type === 'hook/invoked'
+      || event.type === 'hook/result' || event.type === 'turn/end').map(event => event.type))
+      .toEqual(['turn/start', 'hook/invoked', 'hook/result', 'turn/end'])
   })
 
   it('only the five bridge-supported Codex events are honored — a SubagentStop entry is ignored', async () => {
@@ -182,7 +183,7 @@ describe('hooks-codex bridge', () => {
     const ctx = new Context()
     await mountAgentLoopTestDependencies(ctx)
     await ctx.plugin(AgentLoop, { agents: [] })
-    await ctx.plugin(LocalSubprocessService)
+    await ctx.plugin(LocalSubprocessRuntime)
     await ctx.plugin(LocalBashExecutor, { timeoutMs: 10_000 })
     const fiber = await ctx.plugin(HooksCodex, { configPath: join(dir, 'hooks.json'), model: 'm' })
     await fiber.dispose()
@@ -205,7 +206,7 @@ describe('hooks-codex bridge', () => {
     const ctx = new Context()
     await mountAgentLoopTestDependencies(ctx)
     await ctx.plugin(AgentLoop, { agents: [] })
-    await ctx.plugin(LocalSubprocessService)
+    await ctx.plugin(LocalSubprocessRuntime)
     await ctx.plugin(LocalBashExecutor, { timeoutMs: 10_000 })
     const fiber = await ctx.plugin(HooksCodex, { configPath: join(dir, 'hooks.json'), model: 'm' })
     ctx.llm.registerAdapter(['mock'], new MockAdapter([]))
@@ -226,12 +227,12 @@ describe('hooks-codex bridge', () => {
   it('has the namespace-plugin export shape (no stray default) so the Loader keeps name/inject/apply', () => {
     expect('default' in HooksCodex).toBe(false)
     expect(HooksCodex.name).toBe('hooks-codex')
-    expect(HooksCodex.inject).toEqual(['bash'])
+    expect(HooksCodex.inject).toEqual(['shell'])
     const loader = Object.create(Loader.prototype) as Loader
     const unwrapped = loader.unwrapExports(HooksCodex) as Record<string, unknown>
     expect(unwrapped).toBe(HooksCodex)
     expect(unwrapped.name).toBe('hooks-codex')
-    expect(unwrapped.inject).toEqual(['bash'])
+    expect(unwrapped.inject).toEqual(['shell'])
     expect(typeof unwrapped.apply).toBe('function')
   })
 })

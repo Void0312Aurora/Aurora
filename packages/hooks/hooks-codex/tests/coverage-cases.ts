@@ -3,21 +3,21 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mkdtempSync, rmSync, writeFileSync, chmodSync, existsSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Context } from 'cordis'
+import { Context } from '@deepseek-ai/cordis'
 import { SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
-import SessionPersistenceJsonl from '@deepseek-ai/dsh-session-persistence-jsonl'
+import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import { defineContentToolFixture } from '@deepseek-ai/dsh-tools'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { LocalBashExecutor } from '@deepseek-ai/dsh-bash-local'
-import LocalSubprocessService from '@deepseek-ai/dsh-subprocess-local'
+import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import * as HooksCodex from '@deepseek-ai/dsh-hooks-codex'
 import { MockAdapter, textResponse, toolCallResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
 
 const testToolSignal = new AbortController().signal
 
-const dirs: Array<string> = []
+const dirs: string[] = []
 afterEach(() => { for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true }) })
 function dir(): string { const d = mkdtempSync(join(tmpdir(), 'dsh-hx-cov-')); dirs.push(d); return d }
 function sh(d: string, name: string, body: string): string {
@@ -31,9 +31,9 @@ type HarnessOpts = { stderrSummaryMaxChars?: number; sessionRoot?: string }
 async function harness(configPath: string, adapter: MockAdapter, opts: HarnessOpts = {}): Promise<Context> {
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
-  if (opts.sessionRoot !== undefined) await ctx.plugin(SessionPersistenceJsonl, { root: opts.sessionRoot })
+  if (opts.sessionRoot !== undefined) await ctx.plugin(JsonlSessionPersistence, { root: opts.sessionRoot })
   await ctx.plugin(AgentLoop, { agents: [] })
-  await ctx.plugin(LocalSubprocessService)
+  await ctx.plugin(LocalSubprocessRuntime)
   await ctx.plugin(LocalBashExecutor, { timeoutMs: 10_000 })
   await ctx.plugin(HooksCodex, { configPath, model: 'm', ...opts })
   ctx.llm.registerAdapter(['mock'], adapter)
@@ -81,7 +81,7 @@ export function defineCoverageCases(groups: CoverageGroup | readonly CoverageGro
       expect((await capture()).payload.transcript_path).toBeNull()
     }, 15_000) // Two real agent/hook subprocess loops need process startup and teardown headroom.
 
-    it('UserPromptSubmit block (exit 2) rejects admission without a turn', async () => {
+    it('UserPromptSubmit block (exit 2) closes a blocked turn without a step', async () => {
       const d = dir()
       hooks(d, { UserPromptSubmit: [{ hooks: [{ type: 'command', command: sh(d, 'b.sh', '#!/usr/bin/env bash\nexit 2\n') }] }] })
       const adapter = new MockAdapter([textResponse('no')])
@@ -89,7 +89,9 @@ export function defineCoverageCases(groups: CoverageGroup | readonly CoverageGro
       const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
       agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } })); await waitForIdle(ctx, agent)
       expect(adapter.requests).toHaveLength(0)
-      expect(events(agent).some(e => e.type === 'turn/start')).toBe(false)
+      expect(events(agent).filter(e => e.type === 'turn/start' || e.type === 'hook/invoked'
+        || e.type === 'hook/result' || e.type === 'turn/end').map(e => e.type))
+        .toEqual(['turn/start', 'hook/invoked', 'hook/result', 'turn/end'])
     })
 
     it('UserPromptSubmit additionalContext is injected; a no-op hook proceeds', async () => {
@@ -109,12 +111,16 @@ export function defineCoverageCases(groups: CoverageGroup | readonly CoverageGro
       hooks(d, { UserPromptSubmit: [{ hooks: [{ type: 'command', command: sh(d, 'c.sh', '#!/usr/bin/env bash\necho \'{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"bridge ctx"}}\'\n') }] }] })
       const adapter = new MockAdapter([textResponse('should not run')])
       const ctx = await harness(join(d, 'hooks.json'), adapter)
-      ctx.on('agent/prompt-submit', async () => ({ kind: 'block' as const, reason: 'policy veto' }))
+      ctx.on('agent/pre-step', async () => ({
+        kind: 'reject' as const,
+      }))
       const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
       agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } })); await waitForIdle(ctx, agent)
       expect(adapter.requests).toHaveLength(0)
       expect(events(agent).some(e => e.type === 'user/message')).toBe(false)
-      expect(events(agent).some(e => e.type === 'turn/start')).toBe(false)
+      expect(events(agent).filter(e => e.type === 'turn/start' || e.type === 'hook/invoked'
+        || e.type === 'hook/result' || e.type === 'turn/end').map(e => e.type))
+        .toEqual(['turn/start', 'hook/invoked', 'hook/result', 'turn/end'])
     })
 
     it('preserves separate bridge and downstream prompt contexts with framing and metadata', async () => {
@@ -122,10 +128,12 @@ export function defineCoverageCases(groups: CoverageGroup | readonly CoverageGro
       hooks(d, { UserPromptSubmit: [{ hooks: [{ type: 'command', command: sh(d, 'c.sh', '#!/usr/bin/env bash\necho \'{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"from-bridge"}}\'\n') }] }] })
       const adapter = new MockAdapter([textResponse('ok')])
       const ctx = await harness(join(d, 'hooks.json'), adapter)
-      ctx.on('agent/prompt-submit', async () => ({
-        kind: 'allow' as const,
-        content: [{ type: 'text' as const, text: 'rewritten-prompt' }],
-        additionalContexts: [createUserMessage({
+      ctx.on('agent/pre-step', async ({ messages }) => ({
+        kind: 'enter' as const,
+        messages: [{
+          ...messages[0]!,
+          content: [{ type: 'text' as const, text: 'rewritten-prompt' }],
+        }, createUserMessage({
           content: [{ type: 'text' as const, text: 'from-downstream' }],
           source: { kind: 'plugin' as const, plugin: 'policy' },
         })],
@@ -138,8 +146,8 @@ export function defineCoverageCases(groups: CoverageGroup | readonly CoverageGro
       expect(req).toContain('rewritten-prompt')
       const contexts = events(agent).filter(event => event.type === 'user/message' && event.data.source.kind !== 'user')
       expect(contexts.map(event => event.type === 'user/message' && event.data.source)).toEqual([
-        { kind: 'plugin', plugin: 'hooks-codex' },
         { kind: 'plugin', plugin: 'policy' },
+        { kind: 'plugin', plugin: 'hooks-codex' },
       ])
     })
   })
@@ -195,7 +203,7 @@ export function defineCoverageCases(groups: CoverageGroup | readonly CoverageGro
       expect(result?.type === 'tool/result' && result.data.message.content[0].isError).toBe(true)
       expect(result?.type === 'tool/result' && result.data.message.content[0].content.some(b => b.type === 'text' && b.text.includes('downstream-block'))).toBe(true)
       expect(events(agent).some(e => e.type === 'user/message' && e.data.source.kind !== 'user' && e.data.content.some(b => b.type === 'text' && b.text.includes('bridge-note')))).toBe(true)
-    })
+    }, 10_000) // The real hook subprocess needs startup and teardown headroom under full-suite contention.
 
     it('SessionStart additionalContext is injected for the first request', async () => {
       const d = dir()
@@ -203,8 +211,8 @@ export function defineCoverageCases(groups: CoverageGroup | readonly CoverageGro
       const adapter = new MockAdapter([textResponse('ok')])
       const ctx = await harness(join(d, 'hooks.json'), adapter)
       const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
-      await waitFor(() => events(agent).some(e => e.type === 'user/message'
-      && e.data.content.some(b => b.type === 'text' && b.text.includes('start-ctx'))))
+      await waitFor(() => agent.inbox.nextStep.some(message =>
+        message.content.some(block => block.type === 'text' && block.text.includes('start-ctx'))))
       agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } })); await waitForIdle(ctx, agent)
       expect(JSON.stringify(adapter.requests[0]!.messages)).toContain('start-ctx')
     })
@@ -307,7 +315,7 @@ export function defineCoverageCases(groups: CoverageGroup | readonly CoverageGro
       const ctx = new Context()
       await mountAgentLoopTestDependencies(ctx)
       await ctx.plugin(AgentLoop, { agents: [] })
-      await ctx.plugin(LocalSubprocessService)
+      await ctx.plugin(LocalSubprocessRuntime)
       await ctx.plugin(LocalBashExecutor, { timeoutMs: 10_000 })
       ctx.logger.warn = warn as never
       // Direct apply (schema bypass) → the `model ?? ''` fallback is exercised.
@@ -387,7 +395,7 @@ export function defineCoverageCases(groups: CoverageGroup | readonly CoverageGro
     })
 
     it('a {"continue":false} hook is RECORDED as "stop" but does not halt the run (TODO(hook-continue-false))', async () => {
-    // Honoring `continue:false` is deferred — the seams have no hard-halt
+    // Honoring `continue:false` is deferred — the extension points have no hard-halt
     // primitive. Assert the LOG records the halt request AND that the run is not
     // actually halted (the tool still runs, the turn completes).
       const d = dir()
@@ -472,7 +480,7 @@ export function defineCoverageCases(groups: CoverageGroup | readonly CoverageGro
       hooks(d, { PreToolUse: [{ hooks: [{ type: 'command', command: sh(d, 'h.sh', '#!/usr/bin/env bash\nexit 0\n') }] }] })
       const adapter = new MockAdapter([toolCallResponse('c1', 'Bash', { command: 'x' }), textResponse('done')])
       const ctx = await harness(join(d, 'hooks.json'), adapter)
-      ctx.bash.run = (() => Promise.reject(new Error('executor down')))
+      ctx.shell.run = (() => Promise.reject(new Error('executor down')))
       ctx.tools.register(defineContentToolFixture({ name: 'Bash', description: 'b', parameters: { command: { type: 'string' } }, async execute() { return [{ type: 'text', text: 'ok' }] } }))
       const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
       agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } })); await waitForIdle(ctx, agent)
@@ -543,8 +551,8 @@ export function defineCoverageCases(groups: CoverageGroup | readonly CoverageGro
       const adapter = new MockAdapter([textResponse('ok')])
       const ctx = await harness(join(d, 'hooks.json'), adapter)
       const agent = ctx.agentLoop.create(SessionId('a1'), { provider: 'mock', model: 'mock' })
-      await waitFor(() => events(agent).some(e => e.type === 'user/message'
-      && e.data.content.some(b => b.type === 'text' && b.text.includes('session preamble'))))
+      await waitFor(() => agent.inbox.nextStep.some(message =>
+        message.content.some(block => block.type === 'text' && block.text.includes('session preamble'))))
       agent.followup(createUserMessage({ content: [{ type: 'text', text: 'go' }], source: { kind: 'user' } })); await waitForIdle(ctx, agent)
       expect(JSON.stringify(adapter.requests[0]!.messages)).toContain('session preamble')
     })
@@ -617,7 +625,7 @@ export function defineCoverageCases(groups: CoverageGroup | readonly CoverageGro
       const ctx = new Context()
       await mountAgentLoopTestDependencies(ctx)
       await ctx.plugin(AgentLoop, { agents: [] })
-      await ctx.plugin(LocalSubprocessService)
+      await ctx.plugin(LocalSubprocessRuntime)
       await ctx.plugin(LocalBashExecutor, { timeoutMs: 10_000, cwd: serverDir })
       await ctx.plugin(HooksCodex, { configPath: join(serverDir, 'hooks.json'), model: 'm' })
       ctx.llm.registerAdapter(['mock'], adapter)

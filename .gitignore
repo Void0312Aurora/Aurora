@@ -19,6 +19,7 @@ oxlint-contract-*.ts
 .humanize/
 tmp/
 .claude/commands/
+.claude/launch.json
 .claude/settings.json
 .vscode/
 .DS_Store
@@ -39,7 +40,3 @@ apps/vscode/.vscode-test/
 worktrees/
 .agents/worktrees/
 .typert-*/
-
-# Codex action transient workspace files
-.codex-prior-review-context.md
-codex-ci-logs.txt

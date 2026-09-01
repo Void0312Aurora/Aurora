@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Context } from 'cordis'
+import { Context } from '@deepseek-ai/cordis'
 import { createScope, scopeOf } from '@deepseek-ai/dsh-scope'
 import type { Scope, ScopeKey } from '@deepseek-ai/dsh-scope'
 import SessionStore from '@deepseek-ai/dsh-session'
@@ -40,7 +40,7 @@ describe('session dispatch carriers', () => {
     otherScope.ctx.on('session/created', session => void heard.push(`other-created:${session.id}`))
 
     const session = scope.ctx.sessions.create()
-    session.append('turn/start', { turn: 1, trigger: { kind: 'message', source: { kind: 'user' } } })
+    session.append('turn/start', { turn: 1 })
 
     expect(heard).toEqual([
       `owner-created:${session.id}`,
@@ -57,7 +57,7 @@ describe('session dispatch carriers', () => {
     scope.ctx.on('session/event', (_s, event) => void heard.push(`owner:${event.type}`))
 
     const bare = ctx.sessions.create()
-    bare.append('turn/start', { turn: 1, trigger: { kind: 'message', source: { kind: 'user' } } })
+    bare.append('turn/start', { turn: 1 })
     expect(heard).toEqual(['global:turn/start'])
   })
 
@@ -164,7 +164,7 @@ describe('sessions.flush()', () => {
     const ctx = await mount()
     const scope = await mintScope(ctx, 'owner')
     const flushed: string[] = []
-    ctx.on('session/flush', (session: Session) => { return void flushed.push(`global:${session.id}`) })
+    ctx.on('session/flush', (session: Session) => void flushed.push(`global:${session.id}`))
     scope.ctx.on('session/flush', (session: Session) => void flushed.push(`owner:${session.id}`))
 
     const prepared = ctx.sessions.prepare()

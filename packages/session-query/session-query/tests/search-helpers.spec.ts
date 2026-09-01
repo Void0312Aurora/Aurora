@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Context } from 'cordis'
+import { Context } from '@deepseek-ai/cordis'
 import { createUserMessage, CallId , createMessage, createToolResultMessage } from '@deepseek-ai/dsh-llm'
 import SessionStore, {
   SESSION_FORMAT_VERSION,
@@ -17,7 +17,7 @@ import {
   materializeSessionResultFilters,
   type SessionQueryErrorCode,
 } from '@deepseek-ai/dsh-session-query'
-import { TestSessionQueryService } from './test-service.ts'
+import { TestSessionQueryEngine } from './test-service.ts'
 
 const id = SessionId('session')
 
@@ -62,17 +62,10 @@ describe('session-query semantic extraction', () => {
       { type: 'user/message', seq: 2, time: 3, data: createUserMessage({
         content: messageContent, source: { kind: 'plugin', plugin: 'test' },
       }), surfaceOp: 'append' },
-      { type: 'steering/message', seq: 3, time: 4, data: {
-        turn: 1,
-        message: createUserMessage({
-          content: messageContent,
-          source: { kind: 'user' },
-        }),
-      }, surfaceOp: 'append' },
-      { type: 'tool/call', seq: 4, time: 5, data: { turn: 1, step: 1, callId, name: 'bash', arguments: '{"cmd":"pwd"}' } },
+      { type: 'tool/call', seq: 3, time: 5, data: { turn: 1, step: 1, callId, name: 'bash', arguments: '{"cmd":"pwd"}' } },
       {
         type: 'tool/result',
-        seq: 5,
+        seq: 4,
         time: 6,
         data: {
           turn: 1,
@@ -88,7 +81,7 @@ describe('session-query semantic extraction', () => {
       },
       {
         type: 'tool/result',
-        seq: 6,
+        seq: 5,
         time: 7,
         data: {
           turn: 1,
@@ -97,10 +90,10 @@ describe('session-query semantic extraction', () => {
         },
         surfaceOp: 'append',
       },
-      { type: 'todo/write', seq: 7, time: 8, data: { todos: [{ status: 'in_progress', content: 'ship search' }] } },
+      { type: 'todo/write', seq: 6, time: 8, data: { todos: [{ status: 'in_progress', content: 'ship search' }] } },
     ]
 
-    for (const event of events.slice(0, 4)) {
+    for (const event of events.slice(0, 3)) {
       expect(extractSessionEventText(event)).toBe('visible\nread\n{"path":"a"}\nnested')
     }
     expect(extractSessionEventText({
@@ -118,19 +111,18 @@ describe('session-query semantic extraction', () => {
       },
       surfaceOp: 'append',
     })).toBe('')
-    expect(extractSessionEventText(events[4]!)).toBe('bash\n{"cmd":"pwd"}')
-    expect(extractSessionEventText(events[5]!)).toBe('failed\nOops\nE_OOPS')
-    expect(extractSessionEventText(events[6]!)).toBe('')
-    expect(extractSessionEventText(events[7]!)).toBe('in_progress\nship search')
+    expect(extractSessionEventText(events[3]!)).toBe('bash\n{"cmd":"pwd"}')
+    expect(extractSessionEventText(events[4]!)).toBe('failed\nOops\nE_OOPS')
+    expect(extractSessionEventText(events[5]!)).toBe('')
+    expect(extractSessionEventText(events[6]!)).toBe('in_progress\nship search')
   })
 
   it('extracts meaningful turn outcomes and skips structural or unknown events', () => {
     const reasons: Array<[SessionEvent<'turn/end'>['data']['reason'], string]> = [
-      [{ kind: 'error', step: 2, message: 'boom', code: 'E' }, 'error\nboom\nE'],
-      [{ kind: 'error', step: 2, message: 'boom' }, 'error\nboom'],
-      [{ kind: 'error', step: 2, failure: { message: 'provider boom', code: 'SERVER' } }, 'error\nprovider boom\nSERVER'],
-      [{ kind: 'aborted' }, 'aborted'],
-      [{ kind: 'disposed' }, 'disposed'],
+      [{ kind: 'error', error: { message: 'boom', code: 'UNKNOWN' } }, 'error\nboom'],
+      [{ kind: 'error', error: { message: 'provider boom', code: 'UNKNOWN' } }, 'error\nprovider boom'],
+      [{ kind: 'aborted', reason: { kind: 'user' } }, 'aborted'],
+      [{ kind: 'aborted', reason: { kind: 'disposed' } }, 'aborted'],
       [{ kind: 'max-tokens' }, 'max-tokens'],
       [{ kind: 'interrupted' }, 'interrupted'],
       [{ kind: 'completed' }, ''],
@@ -140,7 +132,7 @@ describe('session-query semantic extraction', () => {
       expect(extractSessionEventText({ type: 'turn/end', seq: 0, time: 1, data: { turn: 1, reason } })).toBe(text)
     }
     const structural: SessionEvent[] = [
-      { type: 'turn/start', seq: 0, time: 1, data: { turn: 1, trigger: { kind: 'message', source: { kind: 'user' } } } },
+      { type: 'turn/start', seq: 0, time: 1, data: { turn: 1 } },
       { type: 'step/start', seq: 1, time: 1, data: { turn: 1, step: 1 } },
       { type: 'step/end', seq: 2, time: 1, data: { turn: 1, step: 1 } },
       { type: 'assistant/chunk', seq: 3, time: 1, data: { turn: 1, step: 1, chunk: { type: 'text-delta', index: 0, text: 'raw' } } },
@@ -251,7 +243,7 @@ describe('session-query document and filter helpers', () => {
       },
       surfaceOp: { op: 'replace', start: 9, end: 9 },
     }]
-    expect(() => { return buildSessionEventRecords(id, malformed) }).toThrow(expectCode('SESSION_QUERY_INVALID_SURFACE'))
+    expect(() => buildSessionEventRecords(id, malformed)).toThrow(expectCode('SESSION_QUERY_INVALID_SURFACE'))
   })
 
   it('owns filters and rejects malformed runtime filter shapes deterministically', () => {
@@ -282,7 +274,7 @@ describe('session-query document and filter helpers', () => {
   it('exposes the scan path on the combined query service', async () => {
     const ctx = new Context()
     await ctx.plugin(SessionStore)
-    await ctx.plugin(TestSessionQueryService)
+    await ctx.plugin(TestSessionQueryEngine)
     const session = ctx.sessions.create(id)
     session.append('user/message', createUserMessage({
       content: [{ type: 'text', text: 'Alpha\n beta' }], source: { kind: 'user' },
@@ -298,7 +290,7 @@ describe('session-query document and filter helpers', () => {
 it('registers exact and abstract search behavior under one ctx key', async () => {
   const ctx = new Context()
   await ctx.plugin(SessionStore)
-  const fiber = await ctx.plugin(TestSessionQueryService)
+  const fiber = await ctx.plugin(TestSessionQueryEngine)
   const session = ctx.sessions.create(id)
   await expect(ctx.sessionQuery.searchSessions({ query: 'AI' })).resolves.toEqual({ items: [] })
   await expect(ctx.sessionQuery.searchEvents({ sessionId: id, query: 'AI' }))

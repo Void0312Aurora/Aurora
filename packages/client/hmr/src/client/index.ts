@@ -2,8 +2,8 @@
  * client-hmr, browser half: hot-reload driver for client plugin entries.
  *
  * Listens on the host's system SSE channel (`GET /plugins/events`); on a
- * `rebuilt` frame it re-fetches the entry's bundle and swaps the cordis
- * fiber in place. Every graph entry is a plugin bundle under the web2 model
+ * `rebuilt` frame it reloads the entry's bundle and swaps the cordis
+ * fiber in place. Every graph entry is a plugin bundle
  * — `immediately` rows differ only in stage-one prefetch (a boot
  * optimization), so all rostered plugin packages share these reload semantics;
  * normal packages (react family, cordis, shell, pure libs) are not entries
@@ -14,7 +14,7 @@
  * cascades into its UI dependents with no HMR-side bookkeeping.
  *
  * Reload order (lazy CJS table): invalidate (drop the stale factory and
- * materialized record) → prefetch (fetch + execute + register the fresh
+ * materialized record) → prefetch (load and register the fresh
  * factory) → registry-first teardown → drain old fiber unload → remove
  * owned `<style data-plugin>` tags → `entry.refresh()` materializes the new
  * factory. Invalidate MUST precede prefetch: a live factory makes prefetch
@@ -30,13 +30,12 @@
  * Failure window: if prefetch rejects after invalidate, the module is left
  * unregistered while the OLD fiber keeps running untouched (teardown never
  * started) — degraded but recoverable, the next rebuilt frame retries from
- * scratch. Consistent with the v1 no-rollback policy below. Known dev-only
+ * scratch. Consistent with the no-rollback policy below. Known dev-only
  * race: a rebuilt frame overlapping a still-in-flight boot arrival shares
  * that arrival's task and may materialize the pre-rebuild bytes; the next
  * rebuilt frame self-heals.
  *
- * Why not the naive `entry.fiber.dispose()` → `entry.refresh()` path —
- * confirmed against vendor sources:
+ * Why not the naive `entry.fiber.dispose()` → `entry.refresh()` path:
  * 1. `Entry.fiber` is never cleared on dispose (vendor/loader/src/config/
  *    entry.ts assigns it only in `_init`), so `refresh()` hits its
  *    `if (this.fiber) return` guard and no-ops.
@@ -46,7 +45,7 @@
  *    `disabled: true` — permanently.
  * vendor/hmr's reload skeleton documents the fix: delete the runtime record
  * FIRST (`registry.delete` → case 4 returns early, the entry stays enabled),
- * then rebuild. We additionally clear `entry.fiber` ourselves so
+ * then rebuild. `entry.fiber` is additionally cleared so
  * `entry.refresh()` re-imports and re-plugins through the Loader's own
  * `_init` (entry-resolved config, automatic `fiber.entry` rebinding) instead
  * of hand-rolling `registry.plugin`. Client entries have exactly one fiber
@@ -58,12 +57,12 @@
  * apply opens a fresh channel. Frames arriving during the gap are lost —
  * acceptable for the dev channel, the next rebuild renotifies.
  *
- * Failure policy (v1): no rollback. An import failure leaves the entry
+ * Failure policy: no rollback. An import failure leaves the entry
  * fiberless (the next rebuilt frame retries from scratch); an apply failure
  * leaves a FAILED fiber for the shell's status projection. Both log loudly.
  */
-import type { Context } from 'cordis'
-import type { Entry, Loader } from '@cordisjs/plugin-loader'
+import type { Context } from '@deepseek-ai/cordis'
+import type { Entry, Loader } from '@deepseek-ai/cordis-plugin-loader'
 import type { PluginsEventFrame } from '../events.ts'
 import { EVENTS_ENDPOINT } from '../events.ts'
 
@@ -87,7 +86,7 @@ function findEntry(loader: Loader, id: string): Entry | undefined {
 /** Remove every `<style data-plugin>` tag owned by `id` (attribute compared verbatim — no CSS-selector escaping pitfalls). */
 function removeOwnedStyles(id: string): void {
   for (const el of document.querySelectorAll('style[data-plugin]')) {
-    if (el.getAttribute('data-plugin') === id) { el.remove() }
+    if (el.getAttribute('data-plugin') === id) el.remove()
   }
 }
 
@@ -110,7 +109,7 @@ export function apply(ctx: Context): void {
     }
     // Invalidate first (drop stale factory + record — a live factory makes
     // prefetch a no-op and re-registration a loud duplicate), then run the
-    // async half while the old fiber still serves: fetch + execute registers
+    // async half while the old fiber still serves: script loading registers
     // the fresh factory with zero side effects (lazy CJS — module bodies run
     // at materialization, not execution).
     modLoader.invalidate(id)
@@ -136,7 +135,7 @@ export function apply(ctx: Context): void {
     // re-plugins under the entry context. Import failures are logged by
     // Entry._init and leave the entry fiberless (retryable).
     await entry.refresh()
-    // Surface apply failures loudly (v1: no rollback, FAILED state stays).
+    // Surface apply failures loudly (no rollback, FAILED state stays).
     await entry.fiber?.await()
   }
 
@@ -152,7 +151,7 @@ export function apply(ctx: Context): void {
         })
         break
       case 'graph':
-        // Connect-time snapshot, unused in v1. The loader's cached graph rev
+        // Connect-time snapshot, unused. The loader's cached graph rev
         // goes stale after rebuilds — harmless, since prefetch hits the
         // network anyway (host serves bundles no-cache); graph rev refresh
         // lands with the reconnect-handshake mechanism.

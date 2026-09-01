@@ -1,9 +1,9 @@
 /**
- * Node half of the client module system (dshClient dual-face package): scans
- * the host Loader's entries for `dshClient` packages, composes the
+ * Node half of the client module system (`dsh.client` dual-face package): scans
+ * the host Loader's entries for packages declaring `dsh.client`, composes the
  * `window.__DSH_BOOT__` entry graph (wire single source: {@link WebBootEntry}
- * in `./client/manifest.ts`), serves `/plugins/<id>/client.js`, taps the
- * index render to inject the boot manifest, and provides the
+ * in `./client/manifest.ts`), serves `/plugins/<id>/client.js` and its source
+ * map, taps the index render to inject the boot manifest, and provides the
  * `clientModuleHost` service (the HMR node half's registration/notification
  * face).
  *
@@ -14,9 +14,9 @@
  * set with all current entries and flushes synchronously, so first scan and
  * steady state share one implementation. Package metadata (including the
  * negative "not a client package" verdict) is cached per name and never
- * expires — plugin-set changes take effect on restart per the config-source
- * ruling; bundle content changes reach the graph only through
- * {@link ClientModuleHostService.rebuilt}.
+ * expires — plugin-set changes take effect on restart; bundle content
+ * changes reach the graph only through
+ * {@link ClientModuleRegistry.rebuilt}.
  * @module @deepseek-ai/dsh-client-modules
  */
 
@@ -26,9 +26,9 @@ import { readFile } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
-import { Service } from 'cordis'
-import type { Context } from 'cordis'
-import type {} from '@cordisjs/plugin-loader'
+import { Service } from '@deepseek-ai/cordis'
+import type { Context } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/cordis-plugin-loader'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type { WebBootEntry, WebBootGraph } from './client/manifest.ts'
 
@@ -36,14 +36,14 @@ export type {
   BootManifest, BootModuleRow, BootPluginRow, WebBootEntry, WebBootGraph,
 } from './client/manifest.ts'
 
-declare module 'cordis' {
+declare module '@deepseek-ai/cordis' {
   interface Context {
     /** The web plugin table (provided by the client-modules node half). */
-    clientModuleHost: ClientModuleHostService
+    clientModules: ClientModuleRegistry
   }
 }
 
-/** package.json `dshClient` declaration shape (file boundary — validated field by field). */
+/** package.json `dsh.client` declaration fields, validated one by one after reading the file. */
 interface DshClientDeclaration {
   inject?: string[]
   platform: string
@@ -51,7 +51,7 @@ interface DshClientDeclaration {
   immediately?: boolean
 }
 
-/** Resolved package metadata for one dshClient package (cached per name, never expires). */
+/** Resolved package metadata for one `dsh.client` package (cached per name, never expires). */
 interface PkgMeta {
   clientPath: string
   inject?: string[]
@@ -105,21 +105,21 @@ interface WebPluginRecord {
   clientPath: string
 }
 
-/** Narrow an unknown parsed JSON value to the dshClient declaration, throwing on malformed fields. */
+/** Narrow an unknown parsed JSON value to the `dsh.client` declaration, throwing on malformed fields. */
 function parseDshClient(pkgName: string, value: unknown): DshClientDeclaration | undefined {
   if (value === undefined) return undefined
   if (typeof value !== 'object' || value === null) {
-    throw new Error(`client-modules: ${pkgName} has a non-object dshClient declaration`)
+    throw new Error(`client-modules: ${pkgName} has a non-object dsh.client declaration`)
   }
   const decl = value as Record<string, unknown>
   if (typeof decl.platform !== 'string') {
-    throw new Error(`client-modules: ${pkgName} dshClient.platform must be a string`)
+    throw new Error(`client-modules: ${pkgName} dsh.client.platform must be a string`)
   }
   if (decl.inject !== undefined && (!Array.isArray(decl.inject) || decl.inject.some(i => typeof i !== 'string'))) {
-    throw new Error(`client-modules: ${pkgName} dshClient.inject must be a string array`)
+    throw new Error(`client-modules: ${pkgName} dsh.client.inject must be a string array`)
   }
   if (decl.immediately !== undefined && typeof decl.immediately !== 'boolean') {
-    throw new Error(`client-modules: ${pkgName} dshClient.immediately must be a boolean`)
+    throw new Error(`client-modules: ${pkgName} dsh.client.immediately must be a boolean`)
   }
   return {
     platform: decl.platform,
@@ -138,7 +138,7 @@ function clientExportOf(pkgName: string, exportsField: unknown): string | undefi
     const fallback = (client as Record<string, unknown>).default
     if (typeof fallback === 'string') return fallback
   }
-  throw new Error(`client-modules: ${pkgName} exports["./client"] has an unsupported shape`)
+  throw new Error(`client-modules: ${pkgName} exports["./client"] must be a string or an object with a string default`)
 }
 
 /** sha1 content hash shortened to 12 hex chars (bundle rev / graph rev). */
@@ -175,18 +175,18 @@ export function injectBootManifest(html: string, graph: WebBootGraph): string {
 }
 
 /**
- * The web plugin table service: incremental dshClient scan + wire composition
+ * The web plugin table service: incremental `dsh.client` scan + wire composition
  * + bundle route + index tap. Construction runs the activation scan
  * synchronously — a malformed declaration or missing bundle among the
  * already-loaded entries aggregates into one loud throw (FAILED fiber; the
  * boot activation audit reports it).
  */
-export class ClientModuleHostService extends Service {
-  static inject = ['httpServer', 'loader']
+export class ClientModuleRegistry extends Service {
+  static inject = ['webServer', 'loader']
 
   private readonly table = new Map<string, WebPluginRecord>()
   // Negative verdicts (unresolvable specifier — builtins like cordis:include,
-  // subpath rows — or a package without a web dshClient declaration) are
+  // subpath rows — or a package without a web `dsh.client` declaration) are
   // cached as null and never expire: plugin-set changes take effect on restart.
   private readonly pkgMeta = new Map<string, PkgMeta | null>()
   private readonly rebuildListeners = new Set<(id: string, rev: string) => void>()
@@ -198,10 +198,10 @@ export class ClientModuleHostService extends Service {
 
   /**
    * Build the service: subscribe, seed, and run the activation flush.
-   * @param ctx - plugin context carrying httpServer and loader.
+   * @param ctx - plugin context carrying webServer and loader.
    */
   constructor(ctx: Context) {
-    super(ctx, 'clientModuleHost')
+    super(ctx, 'clientModules')
     // Resolution anchor: the config tree's baseUrl (the cordis.yml directory,
     // whose package declares every composed plugin as a dependency). The
     // modules package's own URL would miss sibling packages under pnpm's
@@ -239,11 +239,11 @@ export class ClientModuleHostService extends Service {
     }
 
     ctx.effect(
-      () => ctx.httpServer.register({ kind: 'prefix', path: '/plugins', handler: this.serveBundle }),
+      () => ctx.webServer.register({ kind: 'prefix', path: '/plugins', handler: this.serveBundle }),
       'client-modules: bundle route',
     )
     ctx.effect(
-      () => { return ctx.httpServer.tapIndex(html => injectBootManifest(html, this.composed)) },
+      () => ctx.webServer.tapIndex(html => injectBootManifest(html, this.composed)),
       'client-modules: boot manifest injection',
     )
   }
@@ -342,18 +342,22 @@ export class ClientModuleHostService extends Service {
       return null
     }
     const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as Record<string, unknown>
-    const decl = parseDshClient(pkgName, pkg.dshClient)
+    const dsh = pkg.dsh
+    const decl = parseDshClient(
+      pkgName,
+      dsh !== null && typeof dsh === 'object' ? (dsh as Record<string, unknown>).client : undefined,
+    )
     if (decl === undefined || decl.platform !== 'web') {
       this.pkgMeta.set(pkgName, null)
       return null
     }
     const clientRel = clientExportOf(pkgName, pkg.exports)
     if (clientRel === undefined) {
-      throw new Error(`client-modules: ${pkgName} declares dshClient but exports no "./client" bundle`)
+      throw new Error(`client-modules: ${pkgName} declares dsh.client but exports no "./client" bundle`)
     }
     const meta: PkgMeta = {
       clientPath: join(dirname(pkgPath), clientRel),
-      ...(decl.inject === undefined ? {} : { inject: decl.inject }),
+      ...(decl.inject !== undefined ? { inject: decl.inject } : {}),
       immediately: decl.immediately === true,
     }
     this.pkgMeta.set(pkgName, meta)
@@ -424,9 +428,15 @@ export class ClientModuleHostService extends Service {
     const pathname = decodeURIComponent(new URL(req.url ?? '/', 'http://x').pathname)
     // The id may contain a scope slash. Anything else under /plugins (including
     // /plugins/events when the HMR row is absent) is an unknown resource.
-    const path = pathname.startsWith('/plugins/') && pathname.endsWith('/client.js')
-      ? this.clientPath(pathname.slice('/plugins/'.length, -'/client.js'.length))
+    const prefix = '/plugins/'
+    const mapSuffix = '/client.js.map'
+    const bundleSuffix = '/client.js'
+    const isSourceMap = pathname.startsWith(prefix) && pathname.endsWith(mapSuffix)
+    const suffix = isSourceMap ? mapSuffix : bundleSuffix
+    const clientPath = pathname.startsWith(prefix) && pathname.endsWith(suffix)
+      ? this.clientPath(pathname.slice(prefix.length, -suffix.length))
       : undefined
+    const path = clientPath === undefined ? undefined : `${clientPath}${isSourceMap ? '.map' : ''}`
     if (path === undefined) {
       res.writeHead(404)
       res.end()
@@ -434,7 +444,10 @@ export class ClientModuleHostService extends Service {
     }
     try {
       const body = await readFile(path)
-      res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-cache' })
+      res.writeHead(200, {
+        'content-type': isSourceMap ? 'application/json; charset=utf-8' : 'text/javascript; charset=utf-8',
+        'cache-control': 'no-cache',
+      })
       res.end(body)
     } catch {
       // Registered but unreadable (bundle not built yet): loud 404 beats a silent SPA-fallback HTML page.
@@ -444,4 +457,4 @@ export class ClientModuleHostService extends Service {
   }
 }
 
-export default ClientModuleHostService
+export default ClientModuleRegistry

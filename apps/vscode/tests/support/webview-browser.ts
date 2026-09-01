@@ -42,14 +42,7 @@ function closeServer(server: CloseableServer): Promise<void> {
   })
 }
 
-/**
- * Finish browser harness startup around an already-listening server. A launch
- * failure closes the server before it is rethrown.
- * @param server - listening HTTP server owned by this transaction.
- * @param origin - server origin exposed to the browser.
- * @param launch - browser launcher.
- * @returns the completed harness.
- */
+/** Finish browser harness startup around an already-listening server. */
 export async function launchBrowserForServer(
   server: CloseableServer,
   origin: string,
@@ -110,7 +103,7 @@ function listen(): Promise<{ server: Server; origin: string }> {
     const rpcId = JSON.parse(message.body ?? '{}').rpcId
     const requested = new URLSearchParams(location.search).get('protocol')
     const protocolVersion = requested === null ? ${String(API_PROTOCOL_VERSION)} : Number(requested)
-    const value = { protocolVersion, version: 'browser-fixture', cwd: '/fixture', attachedSessions: 0 }
+    const value = { protocolVersion, version: 'browser-fixture', cwd: '/fixture', attachedSessions: 0, canOpenPath: false }
     const chunk = JSON.stringify({ type: 'server-response', rpcId, result: { ok: true, value } })
     queueMicrotask(() => {
       window.postMessage({ type: 'dsh-fetch-head', id: message.id, status: 200 }, '*')

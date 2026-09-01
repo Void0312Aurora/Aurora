@@ -130,7 +130,7 @@ describe('settleRunResult', () => {
     const seen: string[] = []
     const result = await settleRunResult({
       attempt: async () => { throw new Error('transport died') },
-      collectOutput: () => { return [] },
+      collectOutput: () => [],
       cancelled: () => false,
       onError: (error, stopReason) => {
         seen.push(`${stopReason}:${error.message}`)

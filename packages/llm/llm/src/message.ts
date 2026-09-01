@@ -2,9 +2,9 @@
 
 import { MessageId, type CallId } from './brand.ts'
 import { deepFreeze } from './call-config.ts'
-import type { ContentBlock, ToolResultBlock } from './types.ts'
+import type { ContentBlock, StreamChunk, ToolResultBlock } from './types.ts'
 
-/** Provider ownership and adapter-private replay data for an assistant message. */
+/** Provider/model identity and adapter-private replay data for an assistant message. */
 export interface AssistantProvenance {
   /** Provider route that produced the message. */
   provider: string
@@ -12,7 +12,7 @@ export interface AssistantProvenance {
   model: string
   /**
    * Lossless-JSON adapter state needed to replay the provider response.
-   * `LlmService` exposes it to a target adapter only when that adapter instance
+   * `LlmRuntime` exposes it to a target adapter only when that adapter instance
    * currently owns both this historical provider and the target provider.
    */
   replayState?: unknown
@@ -30,14 +30,96 @@ export interface ToolMessageSource {
 }
 
 /**
+ * The kind of information in producer-supplied context, declared by the
+ * producer beside its provenance.
+ *
+ * `MessageSource.kind` answers *who produced this*; `form` answers *what kind
+ * of thing it is*, and the two axes are deliberately independent — several
+ * producers share one form, and one producer may emit more than one form over
+ * a session.
+ *
+ * The vocabulary is SEMANTIC, never visual: a value states that the content is
+ * a file's instructions or a catalog of available items, and a consumer decides
+ * what that looks like. Colors, icons, ordering, and collapse defaults are the
+ * consumer's business and must not enter this union. It grows one value at a
+ * time as producers gain the structured fields their form needs; an absent or
+ * unknown value is the documented default, presented as opaque content.
+ */
+export type ContextForm =
+  /** Instructions read out of workspace files the model is expected to follow. */
+  | 'instructions'
+  /** A catalog of items available in this session, republished as it changes. */
+  | 'catalog'
+  /** Current state, where a later snapshot from the same producer supersedes an earlier one. */
+  | 'snapshot'
+  /** A one-off account of something that just happened; it supersedes nothing. */
+  | 'notice'
+  /** A message another agent addressed to this one. */
+  | 'relay'
+  /** Material lifted out of another session's log, possibly reduced on the way in. */
+  | 'recall'
+
+/** One named contribution to a `snapshot`-form context, in assembly order. */
+export interface ContextSnapshotSection {
+  /** The contributing subsystem's name. */
+  readonly name: string
+  /** That contribution's model-facing text, exactly as assembled. */
+  readonly text: string
+}
+
+/**
+ * Producer-declared {@link ContextForm} and the fields that form requires,
+ * mixed into the source types that carry one.
+ *
+ * Discriminated by `form` so a producer cannot select a form without the
+ * fields needed to present it: a `notice` must record its one-line
+ * account, a `snapshot` its sections. Omitting `form` stays valid — an
+ * undeclared context is the documented default.
+ */
+export type ContextFormed =
+  | { readonly form?: never }
+  | { readonly form: 'instructions' }
+  | { readonly form: 'catalog' }
+  | {
+    readonly form: 'snapshot'
+    /** The named contributions this snapshot assembled, in order. */
+    readonly sections: readonly ContextSnapshotSection[]
+  }
+  | {
+    readonly form: 'notice'
+    /** One-line account of what happened, shown without expanding the row. */
+    readonly summary: string
+  }
+  | { readonly form: 'relay' }
+  | { readonly form: 'recall' }
+
+/**
  * Where a message (or injected content) came from.
  * Merge-extensible sum type — plugins add their own `kind`s.
  */
 export interface MessageSourceMap {
   user: { kind: 'user' }
-  plugin: { kind: 'plugin'; plugin: string }
+  plugin: { kind: 'plugin'; plugin: string } & ContextFormed
   model: ModelMessageSource
   tool: ToolMessageSource
+}
+
+/**
+ * Bound for a `notice` summary. The account rides a collapsed transcript row
+ * and is committed to the durable log, while its inputs — task labels, goal
+ * objectives, tool arguments — are caller text with no length of their own.
+ */
+export const CONTEXT_SUMMARY_MAX_CHARS = 120
+
+/**
+ * Bound one `notice` summary to {@link CONTEXT_SUMMARY_MAX_CHARS}.
+ * @param summary - the producer's one-line account, of any length.
+ * @returns the account, ellipsized when it exceeds the bound.
+ */
+export function boundContextSummary(summary: string): string {
+  return summary.length <= CONTEXT_SUMMARY_MAX_CHARS
+    ? summary
+    : `${summary.slice(0, CONTEXT_SUMMARY_MAX_CHARS - 1)}…`
 }
 
 /** Any known message source, derived from {@link MessageSourceMap}; switch on `kind` and fall through unknowns (merge-extensible). */
@@ -51,7 +133,7 @@ export interface Message {
   readonly role: 'system' | 'user' | 'assistant'
   /** Exact model-facing blocks. */
   readonly content: ContentBlock[]
-  /** Required producer provenance. */
+  /** Required source fields supplied by the producer. */
   readonly source: MessageSource
 }
 
@@ -118,7 +200,7 @@ export function createUserMessage<T extends NewUserMessage>(
 
 /**
  * Create one identified model-produced assistant message and freeze it before publication.
- * @param input - complete content and model provenance for a new assistant message.
+ * @param input - complete content plus the provider, model, and optional replay state for a new assistant message.
  * @returns an immutable assistant message with fixed role/source tags and a fresh stable identity.
  */
 export function createAssistantMessage(
@@ -156,4 +238,24 @@ export function createToolResultMessage(input: ToolResultMessageInput): ToolResu
       isError: input.isError,
     }],
   })
+}
+
+/**
+ * Whether a stream chunk carries visible model output (the first-token
+ * boundary shared by client step timing and the whole-log sessionStats
+ * projection). Empty deltas (heartbeats, empty tool-call frames) do not count
+ * as a first token.
+ * @param chunk - the stream chunk to test.
+ * @returns true when the chunk contains a non-empty text/reasoning/tool delta.
+ */
+export function isTokenDelta(chunk: StreamChunk): boolean {
+  switch (chunk.type) {
+    case 'text-delta':
+    case 'reasoning-delta':
+      return chunk.text !== ''
+    case 'tool-call-delta':
+      return chunk.argumentsDelta !== '' || chunk.name !== undefined
+    default:
+      return false
+  }
 }

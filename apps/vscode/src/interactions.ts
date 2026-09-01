@@ -4,15 +4,14 @@
  * and answers them over `/api/respond`. It runs beside the webview's own
  * stream — the wire is multi-client, so whichever surface answers first wins
  * and the other's late answer is a harmless `not-pending` receipt. The
- * consumer keeps a `(sessionId, callId) → tool view` cache so an approval
- * prompt can show what the call will do (the approval frame itself carries
- * only a tool name).
+ * consumer keeps a `callId → tool view` cache so an approval prompt can show
+ * what the call will do (the approval frame itself carries only a tool name).
  */
 
 import type { IApiClient } from '@deepseek-ai/dsh-host-apiproxy/client'
 import type { MuxFrame, RpcId, RpcRequest } from '@deepseek-ai/dsh-host-apiproxy/api'
 import type { ToolCallView } from '@deepseek-ai/dsh-tools/presentation'
-import type { AskUserQuestionAnswer, AskUserQuestionItem } from '@deepseek-ai/dsh-user-interaction/types'
+import type { AskUserQuestionAnswer, AskUserQuestionItem } from '@deepseek-ai/dsh-user-questions/types'
 
 /** What a pending approval asks the user, enriched from the cached tool call. */
 export interface ApprovalPrompt {
@@ -60,7 +59,7 @@ interface CachedCall {
   view?: ToolCallView
 }
 
-/** Scope a provider call id to the session that owns it. */
+/** Cache key scoping a provider callId to its session (mux multiplexes sessions). */
 function callKey(sessionId: string, callId: string): string {
   return `${sessionId}\u0000${callId}`
 }
@@ -106,20 +105,23 @@ export class NativeInteractions {
         this.options.log(`mux stream dropped: ${error instanceof Error ? error.message : String(error)}`)
       }
       if (abort.signal.aborted) return
-      // A fresh stream replays unresolved requests. Close this generation's
-      // controls before reopening so a replay cannot leave duplicate prompts.
+      // The generation ended (drop or clean close). Close every open prompt:
+      // the reopened stream replays still-pending approval/question frames, so
+      // leaving the old prompts up would double them (and the reopened frame's
+      // handler would overwrite their pending entries). The replay recreates
+      // whatever is still pending.
       this.resetPending()
       await new Promise(resolve => setTimeout(resolve, reconnectMs))
     }
   }
 
-  /** Abort and clear every prompt owned by the current stream generation. */
+  /** Abort and clear every open prompt (a stream generation ended). */
   private resetPending(): void {
     for (const controller of this.pending.values()) controller.abort()
     this.pending.clear()
   }
 
-  /** Drop cached tool calls after the session's turn settles. */
+  /** Drop every cached call for one session (its turn ended; the calls are settled). */
   private purgeSessionCalls(sessionId: string): void {
     const prefix = callKey(sessionId, '')
     for (const key of this.calls.keys()) {
@@ -178,17 +180,12 @@ export class NativeInteractions {
     const abort = new AbortController()
     this.pending.set(correlationId, abort)
     try {
-      const cached = frame.callId === undefined
-        ? undefined
-        : this.calls.get(callKey(frame.sessionId, frame.callId))
-      // A reused call id with a mismatched tool name is not the approval's
-      // call; omit its details instead of presenting the wrong operation.
-      const call = cached?.name === frame.toolName ? cached.view : undefined
+      const cached = frame.callId === undefined ? undefined : this.calls.get(callKey(frame.sessionId, frame.callId))
       const prompt: ApprovalPrompt = {
         sessionId: frame.sessionId,
         toolName: frame.toolName,
         ...frame.reason === undefined ? {} : { reason: frame.reason },
-        ...call === undefined ? {} : { call },
+        ...cached?.view === undefined ? {} : { call: cached.view },
       }
       const outcome = await this.options.ui.confirmApproval(prompt, abort.signal)
       if (outcome === 'dismissed' || abort.signal.aborted) return
@@ -215,7 +212,7 @@ export class NativeInteractions {
     }
   }
 
-  /** Remove the entry only when it still owns this exact prompt generation. */
+  /** Remove a pending entry only when it still holds this exact controller (a reset/replay may have replaced it). */
   private clearPending(correlationId: string, abort: AbortController): void {
     if (this.pending.get(correlationId) === abort) this.pending.delete(correlationId)
   }
@@ -237,6 +234,7 @@ export class NativeInteractions {
   dispose(): void {
     this.stopped = true
     this.streamAbort?.abort()
-    this.resetPending()
+    for (const controller of this.pending.values()) controller.abort()
+    this.pending.clear()
   }
 }

@@ -402,7 +402,7 @@ function runSchemaCompiler(initial: CompileTask): void {
         node.type = inputType
         copyAnnotations(input, node)
         if (Object.hasOwn(input, 'enum')) {
-          if (!isPlainJsonArray(input.enum)) { authorError(`${path}.enum must be a non-empty array of scalar values`) }
+          if (!isPlainJsonArray(input.enum)) authorError(`${path}.enum must be a non-empty array of scalar values`)
           node.enum = Array.from(input.enum, entry => entry as JsonSchemaScalar)
         }
         if (Object.hasOwn(input, 'const')) node.const = input.const as JsonSchemaScalar
@@ -493,7 +493,7 @@ export interface DefineToolOptions<S extends ParameterSchemaSpec, O extends Valu
     readonly schema: O
     /** Pure Native/model rendering of one validated canonical value. */
     render(args: InferArgs<S>, value: InferValue<NoInfer<O>>): ContentBlock[]
-    /** Pure replayable presentation metadata for direct surface calls. */
+    /** Pure replayable presentation metadata for direct top-level calls. */
     presentationMeta?(args: InferArgs<S>, value: InferValue<NoInfer<O>>): JsonValue
   }
   /** Optional positive cooperative timeout budget in milliseconds. */

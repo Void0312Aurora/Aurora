@@ -1,17 +1,25 @@
 - id: base
-  name: '@cordisjs/plugin-include'
+  name: '@deepseek-ai/cordis-plugin-include'
   config:
     path: ../../cordis.yml
     patches:
       - id: llm-deepseek
         config:
-          apiKey: snapshot-key
           baseURL: !!js process.env.DSH_SNAPSHOT_BASE_URL
           thinking: disabled
-      - id: cli-agent
+          # The keep-alive contract under test owns this budget; the launching
+          # test derives it from its comment interval. A non-numeric value fails
+          # the adapter's positive-finite validation at load.
+          streamIdleTimeoutMs: !!js Number(process.env.DSH_SNAPSHOT_IDLE_BUDGET_MS)
+      - id: agent-spine
         config:
-          provider: deepseek-official
-          model: deepseek-v4-flash
-          persistenceRoot: './.sessions'
+          agents:
+            - id: main
+              provider: deepseek-official
+              model: deepseek-v4-flash
+              cwd: !!js process.cwd()
           workspaceContext: false
           persona: 'Keyless DeepSeek adapter defaults snapshot.'
+      - id: persistence
+        config:
+          root: './.sessions'

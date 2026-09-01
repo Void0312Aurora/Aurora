@@ -1,8 +1,7 @@
 /**
  * Shared `dsh web` launcher: resolve and spawn the Web server, parse its
  * readiness line, and poll for HTTP readiness. Pure Node logic with no Electron
- * or VS Code imports; shell consumers own lifecycle reporting, window/UI glue,
- * and teardown.
+ * or VS Code imports; consumers own lifecycle reporting, UI glue, and teardown.
  */
 
 import type { ChildProcess, SpawnOptions } from 'node:child_process'
@@ -39,8 +38,8 @@ export interface SpawnWebLaunchOptions {
   platform?: NodeJS.Platform
 }
 
-/** Validated output pipes from a launched Web server. */
-export interface WebLaunchPipes {
+/** A launched Web server whose fixed stdio contract exposes both output pipes. */
+export interface WebLaunchChild extends ChildProcess {
   stdout: Readable
   stderr: Readable
 }
@@ -141,13 +140,15 @@ export function resolveWebLaunch(options: LaunchEnvironment): WebServerLaunch {
  * @param launch - resolved executable, arguments, and launch-specific facts.
  * @param options - host environment and working-directory defaults.
  * @param spawn - injectable process primitive; production uses `cross-spawn`.
- * @returns the live child. Call `requireWebLaunchPipes` before consuming its output.
+ * @returns the live child with piped stdout and stderr.
  */
 export function spawnWebLaunch(
   launch: WebServerLaunch,
   options: SpawnWebLaunchOptions,
   spawn: SpawnFn = crossSpawn,
-): ChildProcess {
+): WebLaunchChild {
+  // The return type narrows the generic cross-spawn declaration to the fixed
+  // stdio tuple owned here; callers never configure these streams separately.
   return spawn(launch.command, launch.args, {
     cwd: launch.cwd ?? options.cwd,
     env: { ...options.env, ...launch.env },
@@ -155,23 +156,7 @@ export function spawnWebLaunch(
     windowsHide: true,
     // POSIX children lead a process group; Windows cleanup uses taskkill /T.
     detached: (options.platform ?? process.platform) !== 'win32',
-  })
-}
-
-/**
- * Require the output pipes requested by `spawnWebLaunch`. A lifecycle owner
- * records the child before calling this function so it can terminate a live
- * process when an injected or platform spawn implementation violates the
- * stdio requirement.
- * @param child - launched child whose stdout and stderr must both be piped.
- * @returns the validated output streams.
- */
-export function requireWebLaunchPipes(child: ChildProcess): WebLaunchPipes {
-  const { stdout, stderr } = child
-  if (stdout === null || stderr === null) {
-    throw new Error('dsh web spawned without its stdout/stderr pipes')
-  }
-  return { stdout, stderr }
+  }) as WebLaunchChild
 }
 
 /**
@@ -313,15 +298,13 @@ export async function waitForHttpOk(url: URL, options: HttpOkOptions = {}): Prom
   const aborted = (): boolean => external !== undefined && external.aborted
   const deadline = Date.now() + timeoutMs
   let lastError: unknown = new Error('no attempt made')
-  while (true) {
-    const remaining = deadline - Date.now()
-    if (remaining <= 0) break
+  while (Date.now() < deadline) {
     if (aborted()) throw new Error(`dsh-web-launcher: readiness poll for ${url.href} was aborted`)
     try {
       // Each attempt aborts on its own 2s deadline or the external signal, whichever first.
       const attemptSignal = external === undefined
-        ? AbortSignal.timeout(Math.min(2_000, remaining))
-        : AbortSignal.any([AbortSignal.timeout(Math.min(2_000, remaining)), external])
+        ? AbortSignal.timeout(2_000)
+        : AbortSignal.any([AbortSignal.timeout(2_000), external])
       const response = await fetchImpl(url, { signal: attemptSignal })
       if (response.ok) return
       lastError = new Error(`HTTP ${response.status}`)

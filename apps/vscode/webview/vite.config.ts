@@ -27,36 +27,51 @@ function stubLoaderConfigUtils(): Plugin {
 }
 
 /**
- * The client plugin packages bundled statically into the webview (the
- * `/client` subpath of each roster row plus the platform packages the shell
- * itself aliases). tsconfig paths cover bare package names; the `/client`
- * subpaths need explicit rows because tsconfig.base.json maps only a few of
- * them. Order matters — subpath aliases must win over bare-name prefixes.
+ * Source aliases for every `/client` subpath imported by the static roster or
+ * its sidebar shell. The official composition includes Client faces outside
+ * `packages/client`, so each row names both the package and its source path.
  */
-const CLIENT_SUBPATH_PACKAGES = [
-  'connection', 'runtime', 'ui-theme', 'locale', 'ui-layout', 'ui-sidebar',
-  'ui-settings', 'ui-settings-general', 'ui-models', 'ui-conversation',
-  'ui-workspace', 'ui-slash', 'ui-command', 'ui-skill', 'ui-subagent',
-  'ui-goal', 'ui-model', 'ui-permission', 'ui-plan', 'ui-question',
-  'ui-trajectory',
+const CLIENT_SUBPATH_ALIASES = [
+  ['@deepseek-ai/dsh-typert-registry/client', 'packages/typert/registry/src/client/index.ts'],
+  ['@deepseek-ai/dsh-api-gateway/client', 'packages/api/gateway/src/client/index.ts'],
+  ['@deepseek-ai/dsh-session-log-export/client', 'packages/session-query/session-log-export/src/client/index.ts'],
+  ['@deepseek-ai/dsh-api-remotes/client', 'packages/api/remotes/src/client/index.ts'],
+  ['@deepseek-ai/dsh-cordis-client-runner/client', 'packages/extensions/cordis-client-runner/src/client/index.ts'],
+  ['@deepseek-ai/dsh-client-ui-cordis/client', 'packages/extensions/ui-cordis/src/client/index.ts'],
+  ['@deepseek-ai/dsh-client-connection/client', 'packages/client/connection/src/client/index.ts'],
+  ['@deepseek-ai/dsh-client-runtime/client', 'packages/client/runtime/src/client/index.ts'],
+  ['@deepseek-ai/dsh-client-ui-theme/client', 'packages/client/ui-theme/src/client/index.ts'],
+  ['@deepseek-ai/dsh-client-locale/client', 'packages/client/locale/src/client/index.ts'],
+  ['@deepseek-ai/dsh-client-ui-layout/client', 'packages/client/ui-layout/src/client/index.ts'],
+  ['@deepseek-ai/dsh-client-ui-sidebar/client', 'packages/client/ui-sidebar/src/client/index.ts'],
+  ['@deepseek-ai/dsh-client-ui-settings/client', 'packages/client/ui-settings/src/client/index.ts'],
+  ['@deepseek-ai/dsh-client-ui-settings-general/client', 'packages/client/ui-settings-general/src/client/index.ts'],
+  ['@deepseek-ai/dsh-client-ui-settings-models/client', 'packages/client/ui-settings-models/src/client/index.ts'],
+  ['@deepseek-ai/dsh-client-ui-settings-plugin-inventory/client', 'packages/client/ui-settings-plugin-inventory/src/client/index.ts'],
+  ['@deepseek-ai/dsh-client-ui-conversation/client', 'packages/client/ui-conversation/src/client/index.ts'],
+  ['@deepseek-ai/dsh-client-ui-tool/client', 'packages/client/ui-tool/src/client/index.ts'],
+  ['@deepseek-ai/dsh-client-ui-workflow-run/client', 'packages/client/ui-workflow-run/src/client/index.ts'],
+  ['@deepseek-ai/dsh-client-ui-deliverables/client', 'packages/client/ui-deliverables/src/client/index.ts'],
+  ['@deepseek-ai/dsh-client-ui-workspace/client', 'packages/client/ui-workspace/src/client/index.ts'],
+  ['@deepseek-ai/dsh-client-ui-input-trigger/client', 'packages/client/ui-input-trigger/src/client/index.ts'],
+  ['@deepseek-ai/dsh-client-ui-commands/client', 'packages/client/ui-commands/src/client/index.ts'],
+  ['@deepseek-ai/dsh-client-ui-skill/client', 'packages/client/ui-skill/src/client/index.ts'],
+  ['@deepseek-ai/dsh-client-ui-subagent/client', 'packages/client/ui-subagent/src/client/index.ts'],
+  ['@deepseek-ai/dsh-client-ui-jobs/client', 'packages/client/ui-jobs/src/client/index.ts'],
+  ['@deepseek-ai/dsh-client-ui-goal/client', 'packages/client/ui-goal/src/client/index.ts'],
+  ['@deepseek-ai/dsh-client-ui-message-feedback/client', 'packages/client/ui-message-feedback/src/client/index.ts'],
+  ['@deepseek-ai/dsh-client-ui-model-selection/client', 'packages/client/ui-model-selection/src/client/index.ts'],
+  ['@deepseek-ai/dsh-client-ui-permission-presets/client', 'packages/client/ui-permission-presets/src/client/index.ts'],
+  ['@deepseek-ai/dsh-client-ui-agent-preset/client', 'packages/client/ui-agent-preset/src/client/index.ts'],
+  ['@deepseek-ai/dsh-client-ui-settings-plugins/client', 'packages/client/ui-settings-plugins/src/client/index.ts'],
+  ['@deepseek-ai/dsh-client-ui-plan/client', 'packages/client/ui-plan/src/client/index.ts'],
+  ['@deepseek-ai/dsh-client-ui-user-questions/client', 'packages/client/ui-user-questions/src/client/index.ts'],
+  ['@deepseek-ai/dsh-client-ui-trajectory/client', 'packages/client/ui-trajectory/src/client/index.ts'],
 ] as const
 
 export default defineConfig({
   plugins: [
     stubLoaderConfigUtils(),
-    {
-      name: 'dsh-vscode-csp-schemastery',
-      enforce: 'pre',
-      transform(code, id) {
-        if (!id.replaceAll('\\', '/').endsWith('/vendor/schemastery/src/index.ts')) return undefined
-        const unsafe = "schema.callback = new Function('return ' + schema.callback)()"
-        if (!code.includes(unsafe)) throw new Error('schemastery callback evaluator changed; update the webview CSP transform')
-        return code.replace(
-          unsafe,
-          "throw new Error('dsh webview: serialized schema callbacks are disabled by CSP')",
-        )
-      },
-    },
     react(),
     // Resolves every bare workspace package name to its src (the same map
     // vitest uses), so the bundle never loads a second lib/ module copy.
@@ -68,15 +83,11 @@ export default defineConfig({
       // apps/web): its only node-only import; the process probes are mapped
       // by `define` below.
       { find: /^node:module$/, replacement: src('./node-module-stub.ts') },
-      {
-        find: /^@deepseek-ai\/dsh-host-directory-picker-browse\/client$/,
-        replacement: src('../../../packages/host/directory-picker-browse/src/client/index.ts'),
-      },
       { find: /^@deepseek-ai\/dsh-client-web$/, replacement: src('../../../packages/client/web/src/boot.tsx') },
       { find: /^@deepseek-ai\/dsh-client-modules\/client$/, replacement: src('../../../packages/client/modules/src/client/index.ts') },
-      ...CLIENT_SUBPATH_PACKAGES.map(name => ({
-        find: new RegExp(`^@deepseek-ai/dsh-client-${name}/client$`),
-        replacement: src(`../../../packages/client/${name}/src/client/index.ts`),
+      ...CLIENT_SUBPATH_ALIASES.map(([specifier, source]) => ({
+        find: new RegExp(`^${specifier.replaceAll('/', '\\/')}$`),
+        replacement: src(`../../../${source}`),
       })),
     ],
   },

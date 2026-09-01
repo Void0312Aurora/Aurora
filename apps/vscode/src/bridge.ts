@@ -8,9 +8,10 @@
  * client, which is the whole reason the bridge exists.
  */
 
-import type {
-  BridgeRequestMessage,
-  BridgeResponseMessage,
+import {
+  parseBridgeRequestMessage,
+  type BridgeRequestMessage,
+  type BridgeResponseMessage,
 } from '@deepseek-ai/dsh-client-connection/client'
 
 /** The one path prefix the bridge relays; everything else is refused before a fetch. */
@@ -47,17 +48,17 @@ export interface ApiBridgeOptions {
   /** Current server origin; undefined while the server is still starting. */
   origin: () => URL | undefined
   /** Response-side sink (the webview's postMessage). */
-  post: (message: BridgeResponseMessage) => void
+  post: (message: BridgeResponseMessage) => void | PromiseLike<boolean>
   /** Transport; defaults to global fetch. */
   fetchImpl?: typeof fetch
-  /** Optional ordered hook that must settle before a request reaches the Host. */
-  beforeRelay?: (message: Extract<BridgeRequestMessage, { type: 'dsh-fetch' }>, signal: AbortSignal) => void | Promise<void>
 }
 
 /** One panel's request relay; dispose aborts everything in flight. */
 export class ApiBridge {
   private readonly inflight = new Map<number, AbortController>()
+  private readonly seenIds = new Set<number>()
   private readonly fetchImpl: typeof fetch
+  private disposed = false
 
   /** @param options - origin resolution, response sink, and transport. */
   constructor(private readonly options: ApiBridgeOptions) {
@@ -68,58 +69,116 @@ export class ApiBridge {
    * Handle one request-side bridge message. Fire-and-forget: every outcome —
    * head, chunks, end, error, abort — returns to the webview as response-side
    * messages correlated by the message id.
-   * @param message - the webview's request start or abort.
+   * @param value - untrusted Webview message to parse and dispatch.
    */
-  handle(message: BridgeRequestMessage): void {
+  handle(value: unknown): void {
+    const parsed = parseBridgeRequestMessage(value)
+    if (!parsed.ok) {
+      if (parsed.id !== undefined) {
+        this.rejectRequest(parsed.id, `invalid bridge request: ${parsed.reason}`)
+      }
+      return
+    }
+    const message = parsed.message
     if (message.type === 'dsh-fetch-abort') {
       this.inflight.get(message.id)?.abort()
       return
     }
-    void this.relay(message)
+    if (this.disposed) {
+      this.postError(message.id, 'bridge is disposed')
+      return
+    }
+    if (this.seenIds.has(message.id)) {
+      this.rejectRequest(message.id, 'duplicate bridge request id')
+      return
+    }
+    this.seenIds.add(message.id)
+    void this.relay(message).catch((error: unknown) => {
+      // `post` is an embedder boundary and can reject independently of fetch;
+      // keep fire-and-forget relay calls from becoming unhandled rejections.
+      console.error('[dsh-vscode] bridge relay failed:', error)
+    })
+  }
+
+  private postError(id: number, message: string): void {
+    void this.safePost({ type: 'dsh-fetch-error', id, message })
+  }
+
+  /** Reject a correlatable id and stop any relay whose response would now be orphaned. */
+  private rejectRequest(id: number, message: string): void {
+    this.seenIds.add(id)
+    this.inflight.get(id)?.abort()
+    this.postError(id, message)
+  }
+
+  private async safePost(message: BridgeResponseMessage): Promise<boolean> {
+    try {
+      const result = this.options.post(message)
+      return result === undefined || await result
+    } catch (error) {
+      console.error('[dsh-vscode] bridge response post failed:', error)
+      return false
+    }
   }
 
   private async relay(message: Extract<BridgeRequestMessage, { type: 'dsh-fetch' }>): Promise<void> {
     const { id } = message
+    const origin = this.options.origin()
+    if (origin === undefined) {
+      this.postError(id, 'dsh web is not running yet')
+      return
+    }
+    // Confinement, not convenience: the webview may run injected script, so the
+    // host — which holds loopback network reach — must refuse to leave the
+    // managed server. Resolve the request path against the server origin and
+    // require the result to stay on that exact origin and under `/api/`. This
+    // rejects an absolute URL, a protocol-relative `//host` authority, a
+    // backslash authority, and any path that escapes the API prefix — the
+    // confused-deputy / SSRF surface a bare `new URL(path, origin)` would open.
+    const target = resolveApiTarget(message.path, origin)
+    if (target === undefined) {
+      this.postError(id, `refused non-/api request target: ${message.path}`)
+      return
+    }
     const controller = new AbortController()
     this.inflight.set(id, controller)
     try {
-      if (this.options.beforeRelay !== undefined) {
-        await this.options.beforeRelay(message, controller.signal)
-        controller.signal.throwIfAborted()
-      }
-      const origin = this.options.origin()
-      if (origin === undefined) {
-        this.options.post({ type: 'dsh-fetch-error', id, message: 'dsh web is not running yet' })
-        return
-      }
-      // The host holds loopback network reach, so an injected webview script
-      // must not escape the managed server or its API prefix.
-      const target = resolveApiTarget(message.path, origin)
-      if (target === undefined) {
-        this.options.post({ type: 'dsh-fetch-error', id, message: `refused non-/api request target: ${message.path}` })
-        return
-      }
       const response = await this.fetchImpl(target, {
         method: message.method,
         headers: message.headers,
         ...message.body === undefined ? {} : { body: message.body },
         signal: controller.signal,
       })
-      this.options.post({ type: 'dsh-fetch-head', id, status: response.status })
+      if (!await this.safePost({ type: 'dsh-fetch-head', id, status: response.status })) {
+        controller.abort()
+        return
+      }
       if (response.body !== null) {
         const reader = response.body.getReader()
         const decoder = new TextDecoder()
         while (true) {
           const { done, value } = await reader.read()
           if (done) break
-          this.options.post({ type: 'dsh-fetch-chunk', id, chunk: decoder.decode(value, { stream: true }) })
+          if (!await this.safePost({ type: 'dsh-fetch-chunk', id, chunk: decoder.decode(value, { stream: true }) })) {
+            controller.abort()
+            await reader.cancel().catch(() => {
+              // The owning request is already aborted; cancellation has no
+              // second recovery channel if the response body rejects it.
+            })
+            return
+          }
+        }
+        const tail = decoder.decode()
+        if (tail !== '' && !await this.safePost({ type: 'dsh-fetch-chunk', id, chunk: tail })) {
+          controller.abort()
+          return
         }
       }
-      this.options.post({ type: 'dsh-fetch-end', id })
+      await this.safePost({ type: 'dsh-fetch-end', id })
     } catch (error) {
       // Abort and transport failures share one arm: the webview client maps
       // the message onto the owning call or stream either way.
-      this.options.post({
+      await this.safePost({
         type: 'dsh-fetch-error',
         id,
         message: error instanceof Error ? error.message : String(error),
@@ -131,6 +190,7 @@ export class ApiBridge {
 
   /** Abort every in-flight relay (panel disposal). */
   dispose(): void {
+    this.disposed = true
     for (const controller of this.inflight.values()) controller.abort()
     this.inflight.clear()
   }

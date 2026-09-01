@@ -131,7 +131,7 @@ function sessionPredicate(filter: SessionResultFilter): (record: SessionRecord) 
       return record => filter.values.includes(record.header.parentSession ?? null)
     case 'availability':
       assertAllowedValues(filter.kind, filter.values, ['live', 'persisted'])
-      return record => filter.values.some(value => value !== 'live' ? record.persisted : record.live)
+      return record => filter.values.some(value => value === 'live' ? record.live : record.persisted)
     default:
       return unknownFilter(filter)
   }
@@ -186,7 +186,7 @@ function copyRange<K extends 'created-at' | 'seq' | 'time'>(
   const copy = {
     kind,
     ...range.from === undefined ? {} : { from: range.from },
-    ...range.to !== undefined ? { to: range.to } : {},
+    ...range.to === undefined ? {} : { to: range.to },
   }
   validateRange(kind, copy)
   return copy

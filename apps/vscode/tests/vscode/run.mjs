@@ -9,7 +9,7 @@ import { runTests } from '@vscode/test-electron'
 import { parseLoaderConfig, validateLoaderMetadata } from '../../../../scripts/cordis-loader-metadata.mjs'
 import {
   WELCOME_NOTICE_ACK_FIELD, WELCOME_NOTICE_SETTINGS_NAMESPACE, WELCOME_NOTICE_VERSION,
-} from '../../../../packages/client/ui-settings-general/src/onboarding-copy.ts'
+} from '../../../../packages/client/ui-settings-models/src/onboarding-copy.ts'
 import { renderReplayOverlay } from './config.mjs'
 import { driveWebview } from './drive-webview.mjs'
 

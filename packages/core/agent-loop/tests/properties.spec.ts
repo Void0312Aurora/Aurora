@@ -10,13 +10,13 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { Context } from 'cordis'
-import LlmService from '@deepseek-ai/dsh-llm'
+import { Context } from '@deepseek-ai/cordis'
+import LlmRuntime from '@deepseek-ai/dsh-llm'
 import { createUserMessage, LlmAdapter } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import ToolRegistry from '@deepseek-ai/dsh-tools'
+import ToolRuntime from '@deepseek-ai/dsh-tools'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
 
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
@@ -37,10 +37,10 @@ class EchoAdapter extends LlmAdapter {
 
 async function harness() {
   const ctx = new Context()
-  await ctx.plugin(LlmService)
+  await ctx.plugin(LlmRuntime)
   await ctx.plugin(SessionStore)
   await ctx.plugin(SystemPrompt)
-  await ctx.plugin(ToolRegistry)
+  await ctx.plugin(ToolRuntime)
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(AgentLoop, { agents: [] })
   ctx.llm.registerAdapter(['mock'], new EchoAdapter())
@@ -50,7 +50,7 @@ async function harness() {
 /** Resolve on the agent's next transition to idle (event-based, not polled). */
 function nextIdle(ctx: Context, agent: Agent): Promise<void> {
   return new Promise((resolve) => {
-    const dispose = ctx.on('agent/status', (subject, status) => {
+    const dispose = ctx.on('agent/status', ({ agent: subject, status }) => {
       if (subject === agent && status === 'idle') {
         dispose()
         resolve()
@@ -63,7 +63,7 @@ function nextIdle(ctx: Context, agent: Agent): Promise<void> {
  * the seen list plus a disposer for the listener (per the registry convention). */
 function recordStatus(ctx: Context, agent: Agent): { seen: string[]; dispose: () => void } {
   const seen: string[] = []
-  const dispose = ctx.on('agent/status', (subject, status) => {
+  const dispose = ctx.on('agent/status', ({ agent: subject, status }) => {
     if (subject === agent) seen.push(status)
   })
   return { seen, dispose }
@@ -78,7 +78,7 @@ function userMessageTexts(agent: Agent): string[] {
 function turnNumbers(agent: Agent): number[] {
   return agent.session.events
     .filter(e => e.type === 'turn/start')
-    .map(e => (e.data as { turn: number }).turn)
+    .map(e => e.data.turn)
 }
 
 function turnEndNumbers(agent: Agent): number[] {
@@ -91,7 +91,7 @@ function userMessageCountsByTurn(agent: Agent): number[] {
   const counts: number[] = []
   for (const event of agent.session.events) {
     if (event.type === 'turn/start') counts.push(0)
-    if (event.type === 'user/message') { counts[counts.length - 1]! += 1 }
+    if (event.type === 'user/message') counts[counts.length - 1]! += 1
   }
   return counts
 }
@@ -122,7 +122,7 @@ describe('agent loop scheduling properties', () => {
           expect(userMessageTexts(agent)).toEqual(texts)
           // This failure-free fixture maps every item to an independent turn.
           expect(turnNumbers(agent)).toEqual(texts.map((_, i) => i + 1))
-          expect(turnEndNumbers(agent)).toEqual(texts.map((_, i) => { return i + 1 }))
+          expect(turnEndNumbers(agent)).toEqual(texts.map((_, i) => i + 1))
           expect(userMessageCountsByTurn(agent)).toEqual(texts.map(() => 1))
           expect(trace).toEqual(['running', 'idle'])
           assertLegalStatusTrace(trace)

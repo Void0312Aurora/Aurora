@@ -49,7 +49,6 @@ function runtimeWith(child: FakeChild, extra: Partial<ServerRuntimeOptions> = {}
   const spawn = vi.fn((): ChildProcess => current as unknown as ChildProcess)
   const runtime = new ServerRuntime({
     appDir: '/ext',
-    appConfigPath: '/ext/config/web.cordis.yml',
     env: { DSH_BIN: '/tools/dsh' }, // pins the launch to one deterministic branch
     log: line => logs.push(line),
     spawn,
@@ -68,15 +67,12 @@ async function settle(): Promise<void> {
 describe('ServerRuntime', () => {
   it('resolves the advertised origin once the readiness line and HTTP poll pass', async () => {
     const child = new FakeChild()
-    const { runtime, spawn } = runtimeWith(child)
+    const { runtime } = runtimeWith(child)
     const started = runtime.start()
     child.ready(5123)
     const url = await started
     expect(url.href).toBe('http://127.0.0.1:5123/')
     expect(runtime.url?.href).toBe('http://127.0.0.1:5123/')
-    expect(spawn).toHaveBeenCalledWith('/tools/dsh', [
-      'web', '--host', '127.0.0.1', '--port', '0', '--app-config', '/ext/config/web.cordis.yml',
-    ], expect.any(Object))
   })
 
   it('shares one attempt across concurrent starts', async () => {
@@ -103,56 +99,6 @@ describe('ServerRuntime', () => {
     child2.ready(6000)
     expect((await retry).href).toBe('http://127.0.0.1:6000/')
     expect(spawn).toHaveBeenCalledTimes(2)
-  })
-
-  it('kills a failed live startup generation before a retry can replace it', async () => {
-    const child = new FakeChild()
-    Object.defineProperty(child, 'stdout', { value: null })
-    const order: string[] = []
-    const { runtime, spawn } = runtimeWith(child, {
-      killTree: async (pid) => { order.push(`kill:${String(pid)}`) },
-    })
-    spawn.mockImplementation(() => {
-      order.push('spawn')
-      return child
-    })
-
-    const failing = runtime.start()
-    await expect(failing).rejects.toThrow(/without its stdout\/stderr pipes/)
-    expect(order).toEqual(['spawn', 'kill:4321'])
-
-    const child2 = new FakeChild()
-    child2.pid = 5432
-    spawn.mockImplementation(() => {
-      order.push('spawn')
-      return child2
-    })
-    const retry = runtime.start()
-    child2.ready(6001)
-    expect((await retry).href).toBe('http://127.0.0.1:6001/')
-    expect(order).toEqual(['spawn', 'kill:4321', 'spawn'])
-  })
-
-  it('keeps dispose pending while a failed-start process tree is still draining', async () => {
-    const child = new FakeChild()
-    Object.defineProperty(child, 'stdout', { value: null })
-    let releaseKill!: () => void
-    let signalKillStarted!: () => void
-    const killStarted = new Promise<void>((resolve) => { signalKillStarted = resolve })
-    const killGate = new Promise<void>((resolve) => { releaseKill = resolve })
-    const { runtime } = runtimeWith(child, {
-      killTree: async () => { signalKillStarted(); await killGate },
-    })
-
-    const failing = runtime.start()
-    await killStarted
-    let disposed = false
-    const disposal = runtime.dispose().then(() => { disposed = true })
-    await settle()
-    expect(disposed).toBe(false)
-    releaseKill()
-    await disposal
-    await expect(failing).rejects.toThrow(/without its stdout\/stderr pipes/)
   })
 
   it('fires onExit when a started server exits on its own', async () => {

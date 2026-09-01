@@ -1,19 +1,11 @@
-# SDK 包（package）
+# sdk/：从另一进程驱动 Harness 运行时
 
 [English](README.md) | 中文
 
-用于创建、编辑、构建和运行 DeepSeek Harness 项目的开发者工具，外加从另一进程驱动 harness 运行时的客户端 SDK 栈。
-
-[功能 Agent Note（agent 决策记录）](../../.agents/notes/proposed/feature/2026-07-14-sdk-developer-projects.md)负责开发者工作流；[架构 Agent Note](../../.agents/notes/proposed/architecture/2026-07-15-sdk-project-editing-architecture.md)负责包与项目编辑边界；[TypeScript SDK Agent Note](../../.agents/notes/implemented/feature/2026-07-27-typescript-sdk-and-sdk-subagent-backend.md)负责客户端 SDK 栈。
+本组包含用于从另一进程驱动 Harness 运行时的协议栈。调用方提供运行时可执行文件及其 `cordis.yml`；本组不创建、配置、构建或启动开发者项目。[TypeScript SDK 决策](../../.agents/notes/implemented/feature/2026-07-27-typescript-sdk-and-sdk-subagent-backend.md)负责客户端约定，[工具链移除](../../.agents/notes/implemented/simplification/2026-08-11-remove-sdk-project-toolchain.md)负责产品边界。
 
 | 包 | 职责 |
 |---|---|
-| [`helper`](helper/README.md) | 项目聚合、编辑会话、内置功能、项目文档、模板、包管理器与提示词抽象 |
-| [`scripts`](scripts/README.md) | `dsh-sdk` 启动器：`start`、`dev`、`build` 和交互式 `config` |
-| [`create-sdk`](create-sdk/README.md) | `npm create @deepseek-ai/sdk` 初始化器 |
-| [`sdk-protocol`](sdk-protocol/README.md) | 共享的 SDK 运行时通信协议：以换行符分隔的 JSON-RPC 传输 + 具名请求/通知类型 |
-| [`sdk-client`](sdk-client/README.md) | TypeScript 客户端 SDK：通过 stdio JSON-RPC 驱动 harness 运行时子进程（Python SDK 的设计孪生） |
-
-`@deepseek-ai/create-sdk` 是仓库 `@deepseek-ai/dsh-*` 命名规则的唯一例外：npm 的 scoped initializer 约定要求使用该名称，才能支持 `npm create @deepseek-ai/sdk`。
-
-生成的项目始终以 `cordis.yml` 作为唯一运行时插件树。`dsh-sdk dev` 只是围绕同一文件增加 TypeScript 与本地工作区解析，不会创建仅供开发环境使用的配置。
+| [`protocol/`](protocol/README.md) | 定义 SDK 运行时通信协议 |
+| [`client/`](client/README.md) | 通过 TypeScript 客户端 API 驱动 Harness 运行时 |
+| [`server/`](server/README.md) | 通过 stdio JSON-RPC 为进程外 SDK 客户端提供服务 |

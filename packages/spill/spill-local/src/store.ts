@@ -46,7 +46,7 @@ export function privateRoot(): string {
  * @returns An injective, filesystem-safe single path segment.
  */
 export function encodeSegment(raw: string): string {
-  if (raw.length === 0) { return '~' }
+  if (raw.length === 0) return '~'
   if (raw === '.') return '~002E'
   if (raw === '..') return '~002E~002E'
   let out = ''

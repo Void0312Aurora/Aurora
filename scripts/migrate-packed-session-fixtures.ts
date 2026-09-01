@@ -9,7 +9,7 @@ import { writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { inspectSessionFixtureLayouts } from './session-fixture-layout.ts'
 
-if (process.argv.length > 2) { throw new Error('migrate:packed-session-fixtures takes no arguments') }
+if (process.argv.length > 2) throw new Error('migrate:packed-session-fixtures takes no arguments')
 
 const root = resolve(import.meta.dirname, '..')
 const fixtures = inspectSessionFixtureLayouts(root)

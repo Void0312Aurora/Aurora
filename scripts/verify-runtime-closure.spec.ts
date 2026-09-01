@@ -1,42 +1,53 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
-import { createRequire } from 'node:module'
-import { spawnSync } from 'node:child_process'
-import { afterEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
+import { verifyRuntimeClosure, type WorkspacePackage } from './verify-runtime-closure.ts'
 
-const root = resolve(import.meta.dirname, '..')
-const verifier = join(root, 'scripts', 'verify-runtime-closure.ts')
-const tsx = createRequire(import.meta.url).resolve('tsx/cli')
-const temporary: string[] = []
-
-afterEach(() => {
-  for (const path of temporary.splice(0)) rmSync(path, { recursive: true, force: true })
-})
-
-function runParity(desktop: Record<string, string>, vscode: Record<string, string>) {
-  const directory = mkdtempSync(join(tmpdir(), 'dsh-runtime-parity-'))
-  temporary.push(directory)
-  const desktopPath = join(directory, 'desktop.json')
-  const vscodePath = join(directory, 'vscode.json')
-  writeFileSync(desktopPath, JSON.stringify({ dependencies: desktop }))
-  writeFileSync(vscodePath, JSON.stringify({ dependencies: vscode }))
-  return spawnSync(process.execPath, [tsx, verifier, '--desktop-manifest', desktopPath, '--vscode-manifest', vscodePath], {
-    cwd: root,
-    encoding: 'utf8',
-  })
+function workspace(entries: Record<string, WorkspacePackage['manifest']>): ReadonlyMap<string, WorkspacePackage> {
+  return new Map(Object.entries(entries).map(([name, manifest]) => [name, { path: `${name}/package.json`, manifest }]))
 }
 
-describe('runtime closure product parity', () => {
-  it('fails loud when the two products pin different versions', () => {
-    const result = runParity({ cordis: '4.0.0' }, { cordis: '4.1.0' })
-    expect(result.status).toBe(1)
-    expect(result.stderr).toContain('cordis: desktop=4.0.0; vscode=4.1.0')
+describe('verifyRuntimeClosure', () => {
+  it('reports a required peer missing from the deploy root with its dependency chain', () => {
+    const result = verifyRuntimeClosure(
+      'desktop-closure',
+      { '@scope/root': 'workspace:^' },
+      workspace({
+        '@scope/root': { name: '@scope/root', dependencies: { '@scope/child': 'workspace:^' } },
+        '@scope/child': { name: '@scope/child', peerDependencies: { '@scope/peer': 'workspace:^' } },
+        '@scope/peer': { name: '@scope/peer' },
+      }),
+    )
+
+    expect(result.failures).toEqual([
+      'desktop-closure -> @scope/root -> @scope/child -> @scope/peer',
+    ])
   })
 
-  it('fails loud when one product omits a dependency', () => {
-    const result = runParity({ cordis: '4.0.0', cosmokit: '1.0.0' }, { cordis: '4.0.0' })
-    expect(result.status).toBe(1)
-    expect(result.stderr).toContain('cosmokit: desktop=1.0.0; vscode=<missing>')
+  it('accepts root peers and ignores optional peers', () => {
+    const result = verifyRuntimeClosure(
+      'desktop-closure',
+      {
+        '@scope/root': 'workspace:^',
+        '@scope/peer': 'workspace:^',
+      },
+      workspace({
+        '@scope/root': {
+          name: '@scope/root',
+          dependencies: { '@scope/child': 'workspace:^' },
+        },
+        '@scope/child': {
+          name: '@scope/child',
+          peerDependencies: {
+            '@scope/peer': 'workspace:^',
+            '@scope/optional': 'workspace:^',
+          },
+          peerDependenciesMeta: { '@scope/optional': { optional: true } },
+        },
+        '@scope/peer': { name: '@scope/peer' },
+        '@scope/optional': { name: '@scope/optional' },
+      }),
+    )
+
+    expect(result.failures).toEqual([])
+    expect(result.packageCount).toBe(3)
   })
 })

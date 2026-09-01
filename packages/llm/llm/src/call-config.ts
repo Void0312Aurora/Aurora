@@ -12,6 +12,8 @@ import type { ReasoningEffortId } from './brand.ts'
 /** Process-local identities of request objects assembled by dsh-agent-loop. */
 const AGENT_LOOP_REQUESTS = new WeakSet<GenerateOptions>()
 
+// TODO(call-config-shape): Revisit which fields are epoch-level for cache reuse
+// and where provider-specific request options belong.
 /**
  * Provider, model, reasoning effort, and sampling scalars of one conversation's
  * requests. Every field maps 1:1 onto the same-named `GenerateOptions` field;
@@ -53,13 +55,13 @@ export function callConfigEquals(a: LlmCallConfig, b: LlmCallConfig): boolean {
     || a.maxTokens !== b.maxTokens
   ) return false
   if (a.stop === undefined || b.stop === undefined) return a.stop === b.stop
-  return a.stop.length === b.stop.length && a.stop.every((s, i) => { return s === b.stop?.[i] })
+  return a.stop.length === b.stop.length && a.stop.every((s, i) => s === b.stop?.[i])
 }
 
 /**
  * Mark one exact request object as assembled by dsh-agent-loop.
  * @param request - loop-owned request envelope before LLM dispatch.
- * @returns the same request object with process-local loop provenance.
+ * @returns the same request object marked as created by the process-local agent loop.
  */
 export function markAgentLoopRequest<T extends GenerateOptions>(request: T): T {
   AGENT_LOOP_REQUESTS.add(request)
@@ -107,7 +109,7 @@ export function deepFreeze<T>(value: T): T {
     for (let index = keys.length - 1; index >= 0; index--) {
       const key = keys[index]
       /* v8 ignore next -- the loop is bounded by the captured key count. */
-      if (key === undefined) { continue }
+      if (key === undefined) continue
       pending.push({ kind: 'property', source: node as Record<string, unknown>, key })
     }
   }

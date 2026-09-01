@@ -16,7 +16,7 @@ import { DeepSeekHarness, type HarnessNotification } from '@deepseek-ai/dsh-sdk-
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import { SessionId, type SessionEvent, type TurnEndReason } from '@deepseek-ai/dsh-session'
 import type { SubagentResult, SubagentRun, SubagentStartRequest, SubagentStopReason } from '@deepseek-ai/dsh-subagent'
-import { settleRunResult, subprocessRunHandle } from '@deepseek-ai/dsh-subagent'
+import { AssistantOutputFold, settleRunResult, subprocessRunHandle } from '@deepseek-ai/dsh-subagent'
 import { scrubbedParentEnv } from '@deepseek-ai/dsh-subprocess'
 
 /** Resolved spawn spec for an SDK runtime child process (no defaults — see Config). */
@@ -70,8 +70,8 @@ export const DEFAULT_SHUTDOWN_TIMEOUT_MS = 1_000
 
 /**
  * Map a child turn-end reason to a harness {@link SubagentStopReason}.
- * @param reason - the `session.finished` reason, or `undefined` when the
- * child settled without running a turn.
+ * @param reason - the owned child run's final durable turn reason, or
+ * `undefined` when it settled without running a turn.
  * @returns the harness equivalent; an absent or unknown reason maps to
  * `error`, so an unclean stop is never reported as `completed`.
  */
@@ -163,24 +163,14 @@ export async function startSdkRun(request: SubagentStartRequest, spec: SdkRunSpe
   }
 
   const childSessionId = `session-${randomUUID().replaceAll('-', '')}`
-  // The child's final answer: the last complete assistant message when one
-  // exists, else the text streamed so far (a partial answer surviving cancel).
-  let lastMessage: ContentBlock[] | undefined
-  const partial: string[] = []
+  // The child's final answer under the seam's canonical selection rule
+  // (`AssistantOutputFold`); a partial answer survives cancel and error paths.
+  const fold = new AssistantOutputFold()
   const observe = (notification: HarnessNotification): void => {
     if (notification.method !== 'session.event' || notification.params.sessionId !== childSessionId) return
-    const event = notification.params.event as SessionEvent
-    if (event.type === 'assistant/chunk' && event.data.chunk.type === 'text-delta') {
-      partial.push(event.data.chunk.text)
-    } else if (event.type === 'assistant/message') {
-      lastMessage = event.data.message.content
-    }
+    fold.push(notification.params.event as SessionEvent)
   }
-  const collectOutput = (): ContentBlock[] => {
-    if (lastMessage !== undefined) return lastMessage
-    const text = partial.join('')
-    return text.length > 0 ? [{ type: 'text', text }] : []
-  }
+  const collectOutput = (): ContentBlock[] => fold.collect() ?? []
 
   // Race the child turn against local cancellation; the shared settlement
   // flattens failures under the seam's never-reject contract.
@@ -191,10 +181,13 @@ export async function startSdkRun(request: SubagentStartRequest, spec: SdkRunSpe
         cancelSettled.then(() => 'cancelled' as const),
       ])
       if (turn === 'cancelled') return { output: collectOutput(), stopReason: 'aborted' }
-      return { output: collectOutput(), stopReason: sdkStopReason(turn.reason) }
+      const lastEnd = turn.events.findLast(
+        (event): event is Extract<SessionEvent, { type: 'turn/end' }> => event.type === 'turn/end',
+      )
+      return { output: collectOutput(), stopReason: sdkStopReason(lastEnd?.data.reason) }
     },
     collectOutput,
-    cancelled: () => { return flags.cancelled },
+    cancelled: () => flags.cancelled,
     onError: spec.onError,
     signal: request.signal,
     onAbort,

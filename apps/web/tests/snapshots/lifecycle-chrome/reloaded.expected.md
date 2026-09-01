@@ -1,19 +1,21 @@
 - banner:
   - navigation "Session hierarchy":
     - button "Reply with the single word" [disabled]
+  - img
+  - text: Standard mode
+  - button "Session log":
+    - text: Session log
+    - img
   - tablist:
     - tab "Chat" [selected]
     - tab "Trajectory"
 - text: Reply with the single word LIGHTHOUSE and stop. {{clock}}
 - button "Copy":
   - img
-- button "Branch into a new conversation" [disabled]:
-  - img
-- text: Available only on the last message of a completed turn
-- button "Context injection":
+- button "Context injection @deepseek-ai/dsh-system-prompt":
   - img
   - img
-  - text: Context injection
+  - text: Context injection @deepseek-ai/dsh-system-prompt
 - button "Think The user wants me to reply with a single word. Let me comply.":
   - img
   - img
@@ -21,9 +23,13 @@
 - paragraph: LIGHTHOUSE
 - button "Copy":
   - img
+- button "Good response":
+  - img
+- button "Bad response":
+  - img
 - button "Branch into a new conversation":
   - img
-- text: {{clock}}
+- text: {{clock}} Ran for {{duration}} TTFT {{duration}} {{throughput}} tok/s
 - textbox "Message the agent"
 - button "Commands":
   - img
@@ -31,5 +37,6 @@
 - button "Select model, current DeepSeek-V4-Flash":
   - text: DeepSeek-V4-Flash
   - img
+- button "6% of context used"
 - button "Send message" [disabled]
-- text: 1 turns · 1 steps Context 6% of 128K Cache hit 99% Input 7.8K tok · Output 21 tok
+- text: 1 turns · 1 steps LLM {{duration}} TTFT avg {{duration}} · {{throughput}} tok/s Cache hit 99% Input 7.8K tok · Output 21 tok

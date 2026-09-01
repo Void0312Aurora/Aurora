@@ -3,7 +3,7 @@
  * @module @deepseek-ai/dsh-credentials/invariant
  */
 
-import type { Context } from 'cordis'
+import type { Context } from '@deepseek-ai/cordis'
 import type { InvariantFailure, InvariantInstaller } from '@deepseek-ai/dsh-invariants'
 
 const PACKAGE_NAME = '@deepseek-ai/dsh-credentials'
@@ -23,7 +23,9 @@ export const inject = ['invariants']
  */
 const install: InvariantInstaller = (ctx: Context, fail: InvariantFailure) => {
   ctx.on('credentials/updated', (ref) => {
-    if (ctx.get('credentials') === undefined) fail(`credentials/updated for "${ref}" emitted without a live credentials service`)
+    if (ctx.get('credentials') === undefined) {
+      fail(`credentials/updated for "${ref}" emitted without a live credentials service`)
+    }
   })
 }
 

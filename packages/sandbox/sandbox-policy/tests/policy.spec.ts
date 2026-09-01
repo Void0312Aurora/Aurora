@@ -8,7 +8,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync } from 'node:
 import { tmpdir } from 'node:os'
 import { join, resolve, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { Context } from 'cordis'
+import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import SandboxPolicyService, { SANDBOX_MODES, effectiveSandboxMode, setSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
@@ -22,7 +22,7 @@ async function mounted(config: { mode?: 'read-only' | 'workspace-write' | 'dange
 
 function session(id: string, cwd?: string): Session {
   const sessionId = SessionId(id)
-  return new Session(sessionId, undefined, {
+  return Session.create(sessionId, undefined, {
     version: 0,
     id: sessionId,
     createdAt: 0,
@@ -69,10 +69,12 @@ describe('SandboxPolicyService', () => {
     expect(ctx.sandboxPolicy.resolve({ session: first })).toEqual({
       mode: 'workspace-write',
       workspaceRoot: resolve('/projects/first'),
+      sessionId: 'sess-first',
     })
     expect(ctx.sandboxPolicy.resolve({ session: second })).toEqual({
       mode: 'read-only',
       workspaceRoot: resolve('/projects/second'),
+      sessionId: 'sess-second',
     })
     expect(ctx.sandboxPolicy.overrideOf(first)).toBeUndefined()
     expect(ctx.sandboxPolicy.overrideOf(second)).toBe('read-only')
@@ -98,6 +100,7 @@ describe('SandboxPolicyService', () => {
       expect(ctx.sandboxPolicy.resolve({ session: session('sess-symlink-parent', cwd) })).toEqual({
         mode: 'workspace-write',
         workspaceRoot: realpathSync.native(physical),
+        sessionId: 'sess-symlink-parent',
       })
     } finally {
       rmSync(root, { recursive: true, force: true })
@@ -111,6 +114,7 @@ describe('SandboxPolicyService', () => {
     expect(ctx.sandboxPolicy.resolve({ session: active, mode: 'danger-full-access' })).toEqual({
       mode: 'danger-full-access',
       workspaceRoot: resolve('/projects/approved'),
+      sessionId: 'sess-approved',
     })
   })
 
@@ -195,7 +199,7 @@ describe('sandbox:policy request context', () => {
   it('reconstructs resumed policy from the session log and omits diagnostics without an agent', async () => {
     const active = session('sess-resume', '/projects/current')
     setSandboxMode(active, 'workspace-write')
-    const resumed = new Session(active.id, active.events, active.header)
+    const resumed = Session.create(active.id, active.events, active.header)
     const ctx = await promptMounted({ mode: 'read-only' })
 
     expect(await policyContext(ctx, resumed)).toContain('workspace-write')
@@ -209,7 +213,7 @@ describe('the sandbox/mode session kit', () => {
   })
 
   it('effectiveSandboxMode folds to the last switch, or undefined without one', () => {
-    const session = new Session(SessionId('sess-fold'))
+    const session = Session.create(SessionId('sess-fold'))
     expect(effectiveSandboxMode(session.events)).toBeUndefined()
     setSandboxMode(session, 'workspace-write')
     setSandboxMode(session, 'read-only')
@@ -217,7 +221,7 @@ describe('the sandbox/mode session kit', () => {
   })
 
   it('setSandboxMode appends exactly one sandbox/mode event per switch', () => {
-    const session = new Session(SessionId('sess-write'))
+    const session = Session.create(SessionId('sess-write'))
     setSandboxMode(session, 'danger-full-access')
     const modeEvents = session.events.filter(e => e.type === 'sandbox/mode')
     expect(modeEvents).toHaveLength(1)

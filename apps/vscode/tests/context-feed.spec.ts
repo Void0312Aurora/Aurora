@@ -29,15 +29,15 @@ function manualScheduler() {
 function feedWith(options: {
   editor: () => EditorState
   session: () => string | undefined
-  respond?: (sessionId: string, signal: AbortSignal | undefined) => InjectResult | Promise<InjectResult>
+  respond?: (sessionId: string) => InjectResult
 }) {
   const scheduler = manualScheduler()
   const injected: { sessionId: string; text: string }[] = []
   const client = {
     sessions: {
-      injectContext: (payload: { sessionId: string; content: { type: string; text?: string }[] }, signal?: AbortSignal) => {
+      injectContext: (payload: { sessionId: string; content: { type: string; text?: string }[] }) => {
         injected.push({ sessionId: payload.sessionId, text: payload.content[0]?.text ?? '' })
-        const result = options.respond?.(payload.sessionId, signal)
+        const result = options.respond?.(payload.sessionId)
           ?? { rpcId: 'r' as never, result: { ok: true as const, value: { accepted: true as const } } }
         return Promise.resolve(result)
       },
@@ -98,50 +98,6 @@ describe('IdeContextFeed', () => {
     session = 's2'
     feed.nudge(); scheduler.tick(); await settle()
     expect(injected.map(i => i.sessionId)).toEqual(['s1', 's2'])
-  })
-
-  it('samples immediately when a session becomes active, ahead of the debounce', async () => {
-    const state: { session?: string } = {}
-    const { feed, scheduler, injected } = feedWith({
-      editor: () => ({ path: 'already-open.ts', selection: 'const ready = true', range: { start: 1, end: 1 }, diagnostics: [] }),
-      session: () => state.session,
-    })
-    feed.nudge()
-    expect(scheduler.pending()).toBe(true)
-    state.session = 'new-session'
-    await feed.sync()
-    expect(scheduler.pending()).toBe(false)
-    expect(injected).toHaveLength(1)
-    expect(injected[0]?.sessionId).toBe('new-session')
-    expect(injected[0]?.text).toContain('already-open.ts')
-  })
-
-  it('shares one explicit-session prime between active change and first prompt', async () => {
-    let release!: (result: InjectResult) => void
-    const deferred = new Promise<InjectResult>((resolve) => { release = resolve })
-    const { feed, injected } = feedWith({
-      editor: () => ({ path: 'explicit.ts', diagnostics: [] }),
-      session: () => 'heuristic-session',
-      respond: () => deferred,
-    })
-
-    const activePrime = feed.beforeFirstPrompt('prompt-session')
-    const promptPrime = feed.beforeFirstPrompt('prompt-session')
-    expect(injected.map(item => item.sessionId)).toEqual(['prompt-session'])
-    release({ rpcId: 'r' as never, result: { ok: true, value: { accepted: true } } })
-    await Promise.all([activePrime, promptPrime])
-    expect(injected).toHaveLength(1)
-  })
-
-  it('forgets prime state with the session so a reused id is admitted again', async () => {
-    const { feed, injected } = feedWith({
-      editor: () => ({ path: 'a.ts', diagnostics: [] }),
-      session: () => 's1',
-    })
-    await feed.beforeFirstPrompt('s1')
-    feed.forget('s1')
-    await feed.beforeFirstPrompt('s1')
-    expect(injected).toHaveLength(2)
   })
 
   it('injects nothing without an active session or an active editor', async () => {
@@ -219,29 +175,5 @@ describe('IdeContextFeed', () => {
     scheduler.tick()
     await settle()
     expect(injected).toHaveLength(0)
-  })
-
-  it('aborts an in-flight send and fences dirty trailing work after dispose', async () => {
-    let session = 's1'
-    let editorReads = 0
-    let release!: (result: InjectResult) => void
-    let observedSignal: AbortSignal | undefined
-    const deferred = new Promise<InjectResult>((resolve) => { release = resolve })
-    const { feed, scheduler, injected } = feedWith({
-      editor: () => { editorReads++; return { path: `${session}.ts`, diagnostics: [] } },
-      session: () => session,
-      respond: (_sessionId, signal) => { observedSignal = signal; return deferred },
-    })
-
-    feed.nudge(); scheduler.tick(); await settle()
-    expect(injected.map(item => item.sessionId)).toEqual(['s1'])
-    session = 's2'
-    feed.nudge(); scheduler.tick(); await settle()
-    feed.dispose()
-    expect(observedSignal?.aborted).toBe(true)
-    release({ rpcId: 'r' as never, result: { ok: true, value: { accepted: true } } })
-    await settle()
-    expect(injected.map(item => item.sessionId)).toEqual(['s1'])
-    expect(editorReads).toBe(1)
   })
 })

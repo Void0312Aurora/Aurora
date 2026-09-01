@@ -4,7 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { Context } from 'cordis'
+import { Context } from '@deepseek-ai/cordis'
 import type { SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
 import { LocalSandboxProvider } from '@deepseek-ai/dsh-sandbox-local'
 import { seatbeltProfileArgs } from '../src/profiles.ts'
@@ -21,7 +21,7 @@ const probe = spawnSync('sandbox-exec', [...seatbeltProfileArgs({ mode: 'read-on
 const seatbeltUsable = probe.status === 0
 
 let ctx: Context | undefined
-const tempDirs: Array<string> = []
+const tempDirs: string[] = []
 
 afterEach(async () => {
   await ctx?.fiber.dispose()
@@ -39,7 +39,7 @@ async function provider(): Promise<LocalSandboxProvider> {
   ctx = new Context()
   await ctx.plugin(LocalSandboxProvider, {})
   const sandbox = ctx.sandbox as LocalSandboxProvider
-  sandbox.internals = { probeBwrap: () => { return false }, probeLandlock: () => 'unusable' }
+  sandbox.internals = { probeBwrap: () => false, probeLandlock: () => 'unusable' }
   return sandbox
 }
 

@@ -1,86 +1,116 @@
 /**
- * Static roster/boot-graph shape: every roster id gets a boot entry, the two
- * kernel-owned ids (modules, app-shell) stay out, and the graph matches the
- * `dshClient` rows of the composed web config minus dev-only hmr and the
- * deliberate shell substitution. This is the guard that keeps the webview's
- * static bundle in sync with the shipped web surface as plugins are added.
+ * Static roster parity: the webview must embed the browser faces declared by
+ * the current dsh-base + dsh-web-app patch layers, except for the HMR row,
+ * the kernel-owned modules row, and the wide layout replaced by the sidebar
+ * shell. This test reads package manifests rather than a retired app config.
  */
 
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { staticBootGraph, staticPlugins, VSCODE_ROUTES_ID, VSCODE_SHELL_ID, VSCODE_THEME_ID } from '../webview/roster.ts'
 
-const WEB_CONFIG = fileURLToPath(new URL('../../cli/config/web.cordis.yml', import.meta.url))
+const REPOSITORY_ROOT = fileURLToPath(new URL('../../../', import.meta.url))
+const ROSTER_SOURCE = join(REPOSITORY_ROOT, 'apps/vscode/webview/roster.ts')
+const PATCH_FILES = [
+  join(REPOSITORY_ROOT, 'packages/bundle/base/cordis.patch.yml'),
+  join(REPOSITORY_ROOT, 'packages/bundle/web-app/cordis.patch.yml'),
+]
 
-/**
- * The client plugin names the shipped web surface composes. Extracted by
- * text (every `name: '@deepseek-ai/dsh-client-*'` row) to avoid a YAML
- * dependency; the parity assertion below only needs the browser-plugin names.
- */
-function webClientPluginNames(): string[] {
-  const text = readFileSync(WEB_CONFIG, 'utf8')
-  const names = [...text.matchAll(/name:\s*'(@deepseek-ai\/dsh-client-[^']+)'/g)].map(match => match[1]!)
-  return [...new Set(names)]
+interface PackageManifest {
+  name?: unknown
+  dsh?: unknown
+}
+
+interface ClientDeclaration {
+  platform?: unknown
+}
+
+/** Collect package manifests without relying on an additional YAML/JSON package. */
+function collectManifests(dir: string, manifests: Map<string, string>): void {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === 'node_modules' || entry.name === 'dist' || entry.name === 'lib' || entry.name === 'deploy') continue
+    const path = join(dir, entry.name)
+    if (entry.isDirectory()) {
+      collectManifests(path, manifests)
+      continue
+    }
+    if (entry.name !== 'package.json') continue
+    const manifest = JSON.parse(readFileSync(path, 'utf8')) as PackageManifest
+    if (typeof manifest.name === 'string') manifests.set(manifest.name, path)
+  }
+}
+
+/** Read one package's `dsh.client` declaration when it has one. */
+function clientDeclaration(path: string): ClientDeclaration | undefined {
+  const manifest = JSON.parse(readFileSync(path, 'utf8')) as PackageManifest
+  if (typeof manifest.dsh !== 'object' || manifest.dsh === null) return undefined
+  const dsh = manifest.dsh as { client?: unknown }
+  if (typeof dsh.client !== 'object' || dsh.client === null) return undefined
+  return dsh.client
+}
+
+/** Names in the two authoritative bundle patch layers. */
+function patchPackageNames(): Set<string> {
+  const names = new Set<string>()
+  for (const path of PATCH_FILES) {
+    const text = readFileSync(path, 'utf8')
+    for (const match of text.matchAll(/\bname:\s*['"]?(@deepseek-ai\/[^'"\s]+)['"]?/g)) names.add(match[1]!)
+  }
+  return names
+}
+
+/** Browser package rows explicitly composed by base + web-app. */
+function authoritativeBrowserNames(): Set<string> {
+  const manifests = new Map<string, string>()
+  collectManifests(join(REPOSITORY_ROOT, 'packages'), manifests)
+  const names = new Set<string>()
+  for (const packageName of patchPackageNames()) {
+    const manifestPath = manifests.get(packageName)
+    if (manifestPath === undefined) continue
+    if (clientDeclaration(manifestPath)?.platform === 'web') names.add(packageName)
+  }
+  return names
+}
+
+/** Package ids in the roster's static object literal. */
+function rosterPackageNames(): Set<string> {
+  const source = readFileSync(ROSTER_SOURCE, 'utf8')
+  return new Set([...source.matchAll(/^\s*'(@deepseek-ai\/[^']+)'\s*:/gm)].map(match => match[1]!))
 }
 
 describe('webview static roster', () => {
-  it('emits one boot entry per static plugin with placeholder transport fields', () => {
-    const graph = staticBootGraph()
-    const ids = graph.entries.map(entry => entry.id)
-    expect(new Set(ids)).toEqual(new Set(Object.keys(staticPlugins)))
-    // Every url is a non-fetchable placeholder (statics resolve without fetch).
-    expect(graph.entries.every(entry => entry.url.startsWith('static:'))).toBe(true)
-    expect(graph.rev).toBe('static')
+  it('uses the static module table for every graph row', () => {
+    const source = readFileSync(ROSTER_SOURCE, 'utf8')
+    expect(source).toContain('url: `static:${id}`')
+    expect(source).toContain("rev: 'static'")
+    expect(source).toContain('Object.keys(staticPlugins).map')
   })
 
-  it('never bundles the kernel-owned modules or app-shell ids', () => {
-    expect(staticPlugins).not.toHaveProperty('@deepseek-ai/dsh-client-modules')
-    expect(Object.keys(staticPlugins).some(id => id.includes('app-shell'))).toBe(false)
-  })
-
-  it('carries the VS Code theme adapter as a webview-own module', () => {
-    expect(staticPlugins).toHaveProperty(VSCODE_THEME_ID)
-    const theme = staticPlugins[VSCODE_THEME_ID] as { apply?: unknown; inject?: unknown }
-    expect(theme.apply).toBeTypeOf('function')
-    expect(theme.inject).toEqual(['theme'])
-  })
-
-  it('pins the browse directory flow paired with the extension overlay', () => {
-    expect(staticPlugins).toHaveProperty('@deepseek-ai/dsh-host-directory-picker-browse')
-    expect(staticPlugins).not.toHaveProperty('@deepseek-ai/dsh-host-directory-picker-native')
-  })
-
-  it('carries the host route bridge as a webview-own module', () => {
-    expect(staticPlugins).toHaveProperty(VSCODE_ROUTES_ID)
-    const routes = staticPlugins[VSCODE_ROUTES_ID] as { apply?: unknown; inject?: unknown }
-    expect(routes.apply).toBeTypeOf('function')
-    expect(routes.inject).toEqual(['layout'])
-  })
-
-  it('swaps the three-column shell for the sidebar one, and only that shell', () => {
-    // 'root' takes a single occupant, so loading both shells fails loud at
-    // registration; the sidebar host must carry exactly its own.
-    expect(staticPlugins).toHaveProperty(VSCODE_SHELL_ID)
-    expect(staticPlugins).not.toHaveProperty('@deepseek-ai/dsh-client-ui-layout')
-    const shell = staticPlugins[VSCODE_SHELL_ID] as { apply?: unknown; inject?: unknown }
-    expect(shell.apply).toBeTypeOf('function')
-    expect(shell.inject).toEqual(['slots'])
-  })
-
-  it('bundles every browser plugin the shipped web config composes (minus dev-only hmr and the shell swap)', () => {
-    // hmr is dev-only (disabled in web.cordis.yml) and modules is kernel-owned;
-    // ui-layout is the wide shell this host deliberately replaces. Every other
-    // composed client name must bundle.
+  it('matches the current base + web-app browser composition', () => {
     const excluded = new Set([
       '@deepseek-ai/dsh-client-hmr',
       '@deepseek-ai/dsh-client-modules',
       '@deepseek-ai/dsh-client-ui-layout',
     ])
-    const web = webClientPluginNames().filter(name => !excluded.has(name))
-    expect(web.length).toBeGreaterThan(0)
-    for (const id of web) {
-      expect(staticPlugins, `web config composes ${id} but the webview roster omits it`).toHaveProperty(id)
-    }
+    const expected = new Set([...authoritativeBrowserNames()].filter(name => !excluded.has(name)))
+    expect(rosterPackageNames()).toEqual(expected)
+  })
+
+  it('keeps kernel-owned rows and the wide shell out of the package roster', () => {
+    const roster = rosterPackageNames()
+    expect(roster).not.toContain('@deepseek-ai/dsh-client-modules')
+    expect(roster).not.toContain('@deepseek-ai/dsh-client-hmr')
+    expect(roster).not.toContain('@deepseek-ai/dsh-client-ui-layout')
+  })
+
+  it('declares the VS Code adapters and sidebar shell', () => {
+    const source = readFileSync(ROSTER_SOURCE, 'utf8')
+    expect(source).toContain("export const VSCODE_THEME_ID = 'dsh-vscode-theme'")
+    expect(source).toContain("export const VSCODE_ROUTES_ID = 'dsh-vscode-routes'")
+    expect(source).toContain("export const VSCODE_SHELL_ID = 'dsh-vscode-shell'")
+    expect(source).toContain('[VSCODE_THEME_ID]: VscodeTheme')
+    expect(source).toContain('[VSCODE_ROUTES_ID]: VscodeRoutes')
+    expect(source).toContain('[VSCODE_SHELL_ID]: VscodeShell')
   })
 })

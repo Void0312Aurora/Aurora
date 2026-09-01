@@ -49,7 +49,12 @@ export async function verifyHostProtocol(
   client: Pick<AbstractApiClient, 'host'>,
   signal?: AbortSignal,
 ): Promise<ProtocolCheck> {
-  const response = await client.host.describe({}, signal)
+  let response: Awaited<ReturnType<AbstractApiClient['host']['describe']>>
+  try {
+    response = await client.host.describe({}, signal)
+  } catch (error: unknown) {
+    return { ok: false, reason: `host.describe protocol response invalid: ${error instanceof Error ? error.message : String(error)}` }
+  }
   if (!response.result.ok) {
     return { ok: false, reason: `host.describe failed: ${response.result.error.code}` }
   }

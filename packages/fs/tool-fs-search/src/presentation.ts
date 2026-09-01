@@ -31,7 +31,7 @@ import type {
   SearchLineMatch,
   SearchResultView,
 } from '@deepseek-ai/dsh-tools'
-import type { RetainedItems } from '@deepseek-ai/dsh-retention'
+import type { RetainedItems } from '@deepseek-ai/dsh-output-retention'
 import type { GrepMatch } from './search-core.ts'
 
 /**
@@ -78,7 +78,7 @@ type MetaFileMatches = { path: string; matches: MetaLineMatch[] }
  * @returns one entry per file, in first-seen order.
  */
 export function groupMatchesByFile(matches: GrepMatch[]): MetaFileMatches[] {
-  const byFile = new Map<string, Array<MetaLineMatch>>()
+  const byFile = new Map<string, MetaLineMatch[]>()
   for (const match of matches) {
     const entry: MetaLineMatch = { lineNumber: match.lineNumber, line: match.line }
     const group = byFile.get(match.path)
@@ -198,7 +198,7 @@ export function searchViewFromMeta(meta: unknown): SearchResultView | undefined 
   }
   if (record.shape === 'paths') {
     const { paths } = record
-    if (!Array.isArray(paths) || !paths.every((path): path is string => { return typeof path === 'string' })) return undefined
+    if (!Array.isArray(paths) || !paths.every((path): path is string => typeof path === 'string')) return undefined
     return { card: 'search', shape: 'paths', paths, truncated, total }
   }
   return undefined

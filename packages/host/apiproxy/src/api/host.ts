@@ -1,16 +1,8 @@
-/**
- * host domain contract.
- */
+/** Host domain contract, including the explicit wire protocol version. */
 
 import type { RpcRequest, RpcResponse } from './rpc.ts'
 
-/**
- * Wire protocol version advertised by `host.describe`. Independently released
- * clients (the VS Code extension is the first) gate on it before consuming
- * frames: bump it on any breaking change to methods, payloads, or frame
- * shapes, and note the change in the api-contracts document. In-repo clients
- * ship with the host and never check it.
- */
+/** Wire protocol version advertised by `host.describe`. */
 export const API_PROTOCOL_VERSION = 1
 
 /** One directory row of a listing: a child entry or a breadcrumb ancestor. */
@@ -50,6 +42,7 @@ export interface HostApi {
    * applied when a new agent doesn't specify them explicitly, absent when the host configures
    * no explicit default (the adapter falls back internally);
    * attachedSessions = count of currently attached sessions (those with a live agent);
+   * canOpenPath = whether this deployment can hand a path to a user-visible native desktop.
    */
   describe(request: RpcRequest<{}>): Promise<RpcResponse<{
     protocolVersion: number
@@ -58,6 +51,7 @@ export interface HostApi {
     provider?: string
     model?: string
     attachedSessions: number
+    canOpenPath: boolean
   }>>
 
   /**

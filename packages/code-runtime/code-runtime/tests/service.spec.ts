@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { Context } from 'cordis'
+import { Context } from '@deepseek-ai/cordis'
 import { CodeRuntime } from '@deepseek-ai/dsh-code-runtime'
 import type { CodeRunRequest, CodeRunResult } from '@deepseek-ai/dsh-code-runtime'
 
 /**
  * Minimal concrete runtime: records requests, "executes" by invoking every
  * binding once in declaration order, and lets tests script the outcome. The
- * seam package ships no implementation, so the contract is exercised through
+ * Service Definition package ships no provider, so the contract is exercised through
  * the smallest subclass that honors it.
  */
 class StubRuntime extends CodeRuntime {
@@ -17,7 +17,9 @@ class StubRuntime extends CodeRuntime {
 
   async run(request: CodeRunRequest): Promise<CodeRunResult> {
     this.requests.push(request)
-    if (request.signal?.aborted) return { logs: [], error: { kind: 'abort', message: String(request.signal.reason) } }
+    if (request.signal?.aborted) {
+      return { logs: [], error: { kind: 'abort', message: String(request.signal.reason) } }
+    }
     for (const namespace of request.bindings) {
       for (const fn of Object.values(namespace.functions)) {
         await fn({ from: 'stub' })

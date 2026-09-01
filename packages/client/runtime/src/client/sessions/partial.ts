@@ -6,6 +6,19 @@ import type { StreamChunk } from '@deepseek-ai/dsh-llm/types'
 import type { AssistantBlock, PartialAssistant } from './conversation.ts'
 import { toAssistantBlock } from './conversation.ts'
 
+/**
+ * Whether a stream chunk changes the partial assistant projection shown by the UI.
+ * @param type - Stream chunk discriminant.
+ * @returns Whether publishing the accumulated partial can change the visible snapshot.
+ */
+export function isVisibleAssistantChunk(type: string): boolean {
+  return type === 'block-start'
+    || type === 'text-delta'
+    || type === 'reasoning-delta'
+    || type === 'tool-call-delta'
+    || type === 'block-end'
+}
+
 /** assistant/chunk accumulator: folds StreamChunks into AssistantBlock[] with block-level immutability. */
 export class PartialAccumulator {
   // Sparse on purpose: block-start may arrive out of order, leaving holes until compaction.
@@ -35,7 +48,7 @@ export class PartialAccumulator {
   push(chunk: StreamChunk): boolean {
     switch (chunk.type) {
       case 'block-start': {
-        this.blocks[chunk.index] = emptyBlock(chunk.blockType)
+        this.blocks[chunk.index] = emptyAssistantBlock(chunk.blockType)
         this.changed = true
         return true
       }
@@ -89,7 +102,12 @@ export class PartialAccumulator {
   }
 }
 
-function emptyBlock(blockType: string): AssistantBlock {
+/**
+ * Create the empty client projection for one streamed Assistant block kind.
+ * @param blockType - wire block kind.
+ * @returns empty projected block ready to receive deltas.
+ */
+export function emptyAssistantBlock(blockType: string): AssistantBlock {
   switch (blockType) {
     case 'text': return { kind: 'text', text: '' }
     case 'reasoning': return { kind: 'reasoning', text: '' }

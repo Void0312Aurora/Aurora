@@ -16,6 +16,6 @@ export function ConnectionBanner({ reconnecting, label = '连接已断开，正�
   reconnecting: boolean
   label?: string | undefined
 }) {
-  if (!reconnecting) { return null }
+  if (!reconnecting) return null
   return <div className={css.banner}>{label}</div>
 }

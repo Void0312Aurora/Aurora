@@ -47,7 +47,7 @@ export function usePointerGrace(close: () => void): PointerGrace {
     }, POINTER_GRACE_MS)
   }, [cancel])
 
-  useEffect(() => { return cancel }, [cancel])
+  useEffect(() => cancel, [cancel])
 
   return { arm, cancel }
 }

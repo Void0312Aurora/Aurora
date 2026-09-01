@@ -7,7 +7,7 @@
  * overrides) needs the body-class observer.
  */
 
-import type { Context } from 'cordis'
+import type { Context } from '@deepseek-ai/cordis'
 // Type-only: the ThemeService context merge (ctx.theme).
 import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
 

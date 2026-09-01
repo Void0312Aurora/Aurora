@@ -2,18 +2,18 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { Context } from 'cordis'
+import { Context } from '@deepseek-ai/cordis'
 import { FsVersion } from '@deepseek-ai/dsh-fs'
 import { CallId } from '@deepseek-ai/dsh-llm'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
-import AgentRegistry from '@deepseek-ai/dsh-agent'
+import AgentRegistry, { Inbox } from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
-import * as FsPolicy from '@deepseek-ai/dsh-fs-policy'
+import * as FsPolicy from '@deepseek-ai/dsh-fs-observation-policy'
 import SandboxedFileSystem from '@deepseek-ai/dsh-fs-sandbox'
 import SandboxPolicy from '@deepseek-ai/dsh-sandbox-policy'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import ToolRegistry from '@deepseek-ai/dsh-tools'
+import ToolRuntime from '@deepseek-ai/dsh-tools'
 import * as ToolStrReplaceEditor from '@deepseek-ai/dsh-tool-str-replace-editor'
 
 const contexts: Context[] = []
@@ -28,20 +28,20 @@ afterEach(async () => {
 function agent(ctx: Context, cwd: string): Agent {
   const id = SessionId(`str-replace-editor-owner-${callNumber}`)
   const scope = ctx.plugin(() => {})
+  const session = Session.create(id, [], { version: 0, id, createdAt: 0, cwd })
   const value: Agent = {
     id,
     options: {},
-    session: new Session(id, [], { version: 0, id, createdAt: 0, cwd }),
+    session,
+    inbox: new Inbox(session, { inserted: () => {}, discarded: () => {}, claimed: () => {} }),
     status: 'idle',
-    acceptsNextStep: false,
     ctx: scope.ctx,
+    send: () => {},
     followup: () => {},
     steer: () => ({ outcome: Promise.resolve({ status: 'rejected' as const }) }),
     inject: () => {},
-    send: () => {},
-    updateInbox: () => 'not-found',
-    reserveTurnAdmission: () => undefined,
     cancel() {},
+    runMaintenance: task => task(new AbortController().signal),
     whenIdle: () => Promise.resolve(),
   }
   ctx.agents.register(value)
@@ -71,7 +71,7 @@ async function setup(
   const ctx = new Context()
   contexts.push(ctx)
   await ctx.plugin(SystemPrompt)
-  await ctx.plugin(ToolRegistry)
+  await ctx.plugin(ToolRuntime)
   await ctx.plugin(AgentRegistry)
   if (options.sandboxMode === undefined) {
     await ctx.plugin(LocalFileSystem, { cwd: root })
@@ -196,6 +196,35 @@ describe('tool-str-replace-editor', () => {
     expect(await readFile(sample, 'utf8')).toBe('one\nbetween\n\nthree\n')
   })
 
+  it('a failed view records absence so create can recover after external deletion', async () => {
+    const { ctx, root, owner } = await setup({}, { fsPolicy: true })
+    const sample = join(root, 'deleted.txt')
+    await writeFile(sample, 'original')
+    expect((await call(ctx, owner, { command: 'view', path: sample })).isError).toBe(false)
+    await rm(sample)
+
+    const missing = await call(ctx, owner, { command: 'view', path: sample })
+    expect(missing.isError).toBe(true)
+    expect(missing.error).toMatchObject({ info: { code: 'FS_NOT_FOUND' } })
+
+    const edit = await call(ctx, owner, {
+      command: 'str_replace',
+      path: sample,
+      old_str: 'original',
+      new_str: 'edited',
+    })
+    expect(edit.isError).toBe(true)
+    expect(edit.error).toMatchObject({ info: { code: 'FS_NOT_FOUND' } })
+
+    const created = await call(ctx, owner, {
+      command: 'create',
+      path: sample,
+      file_text: 'fresh',
+    })
+    expect(created.isError).toBe(false)
+    expect(await readFile(sample, 'utf8')).toBe('fresh')
+  })
+
   it('writes replacement text literally', async () => {
     const { ctx, root, owner } = await setup()
     const sample = join(root, 'literal.txt')
@@ -244,8 +273,10 @@ describe('tool-str-replace-editor', () => {
     expect(listing).not.toContain('too-deep.txt')
     expect(listing).not.toContain('index.js')
     expect(listing).not.toContain('module.pyc')
-    expect(listing).toContain('node_modules_old/kept.js')
-    expect(listing).toContain('__pycache__backup/kept.py')
+    // The listing carries absolute display paths; the POSIX-style substrings
+    // only match on Linux, so assert with platform separators.
+    expect(listing).toContain(join('node_modules_old', 'kept.js'))
+    expect(listing).toContain(join('__pycache__backup', 'kept.py'))
 
     const clipped = await setup({ maxOutputChars: 10 })
     await writeFile(join(clipped.root, 'large.txt'), 'x'.repeat(100))
@@ -409,7 +440,7 @@ describe('tool-str-replace-editor', () => {
     })).error).toMatchObject({ info: { code: 'FS_NOT_REGULAR_FILE' } })
   })
 
-  it('delegates read-before-edit decisions to fs-policy', async () => {
+  it('delegates read-before-edit decisions to fs-observation-policy', async () => {
     const { ctx, root, owner } = await setup({}, { fsPolicy: true })
     const existing = join(root, 'existing.txt')
     const created = join(root, 'created.txt')
@@ -500,7 +531,7 @@ describe('tool-str-replace-editor', () => {
     const ctx = new Context()
     contexts.push(ctx)
     await ctx.plugin(SystemPrompt)
-    await ctx.plugin(ToolRegistry)
+    await ctx.plugin(ToolRuntime)
     await ctx.plugin(AgentRegistry)
     await ctx.plugin(LocalFileSystem, { cwd: root })
     Object.defineProperty(ctx.fs, 'sandboxMode', { value: 'read-only' })

@@ -17,7 +17,6 @@ export type RouteActions = BoundActions<ReturnType<typeof createNarrowStore>>
 /** Cross-plugin panel-action face (ctx.layout) for a single-pane shell. */
 export class NarrowLayoutService implements ILayout {
   #routes: RouteActions | undefined
-  #pendingRoute: NarrowRoute | undefined
 
   /**
    * Adopt the root entry's bound store actions. Called from the root
@@ -28,10 +27,6 @@ export class NarrowLayoutService implements ILayout {
    */
   attachRoutes(actions: RouteActions): void {
     this.#routes = actions
-    if (this.#pendingRoute !== undefined) {
-      actions.show(this.#pendingRoute)
-      this.#pendingRoute = undefined
-    }
   }
 
   /**
@@ -41,11 +36,7 @@ export class NarrowLayoutService implements ILayout {
    * @param route - the pane to bring to the front.
    */
   show(route: NarrowRoute): void {
-    if (this.#routes === undefined) {
-      this.#pendingRoute = route
-      return
-    }
-    this.#routes.show(route)
+    this.#require().show(route)
   }
 
   /** Route between the sessions pane and the conversation. */

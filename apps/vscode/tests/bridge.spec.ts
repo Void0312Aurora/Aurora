@@ -6,7 +6,7 @@
  * vocabulary; this suite fakes both the fetch transport and the response sink.
  */
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { BridgeResponseMessage } from '@deepseek-ai/dsh-client-connection/client'
 import { ApiBridge, resolveApiTarget } from '../src/bridge.ts'
 
@@ -15,17 +15,12 @@ const RUNNING_ORIGIN = new URL('http://127.0.0.1:5173/')
 // origin is required (no default): a default would swallow an explicit
 // `undefined` — JS default params fire on undefined regardless of how it
 // was passed — and the "no origin yet" case needs a genuine undefined.
-function collectingBridge(
-  fetchImpl: typeof fetch,
-  origin: URL | undefined,
-  beforeRelay?: ConstructorParameters<typeof ApiBridge>[0]['beforeRelay'],
-) {
+function collectingBridge(fetchImpl: typeof fetch, origin: URL | undefined) {
   const posted: BridgeResponseMessage[] = []
   const bridge = new ApiBridge({
     origin: () => origin,
-    post: message => posted.push(message),
+    post: (message) => { posted.push(message) },
     fetchImpl,
-    ...beforeRelay === undefined ? {} : { beforeRelay },
   })
   return { bridge, posted }
 }
@@ -39,10 +34,6 @@ function streamResponse(chunks: string[], status = 200): Response {
     },
   })
   return new Response(body, { status })
-}
-
-function requestHref(input: URL | RequestInfo): string {
-  return input instanceof URL ? input.href : input instanceof Request ? input.url : input
 }
 
 /** A response whose body never closes until the request signal aborts (real fetch abort behavior). */
@@ -62,6 +53,55 @@ async function settle(): Promise<void> {
 }
 
 describe('ApiBridge', () => {
+  it('rejects malformed and duplicate request ids without starting orphan relays', async () => {
+    let fetched = 0
+    let observedSignal: AbortSignal | undefined
+    const fetchImpl: typeof fetch = async (_input, init) => {
+      fetched++
+      observedSignal = init?.signal ?? undefined
+      return hangingResponse(observedSignal)
+    }
+    const { bridge, posted } = collectingBridge(fetchImpl, RUNNING_ORIGIN)
+    bridge.handle({ type: 'dsh-fetch', id: 11, path: '/api/session.list', method: 'GET', headers: {} })
+    await settle()
+    bridge.handle({ type: 'dsh-fetch', id: 11, path: '/api/session.list', method: 'GET', headers: {} })
+    bridge.handle({ type: 'dsh-fetch', id: 12, path: '/api/session.list', method: 'GET', headers: { bad: 1 } })
+    await settle()
+    expect(fetched).toBe(1)
+    expect(observedSignal?.aborted).toBe(true)
+    expect(posted).toContainEqual({ type: 'dsh-fetch-error', id: 11, message: 'duplicate bridge request id' })
+    const malformed = posted.find(message => message.type === 'dsh-fetch-error' && message.id === 12)
+    if (malformed?.type !== 'dsh-fetch-error') throw new Error('expected malformed request rejection')
+    expect(malformed.message).toContain('invalid bridge request')
+    bridge.handle({ type: 'dsh-fetch', id: 11, path: '/api/session.list', method: 'GET', headers: {} })
+    bridge.handle({ type: 'dsh-fetch', id: 12, path: '/api/session.list', method: 'GET', headers: {} })
+    await settle()
+    expect(fetched).toBe(1)
+    expect(posted.filter(message => message.type === 'dsh-fetch-error'
+      && message.id === 11 && message.message === 'duplicate bridge request id')).toHaveLength(2)
+    expect(posted).toContainEqual({ type: 'dsh-fetch-error', id: 12, message: 'duplicate bridge request id' })
+  })
+
+  it('contains postMessage failures instead of creating unhandled relay rejections', async () => {
+    const errors: string[] = []
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation((...args) => { errors.push(args.join(' ')) })
+    let observedSignal: AbortSignal | undefined
+    const fetchImpl: typeof fetch = async (_input, init) => {
+      observedSignal = init?.signal ?? undefined
+      return hangingResponse(observedSignal)
+    }
+    const bridge = new ApiBridge({
+      origin: () => RUNNING_ORIGIN,
+      post: () => Promise.reject(new Error('webview gone')),
+      fetchImpl,
+    })
+    bridge.handle({ type: 'dsh-fetch', id: 13, path: '/api/session.list', method: 'GET', headers: {} })
+    await settle()
+    expect(errors.some(error => error.includes('webview gone'))).toBe(true)
+    expect(observedSignal?.aborted).toBe(true)
+    errorSpy.mockRestore()
+  })
+
   it('relays a request against the server origin and streams head + chunks + end', async () => {
     let seen: { url: string; method: string; body?: string } | undefined
     const fetchImpl: typeof fetch = async (input, init) => {
@@ -112,49 +152,6 @@ describe('ApiBridge', () => {
     bridge.handle({ type: 'dsh-fetch', id: 3, path: '/api/session.list', method: 'POST', headers: {} })
     await settle()
     expect(posted).toEqual([{ type: 'dsh-fetch-error', id: 3, message: 'ECONNREFUSED' }])
-  })
-
-  it('holds a prompt relay behind the ordered pre-relay barrier', async () => {
-    let release!: () => void
-    const gate = new Promise<void>((resolve) => { release = resolve })
-    const fetched: string[] = []
-    const fetchImpl: typeof fetch = async (input) => {
-      fetched.push(requestHref(input))
-      return streamResponse([])
-    }
-    const { bridge } = collectingBridge(fetchImpl, RUNNING_ORIGIN, message => (
-      message.path === '/api/session.prompt' ? gate : undefined
-    ))
-
-    bridge.handle({ type: 'dsh-fetch', id: 30, path: '/api/session.prompt', method: 'POST', headers: {}, body: '{}' })
-    await settle()
-    expect(fetched).toEqual([])
-    release()
-    await settle()
-    expect(fetched).toEqual(['http://127.0.0.1:5173/api/session.prompt'])
-  })
-
-  it('does not block other methods and never fetches an aborted barrier request', async () => {
-    let release!: () => void
-    const gate = new Promise<void>((resolve) => { release = resolve })
-    const fetched: string[] = []
-    const fetchImpl: typeof fetch = async (input) => {
-      fetched.push(requestHref(input))
-      return streamResponse([])
-    }
-    const { bridge, posted } = collectingBridge(fetchImpl, RUNNING_ORIGIN, message => (
-      message.path === '/api/session.prompt' ? gate : undefined
-    ))
-
-    bridge.handle({ type: 'dsh-fetch', id: 31, path: '/api/session.prompt', method: 'POST', headers: {}, body: '{}' })
-    bridge.handle({ type: 'dsh-fetch', id: 32, path: '/api/session.list', method: 'POST', headers: {}, body: '{}' })
-    await settle()
-    expect(fetched).toEqual(['http://127.0.0.1:5173/api/session.list'])
-    bridge.handle({ type: 'dsh-fetch-abort', id: 31 })
-    release()
-    await settle()
-    expect(fetched).toEqual(['http://127.0.0.1:5173/api/session.list'])
-    expect(posted.some(message => message.type === 'dsh-fetch-error' && message.id === 31)).toBe(true)
   })
 
   it('aborts an in-flight relay when the webview sends dsh-fetch-abort', async () => {

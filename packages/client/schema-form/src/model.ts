@@ -6,7 +6,7 @@
  * @module @deepseek-ai/dsh-client-schema-form/model
  */
 
-import Schema from 'schemastery'
+import Schema from '@deepseek-ai/schemastery'
 
 /** Live schemastery node; the renderer reads only its structural relations. */
 export type SchemaNode = Schema
@@ -104,7 +104,7 @@ function cloneSpine(root: Record<string, unknown>, path: readonly string[]): {
   leaf: string
 } {
   const result = { ...root }
-  let target: Record<string, unknown> | Array<unknown> = result
+  let target: Record<string, unknown> | unknown[] = result
   for (let i = 0; i < path.length - 1; i++) {
     const key = path[i] as string
     const child = cloneContainer(

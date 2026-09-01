@@ -146,7 +146,7 @@ function isPublicMember(member: ts.ClassElement): boolean {
   if (ts.isClassStaticBlockDeclaration(member)) return false
   const name = ts.getNameOfDeclaration(member)
   if (name && ts.isPrivateIdentifier(name)) return false
-  const modifiers = !ts.canHaveModifiers(member) ? undefined : ts.getModifiers(member)
+  const modifiers = ts.canHaveModifiers(member) ? ts.getModifiers(member) : undefined
   return !(modifiers?.some(modifier =>
     modifier.kind === ts.SyntaxKind.PrivateKeyword
     || modifier.kind === ts.SyntaxKind.ProtectedKeyword,

@@ -1,14 +1,14 @@
 /**
- * Verify that the executable deploy manifest supplies every required workspace
- * peer in its dependency graph. With auto peer installation disabled, a missing
- * root peer can otherwise fail only when Cordis loads the packaged plugin.
+ * Verify that executable deploy manifests supply every required workspace peer
+ * in their dependency graphs. With automatic peer installation disabled, a
+ * missing root peer otherwise fails only when a packaged Cordis plugin loads.
  */
 import { globSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 
-interface PackageManifest {
+export interface PackageManifest {
   name?: string
   dependencies?: Record<string, string>
   optionalDependencies?: Record<string, string>
@@ -16,91 +16,101 @@ interface PackageManifest {
   peerDependenciesMeta?: Record<string, { optional?: boolean }>
 }
 
-interface WorkspacePackage {
+export interface WorkspacePackage {
   path: string
   manifest: PackageManifest
 }
 
 const root = resolve(import.meta.dirname, '..')
-const { values } = parseArgs({
-  args: process.argv.slice(2),
-  options: {
-    manifest: { type: 'string' },
-    'desktop-manifest': { type: 'string' },
-    'vscode-manifest': { type: 'string' },
-  },
-})
-await verifyProductClosureParity(
-  resolve(root, values['desktop-manifest'] ?? 'apps/desktop/closure/package.json'),
-  resolve(root, values['vscode-manifest'] ?? 'apps/vscode/closure/package.json'),
-)
-const runtimeManifestPath = resolve(root, values.manifest ?? 'python/sdk-runtime/package.json')
-const runtimeManifest = await loadManifest(runtimeManifestPath)
-const runtimeName = runtimeManifest.name ?? 'python/sdk-runtime'
-const workspace = await loadWorkspacePackages()
-const runtimeDependencies = runtimeManifest.dependencies ?? {}
-const parents = new Map<string, string | undefined>()
-const queue: string[] = []
+const defaultManifestPaths = ['python/sdk-runtime/package.json'] as const
 
-for (const dependency of Object.keys(runtimeDependencies).sort()) {
-  if (!workspace.has(dependency)) continue
-  parents.set(dependency, undefined)
-  queue.push(dependency)
+if (import.meta.main) {
+  const { values } = parseArgs({
+    args: process.argv.slice(2),
+    options: { manifest: { type: 'string', multiple: true } },
+  })
+  const manifestPaths = values.manifest?.length === 0 || values.manifest === undefined
+    ? defaultManifestPaths
+    : values.manifest
+  const workspace = await loadWorkspacePackages()
+  const failures: string[] = []
+  let totalPackages = 0
+
+  for (const manifestPath of manifestPaths) {
+    const absolutePath = resolve(root, manifestPath)
+    const runtimeManifest = await loadManifest(absolutePath)
+    const runtimeName = runtimeManifest.name ?? manifestPath
+    const result = verifyRuntimeClosure(runtimeName, runtimeManifest.dependencies ?? {}, workspace)
+    totalPackages += result.packageCount
+    failures.push(...result.failures)
+  }
+
+  if (failures.length > 0) {
+    console.error('verify-runtime-closure: required workspace peers are missing from one or more deploy manifests:')
+    for (const failure of failures) console.error(`  ${failure}`)
+    process.exit(1)
+  }
+
+  console.log(`verify-runtime-closure: ${totalPackages} workspace package visits form closed runtime dependency graphs.`)
 }
 
-const failures: Array<string> = []
-for (let index = 0; index < queue.length; index += 1) {
-  const packageName = queue[index]
-  if (packageName === undefined) continue
-  const current = workspace.get(packageName)
-  if (current === undefined) continue
-  const peers = current.manifest.peerDependencies ?? {}
-  const peerMeta = current.manifest.peerDependenciesMeta ?? {}
-  for (const peer of Object.keys(peers).sort()) {
-    if (!workspace.has(peer) || peerMeta[peer]?.optional === true) continue
-    if (runtimeDependencies[peer]?.startsWith('workspace:') === true) continue
-    failures.push(`${formatChain(runtimeName, packageName, parents)} -> ${peer}`)
-  }
-  const dependencies = {
-    ...current.manifest.dependencies,
-    ...current.manifest.optionalDependencies,
-  }
-  for (const dependency of Object.keys(dependencies).sort()) {
-    if (!workspace.has(dependency) || parents.has(dependency)) continue
-    parents.set(dependency, packageName)
+/**
+ * Check one deploy manifest against a workspace package graph.
+ * @param runtimeName - name used to identify the deploy root in diagnostics.
+ * @param runtimeDependencies - direct dependencies declared by the deploy root.
+ * @param workspace - all package manifests available to the workspace.
+ * @returns missing required peers and the number of visited workspace packages.
+ */
+export function verifyRuntimeClosure(
+  runtimeName: string,
+  runtimeDependencies: Readonly<Record<string, string>>,
+  workspace: ReadonlyMap<string, WorkspacePackage>,
+): { failures: string[]; packageCount: number } {
+  const parents = new Map<string, string | undefined>()
+  const queue: string[] = []
+
+  for (const dependency of Object.keys(runtimeDependencies).sort()) {
+    if (!workspace.has(dependency)) continue
+    parents.set(dependency, undefined)
     queue.push(dependency)
   }
-}
 
-if (failures.length > 0) {
-  console.error('verify-runtime-closure: required workspace peers are missing from python/sdk-runtime dependencies:')
-  for (const failure of failures) console.error(`  ${failure}`)
-  process.exit(1)
-}
-
-console.log(`verify-runtime-closure: ${queue.length} workspace packages form a closed runtime dependency graph.`)
-
-/** Keep the two self-contained GUI products on one exact server dependency set. */
-async function verifyProductClosureParity(desktopPath: string, vscodePath: string): Promise<void> {
-  const desktop = await loadManifest(desktopPath)
-  const vscode = await loadManifest(vscodePath)
-  const desktopDependencies = desktop.dependencies ?? {}
-  const vscodeDependencies = vscode.dependencies ?? {}
-  const names = [...new Set([...Object.keys(desktopDependencies), ...Object.keys(vscodeDependencies)])].sort()
-  const differences = names.filter(name => desktopDependencies[name] !== vscodeDependencies[name])
-  if (differences.length === 0) return
-
-  console.error('verify-runtime-closure: desktop and VS Code closure dependency maps diverge:')
-  for (const name of differences) {
-    console.error(
-      `  ${name}: desktop=${desktopDependencies[name] ?? '<missing>'}; vscode=${vscodeDependencies[name] ?? '<missing>'}`,
-    )
+  const failures: string[] = []
+  for (let index = 0; index < queue.length; index += 1) {
+    const packageName = queue[index]
+    if (packageName === undefined) continue
+    const current = workspace.get(packageName)
+    if (current === undefined) continue
+    const peers = current.manifest.peerDependencies ?? {}
+    const peerMeta = current.manifest.peerDependenciesMeta ?? {}
+    for (const peer of Object.keys(peers).sort()) {
+      if (!workspace.has(peer) || peerMeta[peer]?.optional === true) continue
+      if (runtimeDependencies[peer]?.startsWith('workspace:') === true) continue
+      failures.push(`${formatChain(runtimeName, packageName, parents)} -> ${peer}`)
+    }
+    const dependencies = {
+      ...current.manifest.dependencies,
+      ...current.manifest.optionalDependencies,
+    }
+    for (const dependency of Object.keys(dependencies).sort()) {
+      if (!workspace.has(dependency) || parents.has(dependency)) continue
+      parents.set(dependency, packageName)
+      queue.push(dependency)
+    }
   }
-  process.exit(1)
+
+  return { failures, packageCount: queue.length }
 }
 
-async function loadWorkspacePackages(): Promise<Map<string, WorkspacePackage>> {
-  const paths = globSync(['packages/*/*/package.json', 'vendor/*/package.json'], { cwd: root })
+/** Load all workspace package manifests that can contribute runtime edges. */
+export async function loadWorkspacePackages(): Promise<Map<string, WorkspacePackage>> {
+  const paths = globSync([
+    'packages/*/*/package.json',
+    'vendor/*/package.json',
+    'apps/*/package.json',
+    'native/landlock-run/package.json',
+    'native/landlock-run/packages/*/package.json',
+  ], { cwd: root })
     .sort()
     .map(relative => resolve(root, relative))
   const result = new Map<string, WorkspacePackage>()

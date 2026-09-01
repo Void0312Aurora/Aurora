@@ -12,6 +12,7 @@ files:
   - build/**
   - deploy/**
   - package.json
+  - LICENSE
 asar: true
 # Electron-as-Node children (the embedded closure and the reaper) cannot read
 # inside app.asar; keep them on the real unpacked tree.

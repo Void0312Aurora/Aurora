@@ -4,7 +4,7 @@
 
 import type {
   ClientResponse, MuxFrame, RpcId, RpcReceipt, SessionId,
-} from '@deepseek-ai/dsh-client-connection/client'
+} from '@deepseek-ai/dsh-api-remotes/client'
 
 /** Kind-keyed payload map: the requested frame's domain fields (envelope fields stripped). */
 export interface PendingPayloads {
@@ -14,6 +14,9 @@ export interface PendingPayloads {
 
 /** Pending-interaction discriminant (the keys of PendingPayloads). */
 export type PendingKind = keyof PendingPayloads
+
+/** Session-list summary of the user action currently blocking progress. */
+export type PendingInteractionStatus = 'approval' | 'plan-review' | 'question'
 
 /** Kind-discriminated union of concrete waits: narrowing on `kind` types `payload`. */
 export type PendingInteraction = { [K in PendingKind]: PendingWait<K> }[PendingKind]
@@ -68,7 +71,7 @@ export class PendingWait<K extends PendingKind = PendingKind> {
    * @returns the carrier receipt.
    */
   respond(result: ClientResponse['result']): Promise<RpcReceipt> {
-    if (this.#settled) { throw new Error(`pending wait ${this.key} is already settled`) }
+    if (this.#settled) throw new Error(`pending wait ${this.key} is already settled`)
     return this.#respond({ type: 'client-response', rpcId: this.#rpcId, result })
   }
 

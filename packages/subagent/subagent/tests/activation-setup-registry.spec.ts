@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Context } from 'cordis'
+import { Context } from '@deepseek-ai/cordis'
 import SubagentActivationSetupRegistry from '../src/activation-setup-registry.ts'
 
 /** A child-like scoped context with observable disposal. */
@@ -132,7 +132,7 @@ describe('SubagentActivationSetupRegistry', () => {
   it('does not dispose twice when revocation precedes setup rollback', () => {
     const registry = new SubagentActivationSetupRegistry()
     const disposals: string[] = []
-    const removeFirst = registry.register(() => { return () => { disposals.push('first') } })
+    const removeFirst = registry.register(() => () => { disposals.push('first') })
     registry.register(() => {
       removeFirst()
       throw new Error('second failed after revoking the first')

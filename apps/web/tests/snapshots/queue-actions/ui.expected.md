@@ -1,19 +1,21 @@
 - banner:
   - navigation "Session hierarchy":
     - button "Reply with a one-sentence description" [disabled]
+  - img
+  - text: Standard mode
+  - button "Session log":
+    - text: Session log
+    - img
   - tablist:
     - tab "Chat" [selected]
     - tab "Trajectory"
 - text: Reply with a one-sentence description of event sourcing, then stop. {{clock}}
 - button "Copy":
   - img
-- button "Branch into a new conversation" [disabled]:
-  - img
-- text: Available only on the last message of a completed turn
-- button "Context injection":
+- button "Context injection @deepseek-ai/dsh-system-prompt":
   - img
   - img
-  - text: Context injection
+  - text: Context injection @deepseek-ai/dsh-system-prompt
 - paragraph: partial
 - status: Deep diving...
 - list:
@@ -21,11 +23,12 @@
     - text: Edited queue item
     - button "Edit queued message":
       - img
+    - tooltip "Edit queued message"
     - button "Remove queued message":
       - img
     - button "Steer queued message":
       - img
-- textbox "Message the agent"
+- textbox "Cmd/Ctrl+Enter steers all queued messages"
 - button "Commands":
   - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write

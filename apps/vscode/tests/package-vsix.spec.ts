@@ -40,8 +40,9 @@ describe('VSIX packaging contract', () => {
     })
 
     expect(result.status).toBe(1)
-    expect(result.stderr).toContain('does not match this materialized closure')
-    expect(result.stderr).toContain('package on a matching runner')
+    const diagnostics = `${result.stdout ?? ''}\n${result.stderr ?? ''}`
+    expect(diagnostics).toContain('does not match this materialized closure')
+    expect(diagnostics).toContain('package on a matching runner')
   })
 
   it('publishes the canonical source repository', () => {
@@ -50,7 +51,7 @@ describe('VSIX packaging contract', () => {
     }
     expect(manifest.repository).toEqual({
       type: 'git',
-      url: 'https://github.com/Void0312Aurora/Aurora.git',
+      url: 'https://github.com/deepseek-ai/deepseek-harness.git',
       directory: 'apps/vscode',
     })
   })

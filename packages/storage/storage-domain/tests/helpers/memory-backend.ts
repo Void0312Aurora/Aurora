@@ -39,7 +39,7 @@ export class MemoryMediaPool {
   /**
    * When positive, that many subsequent write primitives (putRecord /
    * deleteRecord / setGlobal) reject without touching the medium, decrementing
-   * per rejection. Negative-path seam: callers assert their state is
+   * per rejection. Negative path: callers assert their state is
    * untouched after a durability failure.
    */
   failNextWrites = 0
@@ -73,7 +73,9 @@ class MemoryKvUnit implements KvUnit {
   async loadAll(): Promise<{ tables: Record<string, Record<string, unknown>>; global: unknown }> {
     this.assertOpen()
     const tables: Record<string, Record<string, unknown>> = {}
-    for (const table of this.descriptor.tables) tables[table] = Object.fromEntries(this.medium.tables.get(table) ?? [])
+    for (const table of this.descriptor.tables) {
+      tables[table] = Object.fromEntries(this.medium.tables.get(table) ?? [])
+    }
     return { tables, global: this.medium.global }
   }
 

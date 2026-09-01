@@ -33,7 +33,7 @@ const chunkArb: fc.Arbitrary<StreamChunk> = indexArb.chain(index => fc.oneof(
   fc.constant<StreamChunk>({ type: 'block-start', index, blockType: 'text' }),
   fc.constant<StreamChunk>({ type: 'block-start', index, blockType: 'reasoning' }),
   fc.constant<StreamChunk>({ type: 'block-start', index, blockType: 'tool-call' }),
-  fc.string().map((text): StreamChunk => { return ({ type: 'text-delta', index, text }) }),
+  fc.string().map((text): StreamChunk => ({ type: 'text-delta', index, text })),
   fc.string().map((text): StreamChunk => ({ type: 'reasoning-delta', index, text })),
   fc.record({ id: fc.string({ minLength: 1 }), argumentsDelta: fc.string() })
     .map((r): StreamChunk => ({ type: 'tool-call-delta', index, id: CallId(r.id), argumentsDelta: r.argumentsDelta })),
