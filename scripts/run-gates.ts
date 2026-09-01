@@ -232,7 +232,7 @@ export function gatesForMode(selected: Mode): Gate[] {
         pnpmScript('build', 'build'),
         productArtifactsGate(['build']),
         pnpmScript('build:web', 'build:web'),
-        vscodeBuiltEntryGate(),
+        vscodeBuiltEntryGate(['product-artifacts']),
         ...hygieneLeafGates({ artifactNeeds: ['build'] }),
         ...docSyncLeafGates({
           docTypecheckNeeds: ['build'],
@@ -287,7 +287,7 @@ function ciPrimaryGates(): Gate[] {
     }),
     builtPackageInvariantsGate(['build']),
     builtBinSmokeGate(),
-    vscodeBuiltEntryGate(),
+    vscodeBuiltEntryGate(['product-artifacts']),
   ]
 }
 
@@ -390,7 +390,7 @@ function ciArtifactGates(): Gate[] {
     }),
     builtPackageInvariantsGate(['build']),
     builtBinSmokeGate(),
-    vscodeBuiltEntryGate(),
+    vscodeBuiltEntryGate(['product-artifacts']),
   ]
 }
 
@@ -418,7 +418,10 @@ function ciConsumerGates(): Gate[] {
       needs: validatedBuild,
     }),
     builtBinSmokeGate(validatedBuild),
-    vscodeBuiltEntryGate(validatedBuild),
+    // The built-entry smoke reads the webview bundle emitted by the artifact
+    // gate; serialize it behind that producer so a high-concurrency consumer
+    // lane cannot observe the bundle before it exists.
+    vscodeBuiltEntryGate(['product-artifacts']),
   ]
 }
 

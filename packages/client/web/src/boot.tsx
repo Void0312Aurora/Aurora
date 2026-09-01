@@ -111,6 +111,22 @@ export class AppWebEntry {
     this.manifest = parseBootManifest((globalThis as DshWindow).__DSH_BOOT__)
 
     const { staticPlugins, ...seams } = this.options ?? {}
+    // Validate the host-provided static table before constructing Cordis or
+    // publishing any module-system state. Static entries are substitutes for
+    // real manifest rows; accepting an unknown id would make a typo silently
+    // disappear from the boot graph, while allowing a kernel-owned id would
+    // turn a clear configuration error into a duplicate-registration failure.
+    if (staticPlugins !== undefined) {
+      const manifestIds = new Set(this.manifest.modules.map(row => row.id))
+      for (const id of Object.keys(staticPlugins)) {
+        if (id === APP_SHELL_ID || id === MODULES_ID) {
+          throw new Error(`static plugin "${id}" is kernel-owned`)
+        }
+        if (!manifestIds.has(id)) {
+          throw new Error(`static plugin "${id}" is not a boot-manifest row`)
+        }
+      }
+    }
     this.modules = new ClientModuleSystem({
       modules: this.manifest.modules, staticModules: getStaticModules(), ...seams,
     })

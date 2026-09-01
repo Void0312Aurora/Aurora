@@ -51,10 +51,10 @@ afterEach(() => {
 
 describe('bootGatedWebview', () => {
   it.each([
-    ['older', { protocolVersion: 0, version: 'old', cwd: '/w', attachedSessions: 0 }],
-    ['newer', { protocolVersion: 2, version: 'new', cwd: '/w', attachedSessions: 0 }],
-    ['missing', { version: 'unknown', cwd: '/w', attachedSessions: 0 }],
-    ['malformed', { protocolVersion: '1', version: 'unknown', cwd: '/w', attachedSessions: 0 }],
+    ['older', { protocolVersion: 0, version: 'old', cwd: '/w', attachedSessions: 0, canOpenPath: false }],
+    ['newer', { protocolVersion: 2, version: 'new', cwd: '/w', attachedSessions: 0, canOpenPath: false }],
+    ['missing', { version: 'unknown', cwd: '/w', attachedSessions: 0, canOpenPath: false }],
+    ['malformed', { protocolVersion: '1', version: 'unknown', cwd: '/w', attachedSessions: 0, canOpenPath: false }],
   ])('shows an incompatible-host state for an %s protocol without starting the client graph', async (_case, value) => {
     const fake = bridgeFor(value)
     const root = document.createElement('div')
@@ -75,7 +75,7 @@ describe('bootGatedWebview', () => {
   })
 
   it('publishes the bridge and starts the client graph after a compatible handshake', async () => {
-    const fake = bridgeFor({ protocolVersion: 1, version: 'compatible', cwd: '/w', attachedSessions: 0 })
+    const fake = bridgeFor({ protocolVersion: 1, version: 'compatible', cwd: '/w', attachedSessions: 0, canOpenPath: false })
     const root = document.createElement('div')
     const run = vi.fn(async () => {})
 
@@ -93,7 +93,7 @@ describe('bootGatedWebview', () => {
   })
 
   it('does not probe or start the client graph before the managed server is ready', async () => {
-    const fake = bridgeFor({ protocolVersion: 1, version: 'compatible', cwd: '/w', attachedSessions: 0 })
+    const fake = bridgeFor({ protocolVersion: 1, version: 'compatible', cwd: '/w', attachedSessions: 0, canOpenPath: false })
     const root = document.createElement('div')
     const run = vi.fn(async () => {})
     let release: (() => void) | undefined

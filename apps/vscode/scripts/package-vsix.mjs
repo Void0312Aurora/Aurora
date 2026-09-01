@@ -10,6 +10,7 @@
 
 import { spawnSync } from 'node:child_process'
 import { createRequire } from 'node:module'
+import { fileURLToPath } from 'node:url'
 
 /** Map the running platform+arch to vsce's target triple; the default when DSH_VSIX_TARGET is unset. */
 function hostTarget() {
@@ -26,13 +27,24 @@ const target = process.env.DSH_VSIX_TARGET && process.env.DSH_VSIX_TARGET !== ''
   ? process.env.DSH_VSIX_TARGET
   : hostTarget()
 
+const runningHostTarget = hostTarget()
+if (target !== runningHostTarget) {
+  console.error(
+    `[dsh-vscode] target ${target} does not match this materialized closure for host ${runningHostTarget}; `
+    + 'package on a matching runner',
+  )
+  process.exit(1)
+}
+
 // Resolve vsce from this package's own dependency tree so the packer never
 // depends on a globally installed binary.
 const require = createRequire(import.meta.url)
 const vsceBin = require.resolve('@vscode/vsce/vsce')
+const appRoot = fileURLToPath(new URL('..', import.meta.url))
 
 console.log(`[dsh-vscode] packaging vsix for target ${target}`)
 const result = spawnSync(process.execPath, [vsceBin, 'package', '--no-dependencies', '--target', target], {
+  cwd: appRoot,
   stdio: 'inherit',
 })
 if (result.status !== 0) {

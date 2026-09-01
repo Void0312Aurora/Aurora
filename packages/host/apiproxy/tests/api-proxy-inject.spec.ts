@@ -24,7 +24,7 @@ function request<P>(payload: P): RpcRequest<P> {
 async function harness(): Promise<{
   ctx: Context
   api: ApiProxy
-  attach: (session: Session, inject: (message: UserMessage) => void) => void
+  attach: (session: Session, inject: (message: UserMessage) => void, status?: Agent['status']) => void
 }> {
   const ctx = new Context()
   await ctx.plugin(SessionStore)
@@ -33,8 +33,8 @@ async function harness(): Promise<{
   return {
     ctx,
     api: createApiProxy(ctx, { defaultModelSelection: () => ({ provider: 'p', model: 'm' }), cwd: '/tmp' }),
-    attach: (session, inject) => {
-      ctx.agents.register({ id: session.id, session, status: 'idle', ctx, inject } as unknown as Agent)
+    attach: (session, inject, status = 'idle') => {
+      ctx.agents.register({ id: session.id, session, status, ctx, inject } as unknown as Agent)
     },
   }
 }
@@ -44,7 +44,7 @@ describe('session.injectContext', () => {
     const { ctx, api, attach } = await harness()
     const session = ctx.sessions.create()
     const injected: UserMessage[] = []
-    attach(session, (message) => { injected.push(message) })
+    attach(session, (message) => { injected.push(message) }, 'running')
     const call = request({ sessionId: session.id, content: [{ type: 'text' as const, text: 'editor context' }] })
 
     const response = await api.sessions.injectContext(call)
@@ -59,7 +59,7 @@ describe('session.injectContext', () => {
   it('maps a synchronous inject throw to agent-busy', async () => {
     const { ctx, api, attach } = await harness()
     const session = ctx.sessions.create()
-    attach(session, () => { throw new Error('disposed') })
+    attach(session, () => { throw new Error('disposed') }, 'running')
 
     const response = await api.sessions.injectContext(
       request({ sessionId: session.id, content: [{ type: 'text' as const, text: 'editor context' }] }),

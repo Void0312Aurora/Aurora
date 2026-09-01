@@ -146,6 +146,26 @@ export interface WebviewBridgePort {
   onMessage(listener: (message: unknown) => void): () => void
 }
 
+/**
+ * Keep request ids unique for one bridge even when multiple client instances,
+ * or independently evaluated copies of this module, share that bridge. The
+ * state lives on globalThis through a registered symbol so Vite/Node module
+ * duplication cannot reset the counter and reuse an in-flight id.
+ */
+const REQUEST_ID_STATE = Symbol.for('dsh.webviewBridge.requestIdState')
+
+function nextRequestId(port: WebviewBridgePort): number {
+  const globalState = globalThis as unknown as Record<PropertyKey, unknown>
+  let counters = globalState[REQUEST_ID_STATE] as WeakMap<object, number> | undefined
+  if (counters === undefined) {
+    counters = new WeakMap<object, number>()
+    globalState[REQUEST_ID_STATE] = counters
+  }
+  const id = (counters.get(port) ?? 0) + 1
+  counters.set(port, id)
+  return id
+}
+
 declare global {
   /** The global seat the webview bootstrap fills before the client tree boots. */
   var __DSH_WEBVIEW_BRIDGE__: WebviewBridgePort | undefined
@@ -164,31 +184,35 @@ function headersRecord(init: HeadersInit | undefined): Record<string, string> {
  * base client's unary JSON reads and SSE frame decoding work unchanged.
  */
 export class PostMessageApiClient extends AbstractApiClient {
-  private nextRequestId = 1
-
   /** @param port - the embedder messaging face the bootstrap adapted. */
   constructor(private readonly port: WebviewBridgePort) {
     super()
   }
 
   protected doFetch(input: URL, init?: RequestInit): Promise<Response> {
-    const id = this.nextRequestId++
+    const id = nextRequestId(this.port)
     const signal = init?.signal ?? undefined
     return new Promise<Response>((resolve, reject) => {
       const encoder = new TextEncoder()
       let bodyController: ReadableStreamDefaultController<Uint8Array> | undefined
       let headReceived = false
       let requestPosted = false
+      let abortPosted = false
       let terminal = false
-      let unsubscribe = (): void => {}
+      let cleanupRequested = false
+      let unsubscribe: (() => void) | undefined
       const cleanup = (): void => {
         if (terminal) return
         terminal = true
-        unsubscribe()
+        if (unsubscribe === undefined) cleanupRequested = true
+        else unsubscribe()
         signal?.removeEventListener('abort', onAbort)
       }
       const abortUpstream = (): void => {
-        if (!requestPosted) return
+        if (!requestPosted || abortPosted) return
+        // Mark before posting: a hostile/reentrant embedder can synchronously
+        // deliver another response while this postMessage call is on the stack.
+        abortPosted = true
         try {
           this.port.postMessage({ type: 'dsh-fetch-abort', id })
         } catch {
@@ -258,6 +282,14 @@ export class PostMessageApiClient extends AbstractApiClient {
           }
         }
       })
+      if (cleanupRequested) {
+        unsubscribe()
+        unsubscribe = undefined
+      }
+      // A synchronous test/embedder response may have completed the request
+      // while onMessage was still installing the subscription. Do not post a
+      // now-terminal request into the host after that completion.
+      if (terminal) return
       if (signal !== undefined) {
         if (signal.aborted) {
           onAbort()

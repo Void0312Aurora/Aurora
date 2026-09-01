@@ -84,7 +84,7 @@ describe('PostMessageApiClient', () => {
     expect(start.headers['content-type']).toBe('application/json')
 
     const { rpcId } = requestBodyOf(start)
-    const value = { protocolVersion: 1, version: 'v', cwd: '/w', attachedSessions: 0 }
+    const value = { protocolVersion: 1, version: 'v', cwd: '/w', attachedSessions: 0, canOpenPath: false }
     fake.emit({ id: start.id, type: 'dsh-fetch-head', status: 200 })
     fake.emit({
       id: start.id,
@@ -427,7 +427,7 @@ describe('PostMessageApiClient', () => {
     expect(a.id).not.toBe(b.id)
 
     // Answer the second request first: correlation must route by id, not order.
-    const describeValue = { protocolVersion: 1, version: 'v', cwd: '/w', attachedSessions: 0 }
+    const describeValue = { protocolVersion: 1, version: 'v', cwd: '/w', attachedSessions: 0, canOpenPath: false }
     fake.emit({ id: b.id, type: 'dsh-fetch-head', status: 200 })
     fake.emit({ id: b.id, type: 'dsh-fetch-chunk', chunk: JSON.stringify({ type: 'server-response', rpcId: requestBodyOf(b).rpcId, result: { ok: true, value: describeValue } }) })
     fake.emit({ id: b.id, type: 'dsh-fetch-end' })
@@ -451,7 +451,7 @@ describe('PostMessageApiClient', () => {
     if (a?.type !== 'dsh-fetch' || b?.type !== 'dsh-fetch') throw new Error('expected two starts')
     expect(a.id).not.toBe(b.id)
 
-    const describeValue = { protocolVersion: 1, version: 'v', cwd: '/w', attachedSessions: 0 }
+    const describeValue = { protocolVersion: 1, version: 'v', cwd: '/w', attachedSessions: 0, canOpenPath: false }
     fake.emit({ id: b.id, type: 'dsh-fetch-head', status: 200 })
     fake.emit({ id: b.id, type: 'dsh-fetch-chunk', chunk: JSON.stringify({ type: 'server-response', rpcId: requestBodyOf(b).rpcId, result: { ok: true, value: describeValue } }) })
     fake.emit({ id: b.id, type: 'dsh-fetch-end' })
@@ -487,7 +487,7 @@ describe('PostMessageApiClient', () => {
     await settle()
     expect(secondSettled).toBe(false)
 
-    const describeValue = { protocolVersion: 1, version: 'v', cwd: '/w', attachedSessions: 0 }
+    const describeValue = { protocolVersion: 1, version: 'v', cwd: '/w', attachedSessions: 0, canOpenPath: false }
     fake.emit({ id: b.id, type: 'dsh-fetch-head', status: 200 })
     fake.emit({ id: b.id, type: 'dsh-fetch-chunk', chunk: JSON.stringify({ type: 'server-response', rpcId: requestBodyOf(b).rpcId, result: { ok: true, value: describeValue } }) })
     fake.emit({ id: b.id, type: 'dsh-fetch-end' })

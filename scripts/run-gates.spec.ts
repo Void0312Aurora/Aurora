@@ -277,7 +277,7 @@ describe('Node 24 lane ownership', () => {
     const subject = withPnpmEntrypoint(() => gatesForMode('ci-consumers'))
 
     expect(defaultConcurrency('ci-consumers', subject.length, 4)).toEqual({
-      workers: 13,
+      workers: 12,
       source: 'ci-consumers gate count',
     })
     expect(subject.map(item => item.id)).toEqual([
@@ -320,6 +320,7 @@ describe('Node 24 lane ownership', () => {
       displayCommand: 'DSH_SNAPSHOT=replay pnpm run test:web:built',
       env: { DSH_SNAPSHOT: 'replay' },
     })
+    expect(subject.find(item => item.id === 'vscode-built-entry')?.needs).toEqual(['product-artifacts'])
   })
 })
 

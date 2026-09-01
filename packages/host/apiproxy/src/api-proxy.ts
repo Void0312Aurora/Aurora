@@ -2522,10 +2522,23 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         const found = await agentFor(sessionId)
         if ('error' in found) return err(request, found.error)
         try {
-          found.agent.inject(createUserMessage({
+          const message = createUserMessage({
             content,
             source: { kind: 'plugin', plugin: 'ide', rpcId: request.rpcId },
-          }))
+          })
+          // Agent.inject intentionally stages context in the inbox while an
+          // agent is active, so the next step claims it atomically. An idle
+          // session has no step boundary to claim; persist the message
+          // directly so history reflects the accepted IDE context immediately
+          // and the next prompt derives it exactly once.
+          const events = found.agent.session.events
+          const lastTurnStart = events.findLast(event => event.type === 'turn/start')?.seq ?? -1
+          const lastTurnEnd = events.findLast(event => event.type === 'turn/end')?.seq ?? -1
+          if (found.agent.status === 'idle' && lastTurnStart <= lastTurnEnd) {
+            found.agent.session.append('user/message', message, { surfaceOp: 'append' })
+          } else {
+            found.agent.inject(message)
+          }
         } catch (error: unknown) {
           return err(request, {
             code: 'agent-busy',
